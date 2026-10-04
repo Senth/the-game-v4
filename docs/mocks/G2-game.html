@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Condensed:wght@500;700&family=Roboto+Slab:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-z0:#05080d; --color-z1:#131f41; --color-z2:#2d476b; --color-field:#0e121f;
+  --color-ink:#c5c7d8; --color-muted:#8a90a8; --color-link:#8c9eff; --color-head:#bbdefb;
+  --color-accent:#1c7dc8; --color-accent-strong:#304ffe;
+  --color-warn:#ffa500; --color-ok:#4ade80; --color-time:#0d47a1; --color-pace-ok:#4ade80; --color-pace-1:#e8c547; --color-pace-2:#ff8c1a; --color-pace-3:#b3261e; --color-team:#004d40; --color-you:#1c7dc8;
+  --font-body:"Roboto Slab",serif; --font-head:"Roboto",sans-serif; --font-cond:"Roboto Condensed",sans-serif;
+}
+body{ @apply bg-z0 text-ink font-body; }
+.label{ @apply font-cond uppercase tracking-wider text-xs text-muted; }
+</style></head><body>
+<header class="sticky top-0 z-10 bg-z0">
+<div class="px-4 pb-2.5"><div class="flex items-center justify-between h-11 font-cond">
+  <span class="tabular-nums"><span class="text-lg text-pace-2">47:27</span> <span class="text-xs text-muted">left</span></span>
+  <span class="text-xs text-pace-2">2 quests behind pace</span></div><div class="flex gap-2.5"><div class="flex gap-[3px]" style="flex:4"><span class="h-2 flex-1 rounded-sm bg-pace-ok"></span><span class="h-2 flex-1 rounded-sm bg-z2/60"></span><span class="h-2 flex-1 rounded-sm bg-pace-ok"></span><span class="h-2 flex-1 rounded-sm bg-accent ring-2 ring-accent/40"></span></div><div class="flex gap-[3px]" style="flex:5"><span class="h-2 flex-1 rounded-sm bg-z2/60"></span><span class="h-2 flex-1 rounded-sm bg-pace-ok"></span><span class="h-2 flex-1 rounded-sm bg-pace-ok"></span><span class="h-2 flex-1 rounded-sm bg-z2/60"></span><span class="h-2 flex-1 rounded-sm bg-pace-ok"></span></div><div class="flex gap-[3px]" style="flex:3"><span class="h-2 flex-1 rounded-sm bg-z2/60"></span><span class="h-2 flex-1 rounded-sm bg-z2/60"></span><span class="h-2 flex-1 rounded-sm bg-z2/60"></span></div></div></div><button class="flex w-full items-center gap-1 px-2.5 h-9 bg-z1 font-cond text-[13px] whitespace-nowrap overflow-hidden"><span class="flex items-baseline gap-1.5 px-1.5"><span class="text-[11px] text-muted">1</span><span class="text-ink ">Rävarna</span><span class="text-head font-bold tabular-nums">120</span></span><span class="text-muted">···</span><span class="flex items-baseline gap-1.5 px-1.5"><span class="text-[11px] text-muted">6</span><span class="text-ink ">Lagom</span><span class="text-head font-bold tabular-nums">70</span></span><span class="flex items-baseline gap-1.5 bg-accent/20 rounded px-1.5"><span class="text-[11px] text-muted">7</span><span class="text-ink font-bold">Ninjas</span><span class="text-head font-bold tabular-nums">64</span></span><span class="ml-auto pl-2 text-link">All ›</span></button></header>
+<main class="px-4 pt-5 pb-32"><h1 class="font-head text-head text-2xl font-medium mb-4">The keeper's last log</h1>
+<img src="https://picsum.photos/seed/lighthouse7/780/520" class="w-full rounded-md aspect-[3/2] object-cover" alt="">
+<p class="mt-4 leading-relaxed">The keeper wrote one line every night. On the last night he wrote it backwards, and the ships stopped coming.</p>
+<p class="mt-3 leading-relaxed">Read the log the way the keeper meant it.</p><section class="mt-7">
+  <div class="flex items-end justify-between border-b border-z2 pb-2">
+    <span class="label">Intel</span>
+    <span class="font-cond"><span class="text-3xl text-head font-bold tabular-nums">35p</span><span class="text-muted text-sm"> / 50p</span></span>
+  </div>
+  <div class="flex items-start justify-between gap-3 py-2.5 border-b border-z1 text-sm"><span><span class="font-cond text-muted mr-2">01</span>Start from the bottom.</span><span class="font-cond text-warn tabular-nums">−5p</span></div>
+  <button class="flex w-full items-center justify-between min-h-11 border-b border-z1 text-sm font-cond"><span><span class="text-muted mr-2">02</span><span class="text-link">Hold to decrypt</span></span><span class="text-muted tabular-nums">−10p</span></button>
+  <button class="flex w-full items-center justify-between min-h-11 text-sm font-cond"><span><span class="text-muted mr-2">03</span><span class="text-link">Hold to decrypt</span></span><span class="text-muted tabular-nums">−20p</span></button>
+</section></main><div class="fixed bottom-0 inset-x-0 bg-z1 border-t border-z2 px-4 pt-3 pb-6">
+  <form class="flex gap-2"><input class="flex-1 h-12 rounded-md bg-field border border-link/40 px-3" placeholder="Your answer"><button class="h-12 px-5 rounded-md bg-accent text-white font-cond font-bold">Send</button></form>
+</div></body></html>

@@ -1,0 +1,4 @@
+{
+  "ignores": ["node_modules/**", ".tmp/**"],
+  "frontMatter": "^@AGENTS\\.md\\r?\\n?$"
+}

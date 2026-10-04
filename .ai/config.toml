@@ -1,0 +1,25 @@
+[gates]
+# I-28 appends "pnpm e2e" once the core-loop smoke test exists.
+commands = ["pnpm lint --write", "pnpm typecheck", "pnpm test", "pnpm build"]
+
+[review]
+visible_paths = ["app/**", "components/**", "styles/**", "public/**"]
+browser = true
+
+[dev]
+start = "pnpm dev"
+url = "http://localhost:3000"
+auth = "log in as admin / admin for /admin, or Ninjas / ninjas for the game"
+
+# When MONGODB_URI is unset, dev boots mongodb-memory-server with a persisted
+# dbPath under .tmp/mongo, runs pnpm seed if empty, then starts next dev.
+# The fixture is Cipher Night 2026: Lighthouse has 4 quests, Old Town 5 and
+# Finale 3. Ten teams match the accepted mocks. Ninjas is mid-game with
+# solved quests and revealed-hint history, so the game and live admin views
+# are populated. Accounts admin / admin and Ninjas / ninjas are local only.
+# Unrevealed hints and unfinished quests are intentional, not missing data.
+# See docs/TESTS.md for the fixture and lifecycle test variants.
+
+[design]
+contract = "docs/DESIGN.md"
+tokens = "app/globals.css"

@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Condensed:wght@500;700&family=Roboto+Slab:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-z0:#05080d; --color-z1:#131f41; --color-z2:#2d476b; --color-field:#0e121f;
+  --color-ink:#c5c7d8; --color-muted:#8a90a8; --color-link:#8c9eff; --color-head:#bbdefb;
+  --color-accent:#1c7dc8; --color-accent-strong:#304ffe;
+  --color-warn:#ffa500; --color-ok:#4ade80; --color-time:#0d47a1; --color-pace-ok:#4ade80; --color-pace-1:#e8c547; --color-pace-2:#ff8c1a; --color-pace-3:#b3261e; --color-team:#004d40; --color-you:#1c7dc8;
+  --font-body:"Roboto Slab",serif; --font-head:"Roboto",sans-serif; --font-cond:"Roboto Condensed",sans-serif;
+}
+body{ @apply bg-z0 text-ink font-body; }
+.label{ @apply font-cond uppercase tracking-wider text-xs text-muted; }
+</style></head><body>
+<header class="sticky top-0 z-10 bg-z0 flex items-center h-12 px-1 border-b border-z1 font-cond"><button class="h-11 px-3 text-link">‹ Lighthouse</button><span class="font-head text-head truncate">Backwards log</span><span class="ml-auto pr-4 text-xs text-muted">Saved</span></header>
+<div class="sticky top-12 z-10 bg-z0 px-4 py-2 border-b border-z1"><div class="grid grid-cols-2 rounded-md bg-z1 p-1 font-cond text-sm"><button class="h-9 rounded bg-z2 text-head">Edit</button><button class="h-9 text-muted">Preview</button></div></div>
+<main class="px-4 py-5 pb-10"><div class="space-y-5">
+  <label class="block"><span class="label block mb-1.5">Display title<span class="text-xs text-muted ml-2 normal-case tracking-normal font-body">players see this</span></span><input class="w-full h-11 rounded-md bg-field border border-z2 px-3 text-sm focus:border-accent" value="The keeper&#39;s last log"></label>
+  <label class="block"><span class="label block mb-1.5">Internal title<span class="text-xs text-muted ml-2 normal-case tracking-normal font-body">admin only</span></span><input class="w-full h-11 rounded-md bg-field border border-z2 px-3 text-sm focus:border-accent" value="Backwards log"></label>
+  <div class=""><label class="block"><span class="label block mb-1.5">Content<span class="text-xs text-muted ml-2 normal-case tracking-normal font-body">Markdown</span></span><textarea rows="6" class="w-full rounded-md bg-field border border-z2 px-3 py-2 text-sm font-mono leading-relaxed">The keeper wrote one line every night. On the last night he wrote it backwards, and the ships stopped coming.
+
+Read the log the way the keeper meant it.</textarea></label></div>
+  <div class=""><label class="block"><span class="label block mb-1.5">Image</span><div class="flex items-center gap-3"><img src="https://picsum.photos/seed/lighthouse7/160/110" class="h-14 w-20 rounded object-cover"><span class="text-sm text-muted flex-1 truncate">3f9c1a7e.jpg</span><button class="h-10 px-3 rounded-md border border-z2 font-cond text-sm">Replace</button><button class="h-10 px-3 rounded-md font-cond text-sm text-muted">Remove</button></div></label></div>
+  <label class="block"><span class="label block mb-1.5">Answers<span class="text-xs text-muted ml-2 normal-case tracking-normal font-body">any match, case-insensitive</span></span><div class="flex flex-wrap items-center gap-2 min-h-11 rounded-md bg-field border border-z2 px-2 py-1.5"><span class="inline-flex items-center gap-1 h-7 px-2.5 rounded bg-z2 text-sm">lighthouse <span class="text-muted">✕</span></span><span class="inline-flex items-center gap-1 h-7 px-2.5 rounded bg-z2 text-sm">fyren <span class="text-muted">✕</span></span><input class="flex-1 min-w-20 bg-transparent text-sm h-7" placeholder="Add answer"></div></label>
+  <label class="block"><span class="label block mb-1.5">Points</span><input class="w-full h-11 rounded-md bg-field border border-z2 px-3 text-sm focus:border-accent tabular-nums" value="50"></label>
+  <div class=""><label class="block"><span class="label block mb-1.5">Admin notes<span class="text-xs text-muted ml-2 normal-case tracking-normal font-body">admin only</span></span><input class="w-full h-11 rounded-md bg-field border border-z2 px-3 text-sm focus:border-accent" value="Reverse each line, last letters spell the answer."></label></div>
+</div>
+<div class="mt-8"><div class="flex items-end justify-between border-b border-z2 pb-2"><span class="label">Hints</span><span class="font-cond text-sm text-muted">Worth with all hints: <span class="text-ink">15p</span></span></div>
+<div class="flex gap-2 items-start py-3 border-b border-z1">
+  <div class="flex-1 space-y-2"><textarea rows="2" class="w-full rounded-md bg-field border border-z2 px-3 py-2 text-sm">Start from the bottom.</textarea><div class="flex flex-wrap gap-1 items-center"><span class="text-xs text-muted mr-1">Revealed by</span><span class="inline-flex items-center h-6 px-2 rounded bg-z2 font-cond text-xs">Rävarna</span><span class="inline-flex items-center h-6 px-2 rounded bg-z2 font-cond text-xs">Team Kaos</span><span class="inline-flex items-center h-6 px-2 rounded bg-z2 font-cond text-xs">Fjällräv</span><span class="inline-flex items-center h-6 px-2 rounded bg-z2 font-cond text-xs">Byggarna</span><span class="inline-flex items-center h-6 px-2 rounded bg-z2 font-cond text-xs">Glada Gänget</span><span class="inline-flex items-center h-6 px-2 rounded bg-z2 font-cond text-xs">Lagom</span></div></div>
+  <div class="flex items-center gap-1"><input value="5" class="w-14 h-10 rounded-md bg-field border border-z2 px-2 text-sm text-right tabular-nums"><span class="text-xs text-muted">p</span></div>
+  <button class="h-10 w-10 rounded-md text-muted" aria-label="Remove hint">✕</button></div><div class="flex gap-2 items-start py-3 border-b border-z1">
+  <div class="flex-1 space-y-2"><textarea rows="2" class="w-full rounded-md bg-field border border-z2 px-3 py-2 text-sm">Every line is a word. Read the last letters.</textarea><div class="flex flex-wrap gap-1 items-center"><span class="text-xs text-muted mr-1">Revealed by</span><span class="inline-flex items-center h-6 px-2 rounded bg-z2 font-cond text-xs">Rävarna</span><span class="inline-flex items-center h-6 px-2 rounded bg-z2 font-cond text-xs">Glada Gänget</span></div></div>
+  <div class="flex items-center gap-1"><input value="10" class="w-14 h-10 rounded-md bg-field border border-z2 px-2 text-sm text-right tabular-nums"><span class="text-xs text-muted">p</span></div>
+  <button class="h-10 w-10 rounded-md text-muted" aria-label="Remove hint">✕</button></div><div class="flex gap-2 items-start py-3 border-b border-z1">
+  <div class="flex-1 space-y-2"><textarea rows="2" class="w-full rounded-md bg-field border border-z2 px-3 py-2 text-sm">The answer is a place on the coast.</textarea><span class="text-xs text-muted">Not revealed yet</span></div>
+  <div class="flex items-center gap-1"><input value="20" class="w-14 h-10 rounded-md bg-field border border-z2 px-2 text-sm text-right tabular-nums"><span class="text-xs text-muted">p</span></div>
+  <button class="h-10 w-10 rounded-md text-muted" aria-label="Remove hint">✕</button></div>
+<button class="mt-3 h-11 px-4 rounded-md border border-dashed border-z2 font-cond text-sm text-link w-full">+ Add hint</button></div></main></body></html>
