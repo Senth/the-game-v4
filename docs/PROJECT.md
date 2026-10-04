@@ -49,7 +49,8 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `Quest` | `id: string`, `displayTitle: string`, `internalTitle: string`, `content: string`, `assetPath: string \| null`, `answers: string[]`, `points: number \| null`, `adminNotes: string`, `hints: Hint[]` |
 | `Hint` | `id: string`, `text: string`, `points: number` |
 
-A quest must have an id. Draft quests may have empty content, empty answers or missing points.
+A quest and each hint must have a stable id. Assign ids to hints that lack them, including on import.
+Draft quests may have empty content, empty answers or missing points.
 Warn in the tree and beside missing fields; starting an incomplete season warns the admin.
 Content is Markdown with trusted, admin-authored raw HTML. Use `react-markdown` with `rehype-raw`
 and Shiki for fenced code. There is no separate v3 `code` field.
@@ -68,9 +69,11 @@ and Shiki for fenced code. There is no separate v3 `code` field.
 | `completed` | `boolean` | Team has finished its quest order |
 | `progress` | `TeamQuestProgress[]` | Persistent history for each reached quest |
 
-`TeamQuestProgress` is `{questId: string, solvedAt?: Date, hintsRevealed: number[], pointsEarned: number}`.
-`hintsRevealed` contains hint indexes, not a bitmask. History survives advancement to the next quest.
-Reordering or removing hints must preserve which hints a team revealed, including historical records.
+`TeamQuestProgress` is `{questId: string, solvedAt?: Date, hintsRevealed: RevealedHint[], pointsEarned: number}`.
+`RevealedHint` is `{hintId: string, text: string, points: number, revealedAt: Date}`.
+Each reveal stores the hint's stable id, text and penalty at reveal time, plus its reveal timestamp.
+History survives advancement to the next quest. Deleting or editing a hint never rewrites these snapshots.
+Reordering hints preserves their ids and snapshots. Deleted hints remain in the team's history and score.
 Create a unique index on `teams` for `{seasonId, name}`. Admin creation and self-registration both remain.
 
 ### admins and sessions
@@ -84,6 +87,9 @@ Create a unique index on `teams` for `{seasonId, name}`. Admin creation and self
 Use `bcryptjs` and iron-session 8. The cookie holds only `{kind: "admin" | "team", id: string}`.
 Guard routes in middleware and guard every server action with `requireAdmin` or `requireTeam`.
 The single login form tries admin then team in one request and returns one generic error on failure.
+Team login matches name and password, then chooses the matching team in the
+active season selected by the [active-season lookup rule](#lifecycle-and-season-lookup).
+If none of the matching teams belongs to that season, choose the matching team in the most recently started season.
 Admins land on `/admin`, teams on `/`. Deleting a team invalidates its sessions.
 `pnpm admin:create <name>` prompts for a password. Production admins come from this CLI, not v3 users.
 
@@ -119,16 +125,18 @@ A wrong answer changes no game state. A correct answer records `solvedAt`, earns
 Every logged-in session of that team receives the update.
 
 A player holds a locked hint row for 2 seconds to reveal it. Releasing early cancels.
-Record the hint index for that quest; revealing it again is a no-op. Do not reset history on solve.
+Append a `RevealedHint` snapshot to that quest's `progress.hintsRevealed` on first reveal.
+Match repeated reveals by `hintId`; revealing it again is a no-op. Do not reset history on solve.
 Hint penalties are charged on solve, not on reveal:
 
 ```text
-pointsEarned = quest.points - sum(points of revealed hints)
+pointsEarned = quest.points - sum(points in progress.hintsRevealed snapshots)
 score = score + pointsEarned
 ```
 
 Neither quest earnings nor team score has a floor. Intel shows current worth and full quest worth.
-Past `pointsEarned` records preserve what the team earned; live point edits affect subsequent solves.
+Past `pointsEarned` records preserve what the team earned; live quest-point edits affect subsequent solves.
+Hint edits affect only future reveals. Solves use the stored penalties, even if the hints were edited or deleted.
 
 ### Pace
 
@@ -169,8 +177,8 @@ Autosave each field on blur or after 500 ms idle using server actions that `$set
 Show "Saved", "Saving…" or "Not saved, retry". Edits to different fields from different tabs must not overwrite
 one another. Retry retains unsaved local values. Preview renders real game components from the current edit.
 
-Text, answers, hints and points apply immediately during play. Structural edits require confirmation
-that names how many teams are affected:
+Text, answers, hints and points apply immediately during play, except revealed-hint snapshots remain unchanged.
+Structural edits require confirmation that names how many teams are affected:
 
 - A new quest goes into a random position in each team's remaining order.
 - A deleted quest is removed from teams that have not reached it.
