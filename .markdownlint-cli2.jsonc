@@ -1,4 +1,4 @@
 {
-  "ignores": ["node_modules/**", ".tmp/**"],
-  "frontMatter": "^@AGENTS\\.md\\r?\\n?$"
+	"ignores": ["node_modules/**", ".tmp/**", ".next/**"],
+	"frontMatter": "^@AGENTS\\.md\\r?\\n?$"
 }

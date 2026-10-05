@@ -7,9 +7,7 @@ Use Next.js 16 App Router, React 19, strict TypeScript, Tailwind CSS 4 and Node 
 Use pnpm, Biome, Vitest and Playwright. MongoDB 8 uses the official `mongodb` driver and zod schemas,
 not Mongoose. Authentication uses iron-session 8 and `bcryptjs`.
 
-This bootstrap contains documentation and accepted mocks, not application code.
-I-01 adds the application scripts and `app/globals.css`; I-02 adds database boot and seed support.
-Do not scaffold those as part of documentation work.
+I-02 adds database boot and seed support.
 
 ## Commands and proof
 
@@ -17,16 +15,13 @@ Do not scaffold those as part of documentation work.
 | --- | --- |
 | `pnpm dev` | Boot local MongoDB, seed if empty, then run Next.js development server |
 | `pnpm seed` | Load the development fixture documented in `docs/TESTS.md` |
-| `pnpm lint --write` | Run Biome and apply supported fixes |
+| `pnpm lint --write` | Run markdownlint, then Biome, and apply supported Biome fixes |
 | `pnpm typecheck` | Run `tsc --noEmit` |
 | `pnpm test` | Run Vitest domain and database tests |
 | `pnpm build` | Build the standalone Next.js application |
 | `pnpm e2e` | Run the headless core-loop smoke test once I-28 adds it |
 
-Run configured gates in order. For this docs-only bootstrap, proof is
-`npx markdownlint-cli2 "**/*.md"`, a Python `tomllib` parse of `.ai/config.toml`, and an HTTP fetch
-of the preview iframe from `docs/mocks/D1-admin-desktop.html`.
-Ignore `node_modules` when linting Markdown.
+Run configured gates in order.
 
 Agents never run Docker on fenrir. Its `docker` command invokes `sudo docker` and needs a password.
 Development and tests use `mongodb-memory-server`; production images build in CI and the human runs compose.
@@ -57,3 +52,15 @@ Keep temporary artifacts under `.tmp/`. Do not use live databases or services in
 
 Keep rules in their owning document and link to them elsewhere. Conform to the accepted design.
 Guard admin routes and every admin server action. Player responses must omit secrets as defined in PROJECT.md.
+
+<!-- markdownlint-disable MD013 MD025 -->
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
+<!-- markdownlint-enable MD013 MD025 -->

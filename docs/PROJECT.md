@@ -9,7 +9,7 @@ v4 keeps v3 parity and its TODO backlog, except voice chat is research only in I
 Use Next.js 16 App Router, React 19, strict TypeScript, Tailwind 4 and Node 24 LTS.
 Use pnpm, Biome, `tsc --noEmit`, Vitest and Playwright. MongoDB 8 uses the official
 `mongodb` driver with zod schemas, not Mongoose. [Design](DESIGN.md) owns appearance;
-[tests](TESTS.md) owns proof and fixtures. This bootstrap contains no application code.
+[tests](TESTS.md) owns proof and fixtures.
 
 ## Glossary
 

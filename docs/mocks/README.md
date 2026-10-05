@@ -53,4 +53,4 @@ Each mapping applies to both `.html` and `.png`. Sources are copied without rest
 Serve this directory with `python3 -m http.server --bind 127.0.0.1 --directory docs/mocks 8000`
 from the repo root. Fetch `http://127.0.0.1:8000/D1-admin-desktop.html`, then resolve its iframe
 source against that URL and fetch it. Both D1 and M4 must resolve to `G2-game.html` with HTTP 200.
-Agents use HTTP requests for this docs-bootstrap check; they do not drive the app by hand.
+Agents use HTTP requests for this check; they do not drive the app by hand.
