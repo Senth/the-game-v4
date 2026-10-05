@@ -10,7 +10,13 @@ async function connect(): Promise<Db> {
 	cache.theGameClient = client
 	const name = uri.match(/^mongodb(?:\+srv)?:\/\/[^/]+\/([^?]+)/)?.[1]
 	const db = client.db(name ? decodeURIComponent(name) : "the-game")
-	await ensureIndexes(db)
+	try {
+		await ensureIndexes(db)
+	} catch (error) {
+		if (cache.theGameClient === client) cache.theGameClient = undefined
+		await client.close()
+		throw error
+	}
 	return db
 }
 

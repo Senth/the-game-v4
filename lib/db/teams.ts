@@ -1,7 +1,9 @@
-import { RevealedHint, Team } from "@/lib/domain/schemas"
+import { RevealedHint, Team, TeamQuestProgress } from "@/lib/domain/schemas"
 import { collections, NotFoundError } from "./collections"
 
 type TeamField = Exclude<keyof Team, "_id">
+
+const Solve = TeamQuestProgress.pick({ questId: true, solvedAt: true, pointsEarned: true }).required()
 
 export async function createTeam(input: Omit<Team, "_id"> & { _id?: string }): Promise<Team> {
 	const team = Team.parse({ ...input, _id: input._id ?? crypto.randomUUID() })
@@ -24,6 +26,7 @@ export async function setTeamField<F extends TeamField>(teamId: string, field: F
 }
 
 async function ensureProgress(teamId: string, questId: string): Promise<void> {
+	TeamQuestProgress.shape.questId.parse(questId)
 	const { teams } = await collections()
 	const progress = { questId, hintsRevealed: [], pointsEarned: 0 }
 	await teams.updateOne({ _id: teamId, "progress.questId": { $ne: questId } }, { $push: { progress } })
@@ -45,12 +48,13 @@ export async function recordSolve(
 	solvedAt: Date,
 	pointsEarned: number,
 ): Promise<void> {
+	const solve = Solve.parse({ questId, solvedAt, pointsEarned })
 	await ensureProgress(teamId, questId)
 	await (await collections()).teams.updateOne(
 		{ _id: teamId, progress: { $elemMatch: { questId, solvedAt: { $exists: false } } } },
 		{
-			$set: { "progress.$.solvedAt": solvedAt, "progress.$.pointsEarned": pointsEarned },
-			$inc: { score: pointsEarned },
+			$set: { "progress.$.solvedAt": solve.solvedAt, "progress.$.pointsEarned": solve.pointsEarned },
+			$inc: { score: solve.pointsEarned },
 		},
 	)
 }

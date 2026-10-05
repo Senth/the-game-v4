@@ -99,6 +99,18 @@ describe("revealed-hint history", () => {
 		expect(progress?.[0]?.hintsRevealed[0]).toEqual(first)
 	})
 
+	it("rejects invalid writes and leaves the team unchanged", async () => {
+		const { teamId } = await setup()
+		await revealHint(teamId, "q1", snapshot(0, new Date("2026-03-14T18:05:00Z")))
+		const before = await getTeam(teamId)
+
+		await expect(recordSolve(teamId, "q1", new Date(), Number.NaN)).rejects.toThrow()
+		await expect(recordSolve(teamId, "q1", new Date("invalid"), 50)).rejects.toThrow()
+		await expect(recordSolve(teamId, "", new Date(), 50)).rejects.toThrow()
+		await expect(revealHint(teamId, "", snapshot(1, new Date()))).rejects.toThrow()
+		expect(await getTeam(teamId)).toEqual(before)
+	})
+
 	it("throws for a missing team", async () => {
 		await expect(revealHint("missing", "q1", snapshot(0, new Date()))).rejects.toThrow(NotFoundError)
 	})

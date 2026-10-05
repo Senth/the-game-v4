@@ -7,7 +7,7 @@ export async function startDevMongo(): Promise<{ uri: string; stop: () => Promis
 	const dbPath = ".tmp/mongo"
 	await mkdir(dbPath, { recursive: true })
 	const server = await MongoMemoryServer.create({
-		instance: { ip: "127.0.0.1", port: 27018, dbPath, storageEngine: "wiredTiger" },
+		instance: { ip: "127.0.0.1", port: 27018, portGeneration: false, dbPath, storageEngine: "wiredTiger" },
 	})
 	return { uri: devMongoUri, stop: () => server.stop() }
 }
