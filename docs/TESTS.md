@@ -1,14 +1,5 @@
 # Tests
 
-## Bootstrap proof
-
-Before application scaffolding, run `npx markdownlint-cli2 "**/*.md"` with the copied v3 rules.
-The CLI configuration excludes `node_modules` and `.tmp`. It treats the exact one-line `@AGENTS.md`
-include as front matter so CLAUDE.md remains a pointer rather than a separate rules document.
-Parse `.ai/config.toml` with Python 3 `tomllib`. Serve `docs/mocks/` over local HTTP and fetch
-`D1-admin-desktop.html`, then its relative iframe source `G2-game.html`.
-These checks prove documentation style, config syntax and the preview path, not application behavior.
-
 ## Unit and database tests
 
 Vitest tests `lib/domain/` as pure functions without a database. Cover every rule in
@@ -81,11 +72,11 @@ Do not report intentionally hidden hints or unplayed quests as missing seed data
 
 ## Application gates
 
-These become runnable after I-01 scaffolds application scripts. Run in the configured order:
+Run in the configured order:
 
 | Gate | Proves |
 | --- | --- |
-| `pnpm lint --write` | Biome formatting and lint checks |
+| `pnpm lint --write` | markdownlint, then Biome formatting and lint checks with `preset: "recommended"` |
 | `pnpm typecheck` | Strict TypeScript with `tsc --noEmit` |
 | `pnpm test` | Pure rules, database writes and regression/component tests |
 | `pnpm build` | Next.js standalone production build |

@@ -7,9 +7,7 @@ Use Next.js 16 App Router, React 19, strict TypeScript, Tailwind CSS 4 and Node 
 Use pnpm, Biome, Vitest and Playwright. MongoDB 8 uses the official `mongodb` driver and zod schemas,
 not Mongoose. Authentication uses iron-session 8 and `bcryptjs`.
 
-This bootstrap contains documentation and accepted mocks, not application code.
-I-01 adds the application scripts and `app/globals.css`; I-02 adds database boot and seed support.
-Do not scaffold those as part of documentation work.
+I-02 adds database boot and seed support.
 
 ## Commands and proof
 
@@ -17,16 +15,13 @@ Do not scaffold those as part of documentation work.
 | --- | --- |
 | `pnpm dev` | Boot local MongoDB, seed if empty, then run Next.js development server |
 | `pnpm seed` | Load the development fixture documented in `docs/TESTS.md` |
-| `pnpm lint --write` | Run Biome and apply supported fixes |
+| `pnpm lint --write` | Run markdownlint, then Biome, and apply supported Biome fixes |
 | `pnpm typecheck` | Run `tsc --noEmit` |
 | `pnpm test` | Run Vitest domain and database tests |
 | `pnpm build` | Build the standalone Next.js application |
 | `pnpm e2e` | Run the headless core-loop smoke test once I-28 adds it |
 
-Run configured gates in order. For this docs-only bootstrap, proof is
-`npx markdownlint-cli2 "**/*.md"`, a Python `tomllib` parse of `.ai/config.toml`, and an HTTP fetch
-of the preview iframe from `docs/mocks/D1-admin-desktop.html`.
-Ignore `node_modules` when linting Markdown.
+Run configured gates in order.
 
 Agents never run Docker on fenrir. Its `docker` command invokes `sudo docker` and needs a password.
 Development and tests use `mongodb-memory-server`; production images build in CI and the human runs compose.

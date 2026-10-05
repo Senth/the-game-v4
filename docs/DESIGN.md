@@ -8,9 +8,7 @@ Conform to the nine accepted mocks in [mocks/README.md](mocks/README.md), subjec
 Login, registration, seasons list, lifecycle states and the TV board have no separate mocks.
 They use this same language, not a new visual direction.
 
-This docs-only bootstrap records the approved token values below. I-01 installs them in the Tailwind 4
-`@theme` block in `app/globals.css`, which then owns the runtime values.
-There is no token stylesheet or component implementation yet; do not scaffold one during Phase 2.
+`app/globals.css` owns the runtime token values.
 [PROJECT.md](PROJECT.md) alone defines pace math, rail meaning, standings-strip selection and game rules.
 
 ## Tokens
@@ -71,9 +69,9 @@ Code fences use Shiki; the authoring textarea can use the platform monospace fon
 
 ## Component ownership
 
-`app/globals.css` owns runtime tokens after I-01. `app/` owns routing and page composition.
+`app/globals.css` owns runtime tokens. `app/` owns routing and page composition.
 `components/` owns shared game content, rail, Intel, answer dock and the admin list/editor views.
-When application files arrive, extend those shared implementations rather than copying layouts into routes.
+Extend those shared implementations rather than copying layouts into routes.
 Desktop reuses the mobile quests, teams and team-history components in its middle pane.
 Desktop phone frame and mobile Edit/Preview render the real player components, not a second rendering system.
 With a team open, the desktop preview shows that team's current quest.
