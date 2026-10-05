@@ -3,6 +3,8 @@ import { hintPenalty } from "@/lib/domain/scoring"
 
 const minute = 60_000
 
+export const backwardsLogAsset = "/assets/3f9c1a7e-5b2d-4c8a-9e61-0d4f7b2a6c13.png"
+
 function quest(
 	id: string,
 	internalTitle: string,
@@ -45,7 +47,7 @@ const arcs: Arc[] = [
 				],
 				{
 					displayTitle: "The keeper's last log",
-					assetPath: "/assets/3f9c1a7e-5b2d-4c8a-9e61-0d4f7b2a6c13.png",
+					assetPath: backwardsLogAsset,
 					adminNotes: "The image is the last page of the log.",
 				},
 			),

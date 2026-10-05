@@ -7,7 +7,7 @@ Use Next.js 16 App Router, React 19, strict TypeScript, Tailwind CSS 4 and Node 
 Use pnpm, Biome, Vitest and Playwright. MongoDB 8 uses the official `mongodb` driver and zod schemas,
 not Mongoose. Authentication uses iron-session 8 and `bcryptjs`.
 
-I-02 adds database boot and seed support.
+MongoDB access lives in `lib/db/`, zod schemas in `lib/domain/`, and dev boot and seeding in `scripts/`.
 
 ## Commands and proof
 
