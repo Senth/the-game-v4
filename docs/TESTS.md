@@ -34,10 +34,14 @@ Keep detailed lifecycle, hold cancellation, autosave and ordering cases in unit 
 
 ## Development fixture
 
-`pnpm seed` loads "Cipher Night 2026". When `MONGODB_URI` is unset, `pnpm dev` boots
-`mongodb-memory-server` with persisted dbPath `.tmp/mongo`, seeds only if empty, then starts `next dev`.
-Development seed accounts are `admin / admin` and `Ninjas / ninjas`; never deploy those passwords.
-Initialize start/end relative to seed time so the fixture is running and Ninjas is mid-game.
+`pnpm seed` drops the database and reloads "Cipher Night 2026".
+It targets `MONGODB_URI`, else a running dev database on port 27018, else it boots one for the run.
+It refuses `NODE_ENV=production` and hosts other than `localhost` or `127.0.0.1` unless passed `--force`.
+When `MONGODB_URI` is unset, `pnpm dev` boots `mongodb-memory-server` on port 27018 with dbPath `.tmp/mongo`.
+It seeds only an empty database, then starts `next dev`.
+Seed accounts are `admin / admin` and `Ninjas / ninjas`. Other teams use their lowercased name as password.
+Never deploy those passwords. The seed copies the Backwards log image to `ASSETS_DIR`, default `.tmp/assets`.
+Start and end follow seed time, so the season is running and Ninjas is mid-game.
 
 | Arc | Quests | Authored order |
 | --- | --- | --- |

@@ -6,26 +6,38 @@
 		"node": ">=24"
 	},
 	"scripts": {
-		"dev": "next dev",
+		"dev": "tsx scripts/dev.ts",
 		"lint": "markdownlint-cli2 \"**/*.md\" && biome check",
 		"typecheck": "next typegen && tsc --noEmit",
 		"test": "vitest run --passWithNoTests",
-		"build": "next build"
+		"build": "next build",
+		"seed": "tsx scripts/seed.ts"
 	},
 	"dependencies": {
+		"bcryptjs": "^3.0.3",
+		"mongodb": "^7.7.0",
 		"next": "16.3.8",
 		"react": "19.2.8",
-		"react-dom": "19.2.8"
+		"react-dom": "19.2.8",
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.15",
+		"@next/env": "16.3.8",
 		"@tailwindcss/postcss": "^4",
 		"@types/node": "^24",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 		"markdownlint-cli2": "^0.23.3",
+		"mongodb-memory-server": "^11.3.0",
 		"tailwindcss": "^4",
+		"tsx": "^4.23.15",
 		"typescript": "^5",
 		"vitest": "^5.0.3"
+	},
+	"config": {
+		"mongodbMemoryServer": {
+			"version": "8.0.32"
+		}
 	}
 }
