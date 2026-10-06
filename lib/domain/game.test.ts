@@ -181,17 +181,24 @@ describe("pace", () => {
 	})
 
 	it.each([
-		[10, 1, 0, "pace-ok"],
-		[11, 1, 1, "pace-1"],
-		[10, 0, 10, "pace-1"],
-		[11, 0, 11, "pace-2"],
-		[20, 0, 20, "pace-2"],
-		[21, 0, 21, "pace-3"],
-	])("at %i minutes with %i solved is %i%% behind in band %s", (minute, solved, behindPercent, band) => {
-		const { frozen, original } = frozenCopy({ season: running, team: team(solved) })
-		expect(pace(frozen.season, frozen.team, minutes(minute))).toMatchObject({ behindPercent, band })
-		expect(frozen).toEqual(original)
-	})
+		[10, 100, 1, 10, 0, "pace-ok"],
+		[11, 100, 1, 10, 1, "pace-1"],
+		[10, 100, 0, 10, 10, "pace-1"],
+		[11, 100, 0, 10, 11, "pace-2"],
+		[20, 100, 0, 10, 20, "pace-2"],
+		[21, 100, 0, 10, 21, "pace-3"],
+		[52, 120, 1, 3, 10, "pace-1"],
+	])(
+		"at %i of %i minutes with %i of %i solved is %i%% behind in band %s",
+		(minute, duration, solved, quests, behindPercent, band) => {
+			const { frozen, original } = frozenCopy({
+				season: { start, end: minutes(duration) },
+				team: team(solved, order.slice(0, quests)),
+			})
+			expect(pace(frozen.season, frozen.team, minutes(minute))).toMatchObject({ behindPercent, band })
+			expect(frozen).toEqual(original)
+		},
+	)
 
 	it("reports percentages and N for a team ahead", () => {
 		expect(pace(running, team(5), minutes(30))).toEqual({

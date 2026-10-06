@@ -47,12 +47,14 @@ export function pace(
 	const { start, end } = season
 	const total = team.questOrder.length
 	if (!start || !end || end.getTime() <= start.getTime() || total === 0) return null
-	const timeFraction = Math.min(Math.max((now.getTime() - start.getTime()) / (end.getTime() - start.getTime()), 0), 1)
+	const duration = end.getTime() - start.getTime()
+	const elapsed = Math.min(Math.max(now.getTime() - start.getTime(), 0), duration)
+	const timeFraction = elapsed / duration
 	const order = new Set(team.questOrder)
 	const solved = team.progress.filter((entry) => entry.solvedAt && order.has(entry.questId)).length
 	const timePercent = 100 * timeFraction
 	const solvedPercent = 100 * (solved / total)
-	const behindPercent = timePercent - solvedPercent
+	const behindPercent = (100 * (elapsed * total - solved * duration)) / (duration * total)
 	const band =
 		behindPercent <= 0 ? "pace-ok" : behindPercent <= 10 ? "pace-1" : behindPercent <= 20 ? "pace-2" : "pace-3"
 	return { timePercent, solvedPercent, behindPercent, band, n: Math.round(timeFraction * total) - solved }

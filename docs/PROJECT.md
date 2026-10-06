@@ -190,7 +190,7 @@ Structural edits require confirmation that names how many teams are affected:
 - A deleted quest is removed from teams that have not reached it. Teams that already solved it are unchanged.
 - Teams currently on a deleted quest skip it with 0 points. The quest leaves `questOrder`, `questIndex` stays,
   and its progress entry records `pointsEarned: 0` without `solvedAt`, keeping revealed hint snapshots.
-  Score is unchanged. If no quests remain after `questIndex`, the team is completed.
+  Score is unchanged. If no quest remains at `questIndex`, the team is completed.
 
 Reordering hints, quests across arcs, or whole arcs uses the same live-edit rules.
 Copying an arc into an unstarted season creates independent quests with new ids.
