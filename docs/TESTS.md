@@ -41,7 +41,7 @@ When `MONGODB_URI` is unset, `pnpm dev` boots `mongodb-memory-server` on port 27
 It seeds only an empty database, then starts `next dev`.
 Seed accounts are `admin / admin` and `Ninjas / ninjas`. Other teams use their lowercased name as password.
 Never deploy those passwords. The seed copies the Backwards log image to `ASSETS_DIR`, default `.tmp/assets`.
-Start and end follow seed time, so the season is running and Ninjas is mid-game.
+Start and end follow seed time, so the season is running with registration open and Ninjas is mid-game.
 
 | Arc | Quests | Authored order |
 | --- | --- | --- |

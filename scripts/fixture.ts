@@ -372,6 +372,7 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 		start: new Date(start),
 		end: new Date(start + 120 * minute),
 		shuffleArcs: true,
+		registrationOpen: true,
 		arcs: structuredClone(arcs),
 	}
 	const quests = new Map(arcs.flatMap((arc) => arc.quests.map((q) => [q.id, q] as const)))

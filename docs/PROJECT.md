@@ -39,6 +39,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `start` | `Date \| null` | Scheduled or actual start; null before scheduling |
 | `end` | `Date \| null` | Scheduled or actual end; adjusted by live controls |
 | `shuffleArcs` | `boolean` | Shuffle arc order when building each team's order |
+| `registrationOpen` | `boolean` | New teams join this season; a stored season without it counts as closed |
 | `arcs` | `Arc[]` | Arcs in authored order |
 
 ### Nested types
@@ -98,13 +99,21 @@ Admins land on `/admin`, teams on `/`. Deleting a team invalidates its sessions.
 ### Lifecycle and season lookup
 
 Waiting, countdown, running, completed and ended are distinct player states.
-Before start, show waiting or countdown; at start, enter the game without reloading.
+Waiting means no season or no start time; countdown means a future start.
+At start, enter the game without reloading.
 The game runs from `start` until `end`. At end, stop play and show the team's score.
 When every quest in the team's order is finished, show completed with score.
+Completed outranks ended and running, so a team that finished early stays completed after end.
 
-A team without a season joins the season that starts within 60 seconds or is already running;
-otherwise it joins the next upcoming season. If none exists, show waiting.
-Self-registration uses the same lookup. Names may repeat in different seasons, not within one season.
+A season counts until it ends: `end` is null or now is before `end`.
+New teams join the counting season with `registrationOpen`, also while it runs, until it ends.
+Self-registration and a team without a season use this lookup. If no counting season has registration open,
+registration is not possible and a seasonless team sees waiting.
+At most one counting season may have registration open. Opening it while another counting season has it
+is rejected with an error naming that season; the flag never moves automatically.
+Opening registration on an ended season is rejected. Ended seasons keep their flag, but it no longer counts.
+Changing `end` so a flagged ended season counts again is rejected the same way while another counting season has it.
+Names may repeat in different seasons, not within one season.
 Live Start sets start and end. The admin can shift end by minus or plus 5 minutes, or confirm End game.
 
 ### Quest order and rail
@@ -120,7 +129,8 @@ Do not show "quest N of M" beside the rail.
 
 ### Answers, hints and score
 
-Trim submitted and accepted answers and compare case-insensitively. Any member of `answers: string[]` may match.
+Normalize submitted and accepted answers to Unicode NFC, trim them and compare case-insensitively.
+Any member of `answers: string[]` may match.
 A wrong answer changes no game state. A correct answer records `solvedAt`, earns points and advances the team.
 Every logged-in session of that team receives the update.
 
@@ -165,9 +175,11 @@ Outside running play, use the lifecycle state instead of dividing by a missing d
 
 ### Standings strip
 
-Standings rank teams by points. Always include #1. If you are #1, show only you.
+Standings rank teams by points. Equal points share a rank, so ranks run 1, 2, 2, 4.
+Within a tie, the team whose latest solve came earliest goes first; teams without solves follow, by name.
+Always include #1. If you are #1, including tied for #1, show only you.
 Otherwise show #1, the team immediately ahead of you, and you, without duplicates.
-Insert `···` between #1 and the team ahead only when a rank gap exists.
+Insert `···` between #1 and the team ahead only when other teams sit between them.
 Rank is small and muted, name regular, points bold in heading color; tint your team.
 The whole strip is the button to `/standings`. `/board` is public for a TV and shows only a running season.
 
@@ -180,9 +192,12 @@ one another. Retry retains unsaved local values. Preview renders real game compo
 Text, answers, hints and points apply immediately during play, except revealed-hint snapshots remain unchanged.
 Structural edits require confirmation that names how many teams are affected:
 
-- A new quest goes into a random position in each team's remaining order.
-- A deleted quest is removed from teams that have not reached it.
-- Teams currently on a deleted quest skip it with 0 points.
+- A new quest goes into a random position after the current quest in each team's remaining order.
+  Completed teams ignore added quests.
+- A deleted quest is removed from teams that have not reached it. Teams that already solved it are unchanged.
+- Teams currently on a deleted quest skip it with 0 points. The quest leaves `questOrder`, `questIndex` stays,
+  and its progress entry records `pointsEarned: 0` without `solvedAt`, keeping revealed hint snapshots.
+  Score is unchanged. If no quest remains at `questIndex`, the team is completed.
 
 Reordering hints, quests across arcs, or whole arcs uses the same live-edit rules.
 Copying an arc into an unstarted season creates independent quests with new ids.
@@ -193,7 +208,8 @@ Team views retain per-quest revealed hints and earnings after solving.
 ## Player data boundary
 
 Players never receive internal titles, admin notes, answers or unrevealed hint text, including in previews
-and live responses. Hidden hints may expose their position and penalty, not their text.
+and live responses. Hidden hints may expose their id, position and penalty, not their text.
+Players reveal hints by id, not by index, so edits and deletions cannot shift a reveal onto another hint.
 Construct a player view without deleting fields from the shared season object.
 
 ## Live events
