@@ -166,9 +166,11 @@ Outside running play, use the lifecycle state instead of dividing by a missing d
 
 ### Standings strip
 
-Standings rank teams by points. Always include #1. If you are #1, show only you.
+Standings rank teams by points. Equal points share a rank, so ranks run 1, 2, 2, 4.
+Within a tie, the team whose latest solve came earliest goes first; teams without solves follow, by name.
+Always include #1. If you are #1, including tied for #1, show only you.
 Otherwise show #1, the team immediately ahead of you, and you, without duplicates.
-Insert `···` between #1 and the team ahead only when a rank gap exists.
+Insert `···` between #1 and the team ahead only when other teams sit between them.
 Rank is small and muted, name regular, points bold in heading color; tint your team.
 The whole strip is the button to `/standings`. `/board` is public for a TV and shows only a running season.
 

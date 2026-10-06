@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildQuestOrder, matchesAnswer, pace, paceLabel, scoreForSolve } from "./game"
+import { buildQuestOrder, matchesAnswer, pace, paceLabel, rankTeams, scoreForSolve, standingsStrip } from "./game"
 import type { Arc, Quest, Season, TeamQuestProgress } from "./schemas"
 
 function deepFreeze<T>(value: T): T {
@@ -220,5 +220,114 @@ describe("paceLabel", () => {
 		expect(paceLabel(3)).toBe("3 behind")
 		expect(paceLabel(-2)).toBe("2 ahead")
 		expect(paceLabel(0)).toBe("On pace")
+	})
+})
+
+describe("rankTeams and standingsStrip", () => {
+	const at = (minute: number) => new Date(Date.UTC(2026, 2, 14, 18, minute))
+	const team = (name: string, score: number, solvedMinutes: number[] = []) => ({
+		_id: name.toLowerCase(),
+		name,
+		passwordHash: "hash",
+		seasonId: "s1",
+		questOrder: ["q1", "q2"],
+		questIndex: 0,
+		score,
+		completed: false,
+		progress: solvedMinutes.map((minute, index) => ({
+			questId: `q${index + 1}`,
+			solvedAt: at(minute),
+			hintsRevealed: [],
+			pointsEarned: 10,
+		})),
+	})
+	const field = [
+		team("Lagom", 70, [40]),
+		team("Ravarna", 120, [50]),
+		team("Kaos", 105, [30]),
+		team("Fjallrav", 98, [20]),
+		team("Byggarna", 90, [10]),
+		team("Glada", 82, [15]),
+		team("Ninjas", 64, [5]),
+		team("Kod", 50, [1]),
+	]
+	const row = (rank: number, name: string, score: number, you = false) => ({
+		kind: "team",
+		rank,
+		id: name.toLowerCase(),
+		name,
+		score,
+		you,
+	})
+
+	it("shares ranks on equal score, earliest last solve first, then unsolved teams by name", () => {
+		const { frozen, original } = frozenCopy([
+			team("Zeta", 0),
+			team("Late", 90, [10, 50]),
+			team("Top", 100, [30]),
+			team("Early", 90, [5, 40]),
+			team("Alpha", 0),
+			team("Low", 80, [60]),
+		])
+		expect(rankTeams(frozen).map(({ name, rank }) => [rank, name])).toEqual([
+			[1, "Top"],
+			[2, "Early"],
+			[2, "Late"],
+			[4, "Low"],
+			[5, "Alpha"],
+			[5, "Zeta"],
+		])
+		expect(frozen).toEqual(original)
+	})
+
+	it("shows only you at #1", () => {
+		const { frozen, original } = frozenCopy(field)
+		expect(standingsStrip(frozen, "ravarna")).toEqual([row(1, "Ravarna", 120, true)])
+		expect(frozen).toEqual(original)
+	})
+
+	it("shows #1 and you at #2 without a duplicate or gap", () => {
+		expect(standingsStrip(field, "kaos")).toEqual([row(1, "Ravarna", 120), row(2, "Kaos", 105, true)])
+	})
+
+	it("shows #1, the row above and you at #3 without a gap", () => {
+		expect(standingsStrip(field, "fjallrav")).toEqual([
+			row(1, "Ravarna", 120),
+			row(2, "Kaos", 105),
+			row(3, "Fjallrav", 98, true),
+		])
+	})
+
+	it("inserts a gap between #1 and the row above you at #7", () => {
+		expect(standingsStrip(field, "ninjas")).toEqual([
+			row(1, "Ravarna", 120),
+			{ kind: "gap" },
+			row(6, "Lagom", 70),
+			row(7, "Ninjas", 64, true),
+		])
+	})
+
+	it("shows only you when tied for #1", () => {
+		const tied = [team("First", 100, [10]), team("Second", 100, [20]), team("Third", 90, [5])]
+		expect(standingsStrip(tied, "second")).toEqual([row(1, "Second", 100, true)])
+	})
+
+	it("uses shared ranks for ties below #1", () => {
+		const tied = [team("Top", 100, [1]), team("Ahead", 80, [10]), team("Mine", 80, [20]), team("Last", 70, [5])]
+		expect(standingsStrip(tied, "mine")).toEqual([row(1, "Top", 100), row(2, "Ahead", 80), row(2, "Mine", 80, true)])
+		expect(standingsStrip(tied, "last")).toEqual([
+			row(1, "Top", 100),
+			{ kind: "gap" },
+			row(2, "Mine", 80),
+			row(4, "Last", 70, true),
+		])
+	})
+
+	it("carries no private team fields", () => {
+		for (const entry of standingsStrip(field, "ninjas")) {
+			expect(Object.keys(entry).sort()).toEqual(
+				entry.kind === "gap" ? ["kind"] : ["id", "kind", "name", "rank", "score", "you"],
+			)
+		}
 	})
 })

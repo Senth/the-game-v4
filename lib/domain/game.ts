@@ -63,3 +63,46 @@ export function paceLabel(n: number): string {
 	if (n < 0) return `${-n} ahead`
 	return "On pace"
 }
+
+type RankableTeam = Pick<Team, "_id" | "name" | "score" | "progress">
+
+function lastSolve(team: RankableTeam): number {
+	const times = team.progress.flatMap((entry) => (entry.solvedAt ? [entry.solvedAt.getTime()] : []))
+	return times.length ? Math.max(...times) : Number.POSITIVE_INFINITY
+}
+
+export function rankTeams<T extends RankableTeam>(teams: T[]): (T & { rank: number })[] {
+	const sorted = teams.toSorted(
+		(a, b) => b.score - a.score || lastSolve(a) - lastSolve(b) || a.name.localeCompare(b.name),
+	)
+	const ranked: (T & { rank: number })[] = []
+	for (const [index, team] of sorted.entries()) {
+		const previous = ranked[index - 1]
+		ranked.push({ ...team, rank: previous && previous.score === team.score ? previous.rank : index + 1 })
+	}
+	return ranked
+}
+
+export type StripEntry =
+	| { kind: "team"; rank: number; id: string; name: string; score: number; you: boolean }
+	| { kind: "gap" }
+
+export function standingsStrip(teams: RankableTeam[], youId: string): StripEntry[] {
+	const ranked = rankTeams(teams)
+	const youIndex = ranked.findIndex((team) => team._id === youId)
+	const you = ranked[youIndex]
+	if (!you) return []
+	const indexes = you.rank === 1 ? [youIndex] : [...new Set([0, youIndex - 1, youIndex])]
+	return indexes.flatMap<StripEntry>((index) => {
+		const team = ranked[index] as (typeof ranked)[number]
+		const entry: StripEntry = {
+			kind: "team",
+			rank: team.rank,
+			id: team._id,
+			name: team.name,
+			score: team.score,
+			you: index === youIndex,
+		}
+		return index === youIndex - 1 && index > 1 ? [{ kind: "gap" }, entry] : [entry]
+	})
+}
