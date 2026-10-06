@@ -120,7 +120,8 @@ Do not show "quest N of M" beside the rail.
 
 ### Answers, hints and score
 
-Trim submitted and accepted answers and compare case-insensitively. Any member of `answers: string[]` may match.
+Normalize submitted and accepted answers to Unicode NFC, trim them and compare case-insensitively.
+Any member of `answers: string[]` may match.
 A wrong answer changes no game state. A correct answer records `solvedAt`, earns points and advances the team.
 Every logged-in session of that team receives the update.
 
