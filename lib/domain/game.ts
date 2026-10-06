@@ -8,7 +8,7 @@ export function matchesAnswer(submitted: string, answers: string[]): boolean {
 	return answers.some((answer) => normalizeAnswer(answer) === normalized)
 }
 
-export function scoreForSolve(quest: Quest, progress: TeamQuestProgress): number {
+export function scoreForSolve(quest: Quest, progress: Pick<TeamQuestProgress, "hintsRevealed">): number {
 	return (quest.points ?? 0) - hintPenalty(progress.hintsRevealed)
 }
 
@@ -105,4 +105,36 @@ export function standingsStrip(teams: RankableTeam[], youId: string): StripEntry
 		}
 		return index === youIndex - 1 && index > 1 ? [{ kind: "gap" }, entry] : [entry]
 	})
+}
+
+export type PlayerHint =
+	| { id: string; position: number; points: number; text: string; revealed: true }
+	| { id: string; position: number; points: number; revealed: false }
+
+export type PlayerQuest = Pick<Quest, "id" | "displayTitle" | "content" | "assetPath" | "points"> & {
+	worth: number
+	hints: PlayerHint[]
+}
+
+export function playerView(quest: Quest, progress?: TeamQuestProgress): PlayerQuest {
+	const revealed = progress?.hintsRevealed ?? []
+	const snapshots = new Map(revealed.map((snapshot) => [snapshot.hintId, snapshot]))
+	const currentIds = new Set(quest.hints.map((hint) => hint.id))
+	const shown = [
+		...quest.hints.map((hint) => snapshots.get(hint.id) ?? hint),
+		...revealed.filter((snapshot) => !currentIds.has(snapshot.hintId)),
+	]
+	return {
+		id: quest.id,
+		displayTitle: quest.displayTitle,
+		content: quest.content,
+		assetPath: quest.assetPath,
+		points: quest.points,
+		worth: scoreForSolve(quest, { hintsRevealed: revealed }),
+		hints: shown.map((hint, index) =>
+			"hintId" in hint
+				? { id: hint.hintId, position: index + 1, points: hint.points, text: hint.text, revealed: true }
+				: { id: hint.id, position: index + 1, points: hint.points, revealed: false },
+		),
+	}
 }

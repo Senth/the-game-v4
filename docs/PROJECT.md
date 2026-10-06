@@ -196,7 +196,8 @@ Team views retain per-quest revealed hints and earnings after solving.
 ## Player data boundary
 
 Players never receive internal titles, admin notes, answers or unrevealed hint text, including in previews
-and live responses. Hidden hints may expose their position and penalty, not their text.
+and live responses. Hidden hints may expose their id, position and penalty, not their text.
+Players reveal hints by id, not by index, so edits and deletions cannot shift a reveal onto another hint.
 Construct a player view without deleting fields from the shared season object.
 
 ## Live events

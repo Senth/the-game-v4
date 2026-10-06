@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest"
-import { buildQuestOrder, matchesAnswer, pace, paceLabel, rankTeams, scoreForSolve, standingsStrip } from "./game"
+import {
+	buildQuestOrder,
+	matchesAnswer,
+	pace,
+	paceLabel,
+	playerView,
+	rankTeams,
+	scoreForSolve,
+	standingsStrip,
+} from "./game"
 import type { Arc, Quest, Season, TeamQuestProgress } from "./schemas"
 
 function deepFreeze<T>(value: T): T {
@@ -329,5 +338,78 @@ describe("rankTeams and standingsStrip", () => {
 				entry.kind === "gap" ? ["kind"] : ["id", "kind", "name", "rank", "score", "you"],
 			)
 		}
+	})
+})
+
+describe("playerView", () => {
+	const revealedAt = new Date("2026-03-14T18:00:00Z")
+	const secretQuest: Quest = {
+		...quest("backwards-log", 30),
+		displayTitle: "The keeper's last log",
+		internalTitle: "internal-backwards-log",
+		content: "Read the log in reverse.",
+		assetPath: "backwards-log.png",
+		answers: ["secret-answer-one", "secret-answer-two"],
+		adminNotes: "secret admin note",
+		hints: [
+			{ id: "h1", text: "Edited wording", points: 8 },
+			{ id: "h2", text: "secret hidden hint", points: 10 },
+			{ id: "h3", text: "another secret hint", points: 20 },
+		],
+	}
+	const progress: TeamQuestProgress = {
+		questId: "backwards-log",
+		hintsRevealed: [
+			{ hintId: "h1", text: "Original wording", points: 5, revealedAt },
+			{ hintId: "deleted", text: "Deleted hint", points: 3, revealedAt },
+		],
+		pointsEarned: 0,
+	}
+	const shared = season([{ id: "a1", title: "Lighthouse", shuffleQuests: false, quests: [secretQuest] }])
+
+	it("shows current hints in order with snapshots for revealed ones and appends deleted reveals", () => {
+		expect(playerView(secretQuest, progress)).toEqual({
+			id: "backwards-log",
+			displayTitle: "The keeper's last log",
+			content: "Read the log in reverse.",
+			assetPath: "backwards-log.png",
+			points: 30,
+			worth: 22,
+			hints: [
+				{ id: "h1", position: 1, points: 5, text: "Original wording", revealed: true },
+				{ id: "h2", position: 2, points: 10, revealed: false },
+				{ id: "h3", position: 3, points: 20, revealed: false },
+				{ id: "deleted", position: 4, points: 3, text: "Deleted hint", revealed: true },
+			],
+		})
+	})
+
+	it("treats missing progress as nothing revealed", () => {
+		const view = playerView(secretQuest)
+		expect(view.worth).toBe(30)
+		expect(view.hints.map((hint) => hint.revealed)).toEqual([false, false, false])
+	})
+
+	it("serializes no answer, internal title, admin note or hidden hint text", () => {
+		const json = JSON.stringify(playerView(secretQuest, progress))
+		for (const secret of [
+			"secret-answer-one",
+			"secret-answer-two",
+			"internal-backwards-log",
+			"secret admin note",
+			"secret hidden hint",
+			"another secret hint",
+			"Edited wording",
+		]) {
+			expect(json).not.toContain(secret)
+		}
+	})
+
+	it("leaves a shared deep-frozen season unchanged", () => {
+		const { frozen, original } = frozenCopy({ season: shared, progress })
+		const sharedQuest = frozen.season.arcs[0]?.quests[0] as Quest
+		playerView(sharedQuest, frozen.progress)
+		playerView(sharedQuest)
+		expect(frozen).toEqual(original)
 	})
 })
