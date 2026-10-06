@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	activeSeason,
+	applyStructuralEdit,
 	buildQuestOrder,
 	lifecycleState,
 	matchesAnswer,
@@ -514,5 +515,104 @@ describe("rail", () => {
 			},
 		])
 		expect(frozen).toEqual(original)
+	})
+})
+
+describe("applyStructuralEdit", () => {
+	const revealedAt = new Date("2026-03-14T18:10:00Z")
+	const solvedAt = new Date("2026-03-14T18:20:00Z")
+	const snapshot = { hintId: "h1", text: "Look north", points: 5, revealedAt }
+	const editTeam = (id: string, questOrder: string[], questIndex: number, completed = false) => ({
+		_id: id,
+		questOrder,
+		questIndex,
+		completed,
+		score: 10 * questIndex,
+		progress: questOrder.slice(0, questIndex).map((questId) => ({
+			questId,
+			solvedAt,
+			hintsRevealed: [],
+			pointsEarned: 10,
+		})),
+	})
+	const onQ2 = {
+		...editTeam("on-q2", ["q1", "q2", "q3"], 1),
+		progress: [
+			{ questId: "q1", solvedAt, hintsRevealed: [], pointsEarned: 10 },
+			{ questId: "q2", hintsRevealed: [snapshot], pointsEarned: 0 },
+		],
+	}
+	const done = editTeam("done", ["q1", "q2", "q3"], 3, true)
+	const fresh = editTeam("fresh", ["q2", "q1", "q3"], 0)
+
+	it("inserts an added quest after the current one and skips completed teams", () => {
+		const { frozen, original } = frozenCopy([onQ2, done])
+		const result = applyStructuralEdit(frozen, { kind: "addQuest", questId: "new" }, () => 0)
+		expect(result.affected).toEqual(["on-q2"])
+		expect(result.teams[0]?.questOrder).toEqual(["q1", "q2", "new", "q3"])
+		expect(result.teams[1]).toBe(frozen[1])
+		expect(frozen).toEqual(original)
+	})
+
+	it("can append an added quest at the end", () => {
+		const result = applyStructuralEdit([onQ2], { kind: "addQuest", questId: "new" }, () => 0.999)
+		expect(result.teams[0]?.questOrder).toEqual(["q1", "q2", "q3", "new"])
+	})
+
+	it("uses every slot after the current quest and never one at or before it", () => {
+		const team = editTeam("t", ["q1", "q2", "q3", "q4"], 1)
+		const slots = new Set<number>()
+		for (let run = 0; run < 1000; run++) {
+			const [edited] = applyStructuralEdit([team], { kind: "addQuest", questId: "new" }).teams
+			slots.add(edited?.questOrder.indexOf("new") ?? -1)
+		}
+		expect([...slots].sort((a, b) => a - b)).toEqual([2, 3, 4])
+	})
+
+	it("removes a deleted quest the team has not reached", () => {
+		const { frozen, original } = frozenCopy([onQ2, fresh])
+		const result = applyStructuralEdit(frozen, { kind: "deleteQuest", questId: "q3" })
+		expect(result.affected).toEqual(["on-q2", "fresh"])
+		expect(result.teams.map((team) => [team.questOrder, team.questIndex])).toEqual([
+			[["q1", "q2"], 1],
+			[["q2", "q1"], 0],
+		])
+		expect(frozen).toEqual(original)
+	})
+
+	it("skips a deleted current quest with 0 points and keeps its revealed hints", () => {
+		const { frozen, original } = frozenCopy([onQ2])
+		const { teams, affected } = applyStructuralEdit(frozen, { kind: "deleteQuest", questId: "q2" })
+		expect(affected).toEqual(["on-q2"])
+		expect(teams[0]).toMatchObject({ questOrder: ["q1", "q3"], questIndex: 1, completed: false, score: 10 })
+		expect(teams[0]?.progress).toEqual([
+			{ questId: "q1", solvedAt, hintsRevealed: [], pointsEarned: 10 },
+			{ questId: "q2", hintsRevealed: [snapshot], pointsEarned: 0 },
+		])
+		expect(frozen).toEqual(original)
+	})
+
+	it("records a skip for a current quest without progress", () => {
+		const { teams } = applyStructuralEdit([fresh], { kind: "deleteQuest", questId: "q2" })
+		expect(teams[0]?.progress).toEqual([{ questId: "q2", hintsRevealed: [], pointsEarned: 0 }])
+	})
+
+	it("completes a team whose current quest was the last remaining one", () => {
+		const onLast = editTeam("on-last", ["q1", "q2"], 1)
+		const { teams } = applyStructuralEdit([onLast], { kind: "deleteQuest", questId: "q2" })
+		expect(teams[0]).toMatchObject({ questOrder: ["q1"], questIndex: 1, completed: true, score: 10 })
+	})
+
+	it("completes a team whose only quest is deleted", () => {
+		const { teams } = applyStructuralEdit([editTeam("only", ["q1"], 0)], { kind: "deleteQuest", questId: "q1" })
+		expect(teams[0]).toMatchObject({ questOrder: [], questIndex: 0, completed: true, score: 0 })
+	})
+
+	it("leaves teams that already solved the deleted quest unchanged and unaffected", () => {
+		const { frozen } = frozenCopy([onQ2, done])
+		const result = applyStructuralEdit(frozen, { kind: "deleteQuest", questId: "q1" })
+		expect(result.affected).toEqual([])
+		expect(result.teams[0]).toBe(frozen[0])
+		expect(result.teams[1]).toBe(frozen[1])
 	})
 })

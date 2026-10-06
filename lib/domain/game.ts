@@ -178,3 +178,45 @@ export function rail(
 		})),
 	}))
 }
+
+export type StructuralEdit = { kind: "addQuest"; questId: string } | { kind: "deleteQuest"; questId: string }
+
+type EditableTeam = Pick<Team, "_id" | "questOrder" | "questIndex" | "completed" | "progress">
+
+function editTeam<T extends EditableTeam>(team: T, edit: StructuralEdit, random: () => number): T | null {
+	const { questOrder, questIndex } = team
+	if (edit.kind === "addQuest") {
+		if (team.completed) return null
+		const slot = questIndex + 1 + Math.floor(random() * (questOrder.length - questIndex))
+		return { ...team, questOrder: questOrder.toSpliced(slot, 0, edit.questId) }
+	}
+	const position = questOrder.indexOf(edit.questId)
+	if (position === -1 || position < questIndex) return null
+	const remaining = questOrder.toSpliced(position, 1)
+	if (position > questIndex) return { ...team, questOrder: remaining }
+	const skipped = team.progress.find((entry) => entry.questId === edit.questId)
+	return {
+		...team,
+		questOrder: remaining,
+		completed: questIndex >= remaining.length,
+		progress: [
+			...team.progress.filter((entry) => entry !== skipped),
+			{ questId: edit.questId, hintsRevealed: skipped?.hintsRevealed ?? [], pointsEarned: 0 },
+		],
+	}
+}
+
+export function applyStructuralEdit<T extends EditableTeam>(
+	teams: T[],
+	edit: StructuralEdit,
+	random: () => number = Math.random,
+): { teams: T[]; affected: string[] } {
+	const affected: string[] = []
+	const edited = teams.map((team) => {
+		const changed = editTeam(team, edit, random)
+		if (!changed) return team
+		affected.push(team._id)
+		return changed
+	})
+	return { teams: edited, affected }
+}

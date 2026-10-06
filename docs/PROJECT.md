@@ -185,9 +185,12 @@ one another. Retry retains unsaved local values. Preview renders real game compo
 Text, answers, hints and points apply immediately during play, except revealed-hint snapshots remain unchanged.
 Structural edits require confirmation that names how many teams are affected:
 
-- A new quest goes into a random position in each team's remaining order.
-- A deleted quest is removed from teams that have not reached it.
-- Teams currently on a deleted quest skip it with 0 points.
+- A new quest goes into a random position after the current quest in each team's remaining order.
+  Completed teams ignore added quests.
+- A deleted quest is removed from teams that have not reached it. Teams that already solved it are unchanged.
+- Teams currently on a deleted quest skip it with 0 points. The quest leaves `questOrder`, `questIndex` stays,
+  and its progress entry records `pointsEarned: 0` without `solvedAt`, keeping revealed hint snapshots.
+  Score is unchanged. If no quests remain after `questIndex`, the team is completed.
 
 Reordering hints, quests across arcs, or whole arcs uses the same live-edit rules.
 Copying an arc into an unstarted season creates independent quests with new ids.
