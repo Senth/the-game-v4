@@ -27,14 +27,13 @@ function quest(id: string): Quest {
 	}
 }
 
-function seasonInput(): Omit<SeasonInput, "_id"> {
+function seasonInput(): Omit<SeasonInput, "_id" | "registrationOpen"> {
 	return {
 		title: "Cipher Night",
 		lengthMinutes: 120,
 		start: null,
 		end: null,
 		shuffleArcs: false,
-		registrationOpen: false,
 		arcs: [
 			{ id: "a1", title: "Lighthouse", shuffleQuests: false, quests: [quest("q1"), quest("q2")] },
 			{ id: "a2", title: "Old Town", shuffleQuests: true, quests: [quest("q3")] },
@@ -160,11 +159,39 @@ describe("seasons", () => {
 		await setRegistrationOpen(next._id, false, now)
 	})
 
+	it("rejects an end edit that revives a flagged ended season while another counting season is open", async () => {
+		const ended = await createSeason({ ...seasonInput(), end: new Date(Date.now() - 60_000) })
+		const open = await createSeason({ ...seasonInput(), title: "Season Open" })
+		await setRegistrationOpen(ended._id, true, new Date(Date.now() - 120_000))
+		await setRegistrationOpen(open._id, true)
+
+		const revived = setSeasonField(ended._id, { field: "end" }, null)
+		await expect(revived).rejects.toThrow(RegistrationConflictError)
+		await expect(revived).rejects.toThrow("Season Open")
+		expect((await getSeason(ended._id))?.end).not.toBeNull()
+
+		const stillEnded = new Date(Date.now() - 1_000)
+		await setSeasonField(ended._id, { field: "end" }, stillEnded)
+		expect((await getSeason(ended._id))?.end).toEqual(stillEnded)
+		await setRegistrationOpen(open._id, false)
+	})
+
+	it("ignores a flag passed to createSeason", async () => {
+		const season = await createSeason({ ...seasonInput(), registrationOpen: true } as Parameters<
+			typeof createSeason
+		>[0])
+
+		expect((await getSeason(season._id))?.registrationOpen).toBe(false)
+	})
+
 	it("throws for an unknown season and refuses registrationOpen through setSeasonField", async () => {
 		const season = await createSeason(seasonInput())
+		const open = await createSeason(seasonInput())
+		await setRegistrationOpen(open._id, true)
 
 		await expect(setRegistrationOpen("missing", true)).rejects.toThrow(NotFoundError)
 		await expect(setSeasonField(season._id, { field: "registrationOpen" }, true)).rejects.toThrow("setRegistrationOpen")
 		expect((await getSeason(season._id))?.registrationOpen).toBe(false)
+		await setRegistrationOpen(open._id, false)
 	})
 })

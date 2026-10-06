@@ -39,7 +39,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `start` | `Date \| null` | Scheduled or actual start; null before scheduling |
 | `end` | `Date \| null` | Scheduled or actual end; adjusted by live controls |
 | `shuffleArcs` | `boolean` | Shuffle arc order when building each team's order |
-| `registrationOpen` | `boolean` | New teams join this season; stored seasons without it read as false |
+| `registrationOpen` | `boolean` | New teams join this season; a stored season without it counts as closed |
 | `arcs` | `Arc[]` | Arcs in authored order |
 
 ### Nested types
@@ -112,6 +112,7 @@ registration is not possible and a seasonless team sees waiting.
 At most one counting season may have registration open. Opening it while another counting season has it
 is rejected with an error naming that season; the flag never moves automatically.
 Opening registration on an ended season is rejected. Ended seasons keep their flag, but it no longer counts.
+Changing `end` so a flagged ended season counts again is rejected the same way while another counting season has it.
 Names may repeat in different seasons, not within one season.
 Live Start sets start and end. The admin can shift end by minus or plus 5 minutes, or confirm End game.
 

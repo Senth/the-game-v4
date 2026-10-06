@@ -141,6 +141,8 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress): PlayerQu
 	}
 }
 
+const hasEnded = (season: Pick<Season, "end">, now: Date) => season.end !== null && now >= season.end
+
 export type LifecycleState = "waiting" | "countdown" | "running" | "completed" | "ended"
 
 export function lifecycleState(
@@ -151,11 +153,9 @@ export function lifecycleState(
 	if (!season?.start) return "waiting"
 	if (now < season.start) return "countdown"
 	if (team.completed) return "completed"
-	if (season.end && now >= season.end) return "ended"
+	if (hasEnded(season, now)) return "ended"
 	return "running"
 }
-
-const hasEnded = (season: Pick<Season, "end">, now: Date) => season.end !== null && now >= season.end
 
 export function registrationSeason<T extends Pick<Season, "end" | "registrationOpen">>(
 	seasons: T[],

@@ -16,8 +16,10 @@ const Hints = z
 	.array(HintInput)
 	.transform((hints) => hints.map((hint) => ({ ...hint, id: hint.id ?? crypto.randomUUID() })))
 
-export async function createSeason(input: Omit<SeasonInput, "_id"> & { _id?: string }): Promise<Season> {
-	const season = Season.parse(withHintIds({ ...input, _id: input._id ?? crypto.randomUUID() }))
+export async function createSeason(
+	input: Omit<SeasonInput, "_id" | "registrationOpen"> & { _id?: string },
+): Promise<Season> {
+	const season = Season.parse(withHintIds({ ...input, _id: input._id ?? crypto.randomUUID(), registrationOpen: false }))
 	await (await collections()).seasons.insertOne(season)
 	return season
 }
@@ -68,11 +70,19 @@ function locate(target: SeasonFieldTarget): {
 }
 
 export async function setSeasonField(seasonId: string, target: SeasonFieldTarget, value: unknown): Promise<void> {
-	if (!("arcId" in target) && target.field === "registrationOpen") {
+	if (target.field === "registrationOpen") {
 		throw new Error("Use setRegistrationOpen to change registrationOpen")
 	}
 	const { path, schema, filter, arrayFilters } = locate(target)
 	const parsed = schema.parse(value)
+	if (target.field === "end") {
+		const seasons = await listSeasons()
+		const season = seasons.find((s) => s._id === seasonId)
+		if (season?.registrationOpen) {
+			const edited = seasons.map((s) => (s === season ? { ...s, end: parsed as Season["end"] } : s))
+			refuseOtherOpen(edited, seasonId, new Date())
+		}
+	}
 	const result = await (await collections()).seasons.updateOne(
 		{ ...filter, _id: seasonId },
 		{ $set: { [path]: parsed } },
@@ -85,11 +95,20 @@ export class RegistrationConflictError extends Error {
 	name = "RegistrationConflictError"
 }
 
+function refuseOtherOpen(seasons: Season[], seasonId: string, now: Date): Season | null {
+	const blocker = registrationConflict(seasons, seasonId, now)
+	if (blocker && blocker._id !== seasonId) {
+		throw new RegistrationConflictError(`Registration is already open for "${blocker.title}"`)
+	}
+	return blocker
+}
+
 export async function setRegistrationOpen(seasonId: string, open: boolean, now = new Date()): Promise<void> {
 	if (open) {
-		const blocker = registrationConflict(await listSeasons(), seasonId, now)
-		if (blocker?._id === seasonId) throw new RegistrationConflictError(`Season "${blocker.title}" has ended`)
-		if (blocker) throw new RegistrationConflictError(`Registration is already open for "${blocker.title}"`)
+		const seasons = await listSeasons()
+		if (!seasons.some((s) => s._id === seasonId)) throw new NotFoundError(`Season ${seasonId} not found`)
+		const ended = refuseOtherOpen(seasons, seasonId, now)
+		if (ended) throw new RegistrationConflictError(`Season "${ended.title}" has ended`)
 	}
 	const result = await (await collections()).seasons.updateOne({ _id: seasonId }, { $set: { registrationOpen: open } })
 	if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} not found`)
