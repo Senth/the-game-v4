@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildQuestOrder, matchesAnswer, scoreForSolve } from "./game"
+import { buildQuestOrder, matchesAnswer, pace, paceLabel, scoreForSolve } from "./game"
 import type { Arc, Quest, Season, TeamQuestProgress } from "./schemas"
 
 function deepFreeze<T>(value: T): T {
@@ -149,5 +149,76 @@ describe("buildQuestOrder", () => {
 		)
 		expect(worstDeviation(ids, () => buildQuestOrder(frozen))).toBeLessThan(0.15)
 		expect(frozen).toEqual(original)
+	})
+})
+
+describe("pace", () => {
+	const start = new Date("2026-03-14T18:00:00Z")
+	const minutes = (count: number) => new Date(start.getTime() + count * 60_000)
+	const running = { start, end: minutes(100) }
+	const order = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10"]
+	const team = (solved: number, questOrder = order) => ({
+		questOrder,
+		progress: questOrder.slice(0, solved).map((questId) => ({
+			questId,
+			solvedAt: start,
+			hintsRevealed: [],
+			pointsEarned: 10,
+		})),
+	})
+
+	it.each([
+		[10, 1, 0, "pace-ok"],
+		[11, 1, 1, "pace-1"],
+		[10, 0, 10, "pace-1"],
+		[11, 0, 11, "pace-2"],
+		[20, 0, 20, "pace-2"],
+		[21, 0, 21, "pace-3"],
+	])("at %i minutes with %i solved is %i%% behind in band %s", (minute, solved, behindPercent, band) => {
+		const { frozen, original } = frozenCopy({ season: running, team: team(solved) })
+		expect(pace(frozen.season, frozen.team, minutes(minute))).toMatchObject({ behindPercent, band })
+		expect(frozen).toEqual(original)
+	})
+
+	it("reports percentages and N for a team ahead", () => {
+		expect(pace(running, team(5), minutes(30))).toEqual({
+			timePercent: 30,
+			solvedPercent: 50,
+			behindPercent: -20,
+			band: "pace-ok",
+			n: -2,
+		})
+	})
+
+	it("colors by percentage when N rounds to 0", () => {
+		expect(pace(running, team(0), minutes(4))).toMatchObject({ n: 0, behindPercent: 4, band: "pace-1" })
+	})
+
+	it("clamps time at 0 before start and at 1 after end", () => {
+		expect(pace(running, team(0), minutes(-30))).toMatchObject({ timePercent: 0, n: 0, band: "pace-ok" })
+		expect(pace(running, team(4), minutes(150))).toMatchObject({ timePercent: 100, behindPercent: 60, n: 6 })
+	})
+
+	it("counts only solved progress for quests in the order", () => {
+		const { progress } = team(3)
+		const removed = { questId: "gone", solvedAt: start, hintsRevealed: [], pointsEarned: 10 }
+		const unsolved = { questId: "q4", hintsRevealed: [], pointsEarned: 0 }
+		const counted = { questOrder: order, progress: [...progress, removed, unsolved] }
+		expect(pace(running, counted, minutes(50))).toMatchObject({ solvedPercent: 30, n: 2 })
+	})
+
+	it("returns null without dividing for zero duration, missing start or end and an empty order", () => {
+		expect(pace({ start, end: start }, team(0), start)).toBeNull()
+		expect(pace({ start: null, end: minutes(100) }, team(0), start)).toBeNull()
+		expect(pace({ start, end: null }, team(0), start)).toBeNull()
+		expect(pace(running, team(0, []), minutes(50))).toBeNull()
+	})
+})
+
+describe("paceLabel", () => {
+	it("names behind, ahead and on pace", () => {
+		expect(paceLabel(3)).toBe("3 behind")
+		expect(paceLabel(-2)).toBe("2 ahead")
+		expect(paceLabel(0)).toBe("On pace")
 	})
 })
