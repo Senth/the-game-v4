@@ -98,9 +98,11 @@ Admins land on `/admin`, teams on `/`. Deleting a team invalidates its sessions.
 ### Lifecycle and season lookup
 
 Waiting, countdown, running, completed and ended are distinct player states.
-Before start, show waiting or countdown; at start, enter the game without reloading.
+Waiting means no season or no start time; countdown means a future start.
+At start, enter the game without reloading.
 The game runs from `start` until `end`. At end, stop play and show the team's score.
 When every quest in the team's order is finished, show completed with score.
+Completed outranks ended and running, so a team that finished early stays completed after end.
 
 A team without a season joins the season that starts within 60 seconds or is already running;
 otherwise it joins the next upcoming season. If none exists, show waiting.

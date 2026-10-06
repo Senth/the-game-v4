@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+	activeSeason,
 	buildQuestOrder,
+	lifecycleState,
 	matchesAnswer,
 	pace,
 	paceLabel,
 	playerView,
+	rail,
 	rankTeams,
 	scoreForSolve,
 	standingsStrip,
@@ -410,6 +413,106 @@ describe("playerView", () => {
 		const sharedQuest = frozen.season.arcs[0]?.quests[0] as Quest
 		playerView(sharedQuest, frozen.progress)
 		playerView(sharedQuest)
+		expect(frozen).toEqual(original)
+	})
+})
+
+describe("lifecycleState", () => {
+	const start = new Date("2026-03-14T18:00:00Z")
+	const end = new Date("2026-03-14T20:00:00Z")
+	const playing = { completed: false }
+	const done = { completed: true }
+
+	it("waits without a season or a start time", () => {
+		expect(lifecycleState(null, playing, start)).toBe("waiting")
+		expect(lifecycleState({ start: null, end: null }, playing, start)).toBe("waiting")
+	})
+
+	it("counts down before start and runs from exactly start", () => {
+		const { frozen, original } = frozenCopy({ start, end })
+		expect(lifecycleState(frozen, playing, new Date(start.getTime() - 1))).toBe("countdown")
+		expect(lifecycleState(frozen, playing, start)).toBe("running")
+		expect(frozen).toEqual(original)
+	})
+
+	it("ends at exactly end", () => {
+		expect(lifecycleState({ start, end }, playing, new Date(end.getTime() - 1))).toBe("running")
+		expect(lifecycleState({ start, end }, playing, end)).toBe("ended")
+	})
+
+	it("keeps a team that completed before the end completed, during play and after end", () => {
+		expect(lifecycleState({ start, end }, done, new Date(end.getTime() - 60_000))).toBe("completed")
+		expect(lifecycleState({ start, end }, done, end)).toBe("completed")
+	})
+})
+
+describe("activeSeason", () => {
+	const now = new Date("2026-03-14T18:00:00Z")
+	const offset = (seconds: number) => new Date(now.getTime() + seconds * 1000)
+	const dated = (id: string, startSeconds: number, endSeconds: number) => ({
+		id,
+		start: offset(startSeconds),
+		end: offset(endSeconds),
+	})
+	const running = dated("running", -3600, 3600)
+
+	it("joins a season starting in exactly 60 s over a running one", () => {
+		const { frozen, original } = frozenCopy([running, dated("soon", 60, 7200)])
+		expect(activeSeason(frozen, now)?.id).toBe("soon")
+		expect(frozen).toEqual(original)
+	})
+
+	it("keeps the running season when the next starts in 61 s", () => {
+		expect(activeSeason([running, dated("later", 61, 7200)], now)?.id).toBe("running")
+	})
+
+	it("takes the most recently started of two running seasons", () => {
+		expect(activeSeason([running, dated("newer", -60, 3600), dated("ended", -7200, 0)], now)?.id).toBe("newer")
+	})
+
+	it("falls back to the next upcoming season", () => {
+		const seasons = [dated("far", 7200, 9000), dated("next", 3600, 5400), dated("ended", -7200, -10)]
+		expect(activeSeason(seasons, now)?.id).toBe("next")
+	})
+
+	it("returns null when nothing is running or upcoming", () => {
+		expect(activeSeason([dated("ended", -7200, 0), { id: "unscheduled", start: null, end: null }], now)).toBeNull()
+		expect(activeSeason([], now)).toBeNull()
+	})
+})
+
+describe("rail", () => {
+	const railSeason = season([arc("a1", ["q1", "q2", "q3"], true), arc("a2", ["q4", "q5"], true)])
+	const solvedAt = new Date("2026-03-14T18:30:00Z")
+	const shuffledTeam = {
+		questOrder: ["q3", "q1", "q2", "q5", "q4"],
+		questIndex: 2,
+		progress: [
+			{ questId: "q3", solvedAt, hintsRevealed: [], pointsEarned: 10 },
+			{ questId: "q1", solvedAt, hintsRevealed: [], pointsEarned: 10 },
+			{ questId: "q2", hintsRevealed: [], pointsEarned: 0 },
+		],
+	}
+
+	it("uses authored order and marks solved quests at their authored positions", () => {
+		const { frozen, original } = frozenCopy({ season: railSeason, team: shuffledTeam })
+		expect(rail(frozen.season, frozen.team)).toEqual([
+			{
+				arcId: "a1",
+				segments: [
+					{ questId: "q1", state: "solved" },
+					{ questId: "q2", state: "current" },
+					{ questId: "q3", state: "solved" },
+				],
+			},
+			{
+				arcId: "a2",
+				segments: [
+					{ questId: "q4", state: "todo" },
+					{ questId: "q5", state: "todo" },
+				],
+			},
+		])
 		expect(frozen).toEqual(original)
 	})
 })

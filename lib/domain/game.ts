@@ -138,3 +138,43 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress): PlayerQu
 		),
 	}
 }
+
+export type LifecycleState = "waiting" | "countdown" | "running" | "completed" | "ended"
+
+export function lifecycleState(
+	season: Pick<Season, "start" | "end"> | null,
+	team: Pick<Team, "completed">,
+	now: Date,
+): LifecycleState {
+	if (!season?.start) return "waiting"
+	if (now < season.start) return "countdown"
+	if (team.completed) return "completed"
+	if (season.end && now >= season.end) return "ended"
+	return "running"
+}
+
+export function activeSeason<T extends Pick<Season, "start" | "end">>(seasons: T[], now: Date): T | null {
+	const dated = seasons.flatMap((season) => (season.start ? [{ season, start: season.start.getTime() }] : []))
+	const joinable = dated
+		.filter(({ season, start }) => start - now.getTime() <= 60_000 && !(season.end && now >= season.end))
+		.sort((a, b) => b.start - a.start)
+	const upcoming = dated.filter(({ start }) => start > now.getTime()).sort((a, b) => a.start - b.start)
+	return (joinable[0] ?? upcoming[0])?.season ?? null
+}
+
+export type RailArc = { arcId: string; segments: { questId: string; state: "solved" | "current" | "todo" }[] }
+
+export function rail(
+	season: Pick<Season, "arcs">,
+	team: Pick<Team, "questOrder" | "questIndex" | "progress">,
+): RailArc[] {
+	const solved = new Set(team.progress.filter((entry) => entry.solvedAt).map((entry) => entry.questId))
+	const current = team.questOrder[team.questIndex]
+	return season.arcs.map((arc) => ({
+		arcId: arc.id,
+		segments: arc.quests.map(({ id }) => ({
+			questId: id,
+			state: solved.has(id) ? "solved" : id === current ? "current" : "todo",
+		})),
+	}))
+}
