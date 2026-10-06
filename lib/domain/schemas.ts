@@ -37,6 +37,7 @@ export const Season = z.object({
 	start: z.date().nullable(),
 	end: z.date().nullable(),
 	shuffleArcs: z.boolean(),
+	registrationOpen: z.boolean().default(false),
 	arcs: z.array(Arc),
 })
 export type Season = z.infer<typeof Season>

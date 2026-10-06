@@ -155,13 +155,26 @@ export function lifecycleState(
 	return "running"
 }
 
-export function activeSeason<T extends Pick<Season, "start" | "end">>(seasons: T[], now: Date): T | null {
-	const dated = seasons.flatMap((season) => (season.start ? [{ season, start: season.start.getTime() }] : []))
-	const joinable = dated
-		.filter(({ season, start }) => start - now.getTime() <= 60_000 && !(season.end && now >= season.end))
-		.sort((a, b) => b.start - a.start)
-	const upcoming = dated.filter(({ start }) => start > now.getTime()).sort((a, b) => a.start - b.start)
-	return (joinable[0] ?? upcoming[0])?.season ?? null
+const hasEnded = (season: Pick<Season, "end">, now: Date) => season.end !== null && now >= season.end
+
+export function registrationSeason<T extends Pick<Season, "end" | "registrationOpen">>(
+	seasons: T[],
+	now: Date,
+): T | null {
+	return seasons.find((season) => season.registrationOpen && !hasEnded(season, now)) ?? null
+}
+
+export function registrationConflict<T extends Pick<Season, "_id" | "end" | "registrationOpen">>(
+	seasons: T[],
+	seasonId: string,
+	now: Date,
+): T | null {
+	const target = seasons.find((season) => season._id === seasonId)
+	if (target && hasEnded(target, now)) return target
+	return registrationSeason(
+		seasons.filter((season) => season._id !== seasonId),
+		now,
+	)
 }
 
 export type RailArc = { arcId: string; segments: { questId: string; state: "solved" | "current" | "todo" }[] }

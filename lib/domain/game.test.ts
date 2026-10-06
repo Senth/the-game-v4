@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import {
-	activeSeason,
 	applyStructuralEdit,
 	buildQuestOrder,
 	lifecycleState,
@@ -10,6 +9,8 @@ import {
 	playerView,
 	rail,
 	rankTeams,
+	registrationConflict,
+	registrationSeason,
 	scoreForSolve,
 	standingsStrip,
 } from "./game"
@@ -53,6 +54,7 @@ const season = (arcs: Arc[], shuffleArcs = false): Season => ({
 	start: null,
 	end: null,
 	shuffleArcs,
+	registrationOpen: false,
 	arcs,
 })
 
@@ -454,38 +456,59 @@ describe("lifecycleState", () => {
 	})
 })
 
-describe("activeSeason", () => {
+describe("registrationSeason", () => {
 	const now = new Date("2026-03-14T18:00:00Z")
-	const offset = (seconds: number) => new Date(now.getTime() + seconds * 1000)
-	const dated = (id: string, startSeconds: number, endSeconds: number) => ({
-		id,
-		start: offset(startSeconds),
-		end: offset(endSeconds),
-	})
-	const running = dated("running", -3600, 3600)
+	const end = new Date(now.getTime() + 3_600_000)
+	const open = { _id: "open", registrationOpen: true, end }
+	const closed = { _id: "closed", registrationOpen: false, end: null }
 
-	it("joins a season starting in exactly 60 s over a running one", () => {
-		const { frozen, original } = frozenCopy([running, dated("soon", 60, 7200)])
-		expect(activeSeason(frozen, now)?.id).toBe("soon")
+	it("returns null when no season has registration open", () => {
+		const { frozen, original } = frozenCopy([closed])
+		expect(registrationSeason(frozen, now)).toBeNull()
+		expect(registrationSeason([], now)).toBeNull()
 		expect(frozen).toEqual(original)
 	})
 
-	it("keeps the running season when the next starts in 61 s", () => {
-		expect(activeSeason([running, dated("later", 61, 7200)], now)?.id).toBe("running")
+	it("returns the season with registration open, also without an end", () => {
+		const { frozen, original } = frozenCopy([closed, open])
+		expect(registrationSeason(frozen, now)?._id).toBe("open")
+		expect(registrationSeason([{ ...open, end: null }], now)?._id).toBe("open")
+		expect(frozen).toEqual(original)
 	})
 
-	it("takes the most recently started of two running seasons", () => {
-		expect(activeSeason([running, dated("newer", -60, 3600), dated("ended", -7200, 0)], now)?.id).toBe("newer")
+	it("does not count an ended season that kept its flag", () => {
+		expect(registrationSeason([{ ...open, end: new Date(now.getTime() - 1) }], now)).toBeNull()
 	})
 
-	it("falls back to the next upcoming season", () => {
-		const seasons = [dated("far", 7200, 9000), dated("next", 3600, 5400), dated("ended", -7200, -10)]
-		expect(activeSeason(seasons, now)?.id).toBe("next")
+	it("stops counting at exactly end", () => {
+		expect(registrationSeason([open], new Date(end.getTime() - 1))?._id).toBe("open")
+		expect(registrationSeason([open], end)).toBeNull()
+	})
+})
+
+describe("registrationConflict", () => {
+	const now = new Date("2026-03-14T18:00:00Z")
+	const later = new Date(now.getTime() + 3_600_000)
+	const earlier = new Date(now.getTime() - 1)
+	const a = { _id: "a", registrationOpen: true, end: later }
+	const b = { _id: "b", registrationOpen: false, end: null }
+
+	it("returns the other counting season that has registration open", () => {
+		const { frozen, original } = frozenCopy([a, b])
+		expect(registrationConflict(frozen, "b", now)?._id).toBe("a")
+		expect(frozen).toEqual(original)
 	})
 
-	it("returns null when nothing is running or upcoming", () => {
-		expect(activeSeason([dated("ended", -7200, 0), { id: "unscheduled", start: null, end: null }], now)).toBeNull()
-		expect(activeSeason([], now)).toBeNull()
+	it("ignores an ended season that kept its flag", () => {
+		expect(registrationConflict([{ ...a, end: earlier }, b], "b", now)).toBeNull()
+	})
+
+	it("does not count the season itself as a conflict", () => {
+		expect(registrationConflict([a, b], "a", now)).toBeNull()
+	})
+
+	it("returns the season itself when it has ended", () => {
+		expect(registrationConflict([{ ...b, end: earlier }], "b", now)?._id).toBe("b")
 	})
 })
 

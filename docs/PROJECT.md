@@ -39,6 +39,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `start` | `Date \| null` | Scheduled or actual start; null before scheduling |
 | `end` | `Date \| null` | Scheduled or actual end; adjusted by live controls |
 | `shuffleArcs` | `boolean` | Shuffle arc order when building each team's order |
+| `registrationOpen` | `boolean` | New teams join this season; stored seasons without it read as false |
 | `arcs` | `Arc[]` | Arcs in authored order |
 
 ### Nested types
@@ -104,9 +105,14 @@ The game runs from `start` until `end`. At end, stop play and show the team's sc
 When every quest in the team's order is finished, show completed with score.
 Completed outranks ended and running, so a team that finished early stays completed after end.
 
-A team without a season joins the season that starts within 60 seconds or is already running;
-otherwise it joins the next upcoming season. If none exists, show waiting.
-Self-registration uses the same lookup. Names may repeat in different seasons, not within one season.
+A season counts until it ends: `end` is null or now is before `end`.
+New teams join the counting season with `registrationOpen`, also while it runs, until it ends.
+Self-registration and a team without a season use this lookup. If no counting season has registration open,
+registration is not possible and a seasonless team sees waiting.
+At most one counting season may have registration open. Opening it while another counting season has it
+is rejected with an error naming that season; the flag never moves automatically.
+Opening registration on an ended season is rejected. Ended seasons keep their flag, but it no longer counts.
+Names may repeat in different seasons, not within one season.
 Live Start sets start and end. The admin can shift end by minus or plus 5 minutes, or confirm End game.
 
 ### Quest order and rail

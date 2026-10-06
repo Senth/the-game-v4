@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest"
 import type { Quest, SeasonInput } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
 import { NotFoundError } from "./collections"
-import { createSeason, getSeason, listSeasons, setSeasonField } from "./seasons"
+import {
+	createSeason,
+	getSeason,
+	listSeasons,
+	RegistrationConflictError,
+	setRegistrationOpen,
+	setSeasonField,
+} from "./seasons"
 
 useTestDb()
 
@@ -27,6 +34,7 @@ function seasonInput(): Omit<SeasonInput, "_id"> {
 		start: null,
 		end: null,
 		shuffleArcs: false,
+		registrationOpen: false,
 		arcs: [
 			{ id: "a1", title: "Lighthouse", shuffleQuests: false, quests: [quest("q1"), quest("q2")] },
 			{ id: "a2", title: "Old Town", shuffleQuests: true, quests: [quest("q3")] },
@@ -119,5 +127,44 @@ describe("seasons", () => {
 			["q2", null],
 			["q1", 50],
 		])
+	})
+
+	it("opens registration on one counting season and rejects a second, naming the first", async () => {
+		const now = new Date("2026-03-14T18:00:00Z")
+		const a = await createSeason({ ...seasonInput(), title: "Season A" })
+		const b = await createSeason({ ...seasonInput(), title: "Season B" })
+		await setRegistrationOpen(a._id, true, now)
+		await setRegistrationOpen(a._id, true, now)
+
+		const rejected = setRegistrationOpen(b._id, true, now)
+		await expect(rejected).rejects.toThrow(RegistrationConflictError)
+		await expect(rejected).rejects.toThrow("Season A")
+		expect((await getSeason(a._id))?.registrationOpen).toBe(true)
+		expect((await getSeason(b._id))?.registrationOpen).toBe(false)
+
+		await setRegistrationOpen(a._id, false, now)
+		await setRegistrationOpen(b._id, true, now)
+		expect((await getSeason(b._id))?.registrationOpen).toBe(true)
+		await setRegistrationOpen(b._id, false, now)
+	})
+
+	it("ignores an ended season's flag and refuses to open an ended season", async () => {
+		const now = new Date("2026-03-14T18:00:00Z")
+		const ended = await createSeason({ ...seasonInput(), title: "Old", end: new Date(now.getTime() - 1) })
+		const next = await createSeason(seasonInput())
+		await setRegistrationOpen(ended._id, true, new Date(now.getTime() - 60_000))
+
+		await setRegistrationOpen(next._id, true, now)
+		await expect(setRegistrationOpen(ended._id, true, now)).rejects.toThrow(RegistrationConflictError)
+		expect((await getSeason(next._id))?.registrationOpen).toBe(true)
+		await setRegistrationOpen(next._id, false, now)
+	})
+
+	it("throws for an unknown season and refuses registrationOpen through setSeasonField", async () => {
+		const season = await createSeason(seasonInput())
+
+		await expect(setRegistrationOpen("missing", true)).rejects.toThrow(NotFoundError)
+		await expect(setSeasonField(season._id, { field: "registrationOpen" }, true)).rejects.toThrow("setRegistrationOpen")
+		expect((await getSeason(season._id))?.registrationOpen).toBe(false)
 	})
 })

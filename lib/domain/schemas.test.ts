@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { Hint, Quest, type SeasonInput, Team, withHintIds } from "./schemas"
+import { Hint, Quest, Season, type SeasonInput, Team, withHintIds } from "./schemas"
 
 const draftQuest = {
 	id: "q1",
@@ -38,6 +38,7 @@ describe("withHintIds", () => {
 		start: null,
 		end: null,
 		shuffleArcs: false,
+		registrationOpen: false,
 		arcs: [
 			{
 				id: "a1",
@@ -66,6 +67,13 @@ describe("withHintIds", () => {
 		expect(ids.every((hintId) => hintId.length > 0)).toBe(true)
 		expect(new Set(ids).size).toBe(3)
 		expect(input).toEqual(original)
+	})
+})
+
+describe("Season", () => {
+	it("reads a stored season without registrationOpen as closed", () => {
+		const stored = { _id: "s1", title: "Old", lengthMinutes: 60, start: null, end: null, shuffleArcs: false, arcs: [] }
+		expect(Season.parse(stored).registrationOpen).toBe(false)
 	})
 })
 

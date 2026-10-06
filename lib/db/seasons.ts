@@ -1,5 +1,6 @@
 import type { Filter } from "mongodb"
 import { z } from "zod"
+import { registrationConflict } from "@/lib/domain/game"
 import { Arc, Hint, HintInput, Quest, Season, type SeasonInput, withHintIds } from "@/lib/domain/schemas"
 import { collections, NotFoundError } from "./collections"
 
@@ -67,6 +68,9 @@ function locate(target: SeasonFieldTarget): {
 }
 
 export async function setSeasonField(seasonId: string, target: SeasonFieldTarget, value: unknown): Promise<void> {
+	if (!("arcId" in target) && target.field === "registrationOpen") {
+		throw new Error("Use setRegistrationOpen to change registrationOpen")
+	}
 	const { path, schema, filter, arrayFilters } = locate(target)
 	const parsed = schema.parse(value)
 	const result = await (await collections()).seasons.updateOne(
@@ -75,4 +79,18 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 		{ arrayFilters },
 	)
 	if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
+}
+
+export class RegistrationConflictError extends Error {
+	name = "RegistrationConflictError"
+}
+
+export async function setRegistrationOpen(seasonId: string, open: boolean, now = new Date()): Promise<void> {
+	if (open) {
+		const blocker = registrationConflict(await listSeasons(), seasonId, now)
+		if (blocker?._id === seasonId) throw new RegistrationConflictError(`Season "${blocker.title}" has ended`)
+		if (blocker) throw new RegistrationConflictError(`Registration is already open for "${blocker.title}"`)
+	}
+	const result = await (await collections()).seasons.updateOne({ _id: seasonId }, { $set: { registrationOpen: open } })
+	if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} not found`)
 }

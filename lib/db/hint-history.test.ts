@@ -30,6 +30,7 @@ async function setup() {
 		start: null,
 		end: null,
 		shuffleArcs: false,
+		registrationOpen: false,
 		arcs: [{ id: "a1", title: "Lighthouse", shuffleQuests: false, quests: [quest] }],
 	})
 	const team = await createTeam({
