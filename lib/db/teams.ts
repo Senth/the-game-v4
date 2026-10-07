@@ -19,6 +19,10 @@ export async function listTeams(seasonId: string | null): Promise<Team[]> {
 	return (await collections()).teams.find({ seasonId }).toArray()
 }
 
+export async function listTeamsByName(name: string): Promise<Team[]> {
+	return (await collections()).teams.find({ name }).toArray()
+}
+
 export async function setTeamField<F extends TeamField>(teamId: string, field: F, value: Team[F]): Promise<void> {
 	const parsed = Team.shape[field].parse(value)
 	const result = await (await collections()).teams.updateOne({ _id: teamId }, { $set: { [field]: parsed } })

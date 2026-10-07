@@ -75,7 +75,8 @@ and Shiki for fenced code. There is no separate v3 `code` field.
 Each reveal stores the hint's stable id, text and penalty at reveal time, plus its reveal timestamp.
 History survives advancement to the next quest. Deleting or editing a hint never rewrites these snapshots.
 Reordering hints preserves their ids and snapshots. Deleted hints remain in the team's history and score.
-Create a unique index on `teams` for `{seasonId, name}`. Admin creation and self-registration both remain.
+Create a unique index on `teams` for `{seasonId, name}` and a `{name}` index for login.
+Admin creation and self-registration both remain.
 
 ### admins and sessions
 
@@ -86,12 +87,16 @@ Create a unique index on `teams` for `{seasonId, name}`. Admin creation and self
 | `passwordHash` | `string` | bcrypt hash |
 
 Use `bcryptjs` and iron-session 8. The cookie holds only `{kind: "admin" | "team", id: string}`.
-Guard routes in middleware and guard every server action with `requireAdmin` or `requireTeam`.
+Sessions last 30 days. Production requires `SESSION_SECRET`.
+`proxy.ts` denies by default.
+Public paths are `/login`, `/logout`, `/register`, `/board`, `/assets/`, `/_next/` and the icons.
+Guard every server action with `requireAdmin` or `requireTeam`.
 The single login form tries admin then team in one request and returns one generic error on failure.
-Team login matches name and password, then chooses the matching team in the
-active season selected by the [active-season lookup rule](#lifecycle-and-season-lookup).
-If none of the matching teams belongs to that season, choose the matching team in the most recently started season.
+Team login keeps the teams whose name and password match.
+It picks the one in the registration-open season, else the latest season whose start has passed,
+else an unscheduled or future-scheduled season, else no season.
 Admins land on `/admin`, teams on `/`. Deleting a team invalidates its sessions.
+`/logout` accepts only POST, so a link or prefetch cannot log anyone out.
 `pnpm admin:create <name>` prompts for a password. Production admins come from this CLI, not v3 users.
 
 ## Game rules
