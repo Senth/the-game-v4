@@ -10,10 +10,9 @@ import type { Admin } from "@/lib/domain/schemas"
 export async function createAdminAccount(name: string, password: string): Promise<Admin> {
 	if (password.length < 8) throw new Error("Password must be at least 8 characters")
 	try {
-		return await createAdmin({ name: name.trim(), passwordHash: await hashPassword(password) })
+		return await createAdmin({ name, passwordHash: await hashPassword(password) })
 	} catch (error) {
-		if (error instanceof MongoServerError && error.code === 11000)
-			throw new Error(`Admin "${name.trim()}" already exists`)
+		if (error instanceof MongoServerError && error.code === 11000) throw new Error(`Admin "${name}" already exists`)
 		throw error
 	}
 }

@@ -545,6 +545,28 @@ describe("pickLoginTeam", () => {
 		expect(frozen).toEqual(original)
 	})
 
+	it("prefers a running season over a scheduled future one", () => {
+		const running = {
+			_id: "running",
+			start: new Date(now.getTime() - hour),
+			end: new Date(now.getTime() + hour),
+			registrationOpen: false,
+		}
+		const scheduled = {
+			_id: "scheduled",
+			start: new Date(now.getTime() + 24 * hour),
+			end: new Date(now.getTime() + 26 * hour),
+			registrationOpen: false,
+		}
+		const { frozen, original } = frozenCopy({
+			teams: [team("scheduled"), team("running")],
+			seasons: [scheduled, running],
+		})
+		expect(pickLoginTeam(frozen.teams, frozen.seasons, now)?.seasonId).toBe("running")
+		expect(frozen).toEqual(original)
+		expect(pickLoginTeam([team(null), team("scheduled")], [scheduled], now)?.seasonId).toBe("scheduled")
+	})
+
 	it("ignores registration on an ended season", () => {
 		const ended = { ...open, start: older.start, end: older.end }
 		expect(pickLoginTeam([team("open"), team("newer")], [ended, newer], now)?.seasonId).toBe("newer")

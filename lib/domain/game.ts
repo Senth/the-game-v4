@@ -182,14 +182,15 @@ export function pickLoginTeam<
 	S extends Pick<Season, "_id" | "start" | "end" | "registrationOpen">,
 >(candidates: T[], seasons: S[], now: Date): T | null {
 	const startOf = (team: T) => seasons.find((season) => season._id === team.seasonId)?.start
+	const started = (team: T) => (startOf(team)?.getTime() ?? Number.POSITIVE_INFINITY) <= now.getTime()
 	const open = registrationSeason(seasons, now)
 	const [latestStarted] = candidates
-		.filter((team) => startOf(team))
+		.filter(started)
 		.toSorted((a, b) => (startOf(b)?.getTime() ?? 0) - (startOf(a)?.getTime() ?? 0))
 	return (
 		candidates.find((team) => team.seasonId === open?._id) ??
 		latestStarted ??
-		candidates.find((team) => startOf(team) === null) ??
+		candidates.find((team) => startOf(team) !== undefined && !started(team)) ??
 		candidates.find((team) => team.seasonId === null) ??
 		null
 	)

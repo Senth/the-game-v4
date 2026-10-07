@@ -74,9 +74,11 @@ describe("authenticate", () => {
 
 	it("returns null for a wrong password or an unknown name", async () => {
 		await team("Bears", "bears", "open")
+		await createAdmin({ name: "Warden", passwordHash: await hashPassword("warden-secret") })
+		await team("Warden", "warden-team", "open")
 
 		expect(await authenticate("Bears", "wolves", now)).toBeNull()
-		expect(await authenticate("Chief", "wrong", now)).toBeNull()
+		expect(await authenticate("Warden", "wrong", now)).toBeNull()
 		expect(await authenticate("Nobody", "bears", now)).toBeNull()
 	})
 })
