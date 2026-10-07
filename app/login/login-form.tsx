@@ -4,7 +4,7 @@ import { useActionState } from "react"
 import { type LoginState, login } from "./actions"
 
 const label = "mb-1.5 block font-cond text-xs uppercase tracking-wider text-muted"
-const input = "h-11 w-full rounded-md border border-z2 bg-field px-3 focus:border-accent"
+const input = "h-11 w-full rounded-md border border-z2 bg-field px-3 outline-hidden focus:border-accent"
 
 export function LoginForm() {
 	const [state, action, pending] = useActionState<LoginState, FormData>(login, {})
@@ -35,7 +35,7 @@ export function LoginForm() {
 			<button
 				type="submit"
 				disabled={pending}
-				className="h-12 w-full rounded-md bg-accent font-cond font-bold text-white hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+				className="h-12 w-full rounded-md bg-accent font-cond text-lg font-bold text-white hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
 			>
 				{pending ? "Logging in…" : "Log in"}
 			</button>
