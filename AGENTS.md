@@ -15,6 +15,7 @@ MongoDB access lives in `lib/db/`, zod schemas in `lib/domain/`, and dev boot an
 | --- | --- |
 | `pnpm dev` | Boot local MongoDB, seed if empty, then run Next.js development server |
 | `pnpm seed` | Load the development fixture documented in `docs/TESTS.md` |
+| `pnpm admin:create <name>` | Create an admin in the `MONGODB_URI` database; reads the password from a prompt or stdin |
 | `pnpm lint --write` | Run markdownlint, then Biome, and apply supported Biome fixes |
 | `pnpm typecheck` | Run `tsc --noEmit` |
 | `pnpm test` | Run Vitest domain and database tests |
@@ -26,6 +27,7 @@ Run configured gates in order.
 Agents never run Docker on fenrir. Its `docker` command invokes `sudo docker` and needs a password.
 Development and tests use `mongodb-memory-server`; production images build in CI and the human runs compose.
 When `MONGODB_URI` is unset, `pnpm dev` persists the local database under `.tmp/mongo`.
+Production requires `SESSION_SECRET` of at least 32 characters. Development falls back to a fixed secret.
 Keep temporary artifacts under `.tmp/`. Do not use live databases or services in tests.
 
 ## Folder layout
