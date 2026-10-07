@@ -6,6 +6,7 @@ import {
 	matchesAnswer,
 	pace,
 	paceLabel,
+	pickLoginTeam,
 	playerView,
 	rail,
 	rankTeams,
@@ -509,6 +510,53 @@ describe("registrationConflict", () => {
 
 	it("returns the season itself when it has ended", () => {
 		expect(registrationConflict([{ ...b, end: earlier }], "b", now)?._id).toBe("b")
+	})
+})
+
+describe("pickLoginTeam", () => {
+	const now = new Date("2026-03-14T18:00:00Z")
+	const hour = 3_600_000
+	const open = { _id: "open", start: null, end: null, registrationOpen: true }
+	const older = {
+		_id: "older",
+		start: new Date(now.getTime() - 48 * hour),
+		end: new Date(now.getTime() - 46 * hour),
+		registrationOpen: false,
+	}
+	const newer = {
+		_id: "newer",
+		start: new Date(now.getTime() - 24 * hour),
+		end: new Date(now.getTime() - 22 * hour),
+		registrationOpen: false,
+	}
+	const draft = { _id: "draft", start: null, end: null, registrationOpen: false }
+	const seasons = [older, open, newer, draft]
+	const team = (seasonId: string | null) => ({ _id: `t-${seasonId}`, seasonId })
+
+	it("picks the team in the season with registration open", () => {
+		const { frozen, original } = frozenCopy({ teams: [team("older"), team("open"), team("newer")], seasons })
+		expect(pickLoginTeam(frozen.teams, frozen.seasons, now)?.seasonId).toBe("open")
+		expect(frozen).toEqual(original)
+	})
+
+	it("else picks the team in the most recently started season", () => {
+		const { frozen, original } = frozenCopy({ teams: [team("draft"), team("older"), team("newer")], seasons })
+		expect(pickLoginTeam(frozen.teams, frozen.seasons, now)?.seasonId).toBe("newer")
+		expect(frozen).toEqual(original)
+	})
+
+	it("ignores registration on an ended season", () => {
+		const ended = { ...open, start: older.start, end: older.end }
+		expect(pickLoginTeam([team("open"), team("newer")], [ended, newer], now)?.seasonId).toBe("newer")
+	})
+
+	it("else picks a team in an unstarted season, then a seasonless team", () => {
+		expect(pickLoginTeam([team(null), team("draft")], seasons, now)?.seasonId).toBe("draft")
+		expect(pickLoginTeam([team(null)], seasons, now)?.seasonId).toBeNull()
+	})
+
+	it("returns null without candidates", () => {
+		expect(pickLoginTeam([], seasons, now)).toBeNull()
 	})
 })
 

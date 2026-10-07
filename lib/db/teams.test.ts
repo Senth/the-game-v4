@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import type { Team } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
 import { NotFoundError } from "./collections"
-import { createTeam, getTeam, listTeams, setTeamField } from "./teams"
+import { createTeam, getTeam, listTeams, listTeamsByName, setTeamField } from "./teams"
 
 useTestDb()
 
@@ -28,6 +28,14 @@ describe("teams", () => {
 
 		expect(await getTeam(ninjas._id)).toEqual(ninjas)
 		expect((await listTeams("spring")).map((t) => t.name).sort()).toEqual(["Ninjas", "Owls"])
+	})
+
+	it("lists teams by exact name across seasons", async () => {
+		await createTeam(team("Herons", "spring"))
+		await createTeam(team("Herons", "autumn"))
+		await createTeam(team("herons", "autumn"))
+
+		expect((await listTeamsByName("Herons")).map((t) => t.seasonId).sort()).toEqual(["autumn", "spring"])
 	})
 
 	it("sets one field", async () => {
