@@ -1,6 +1,6 @@
 import type { SessionData } from "./session"
 
-const publicPaths = ["/login", "/logout", "/register", "/board", "/icon.svg", "/favicon.ico"]
+const publicPaths = ["/login", "/logout", "/register", "/board", "/api/events", "/icon.svg", "/favicon.ico"]
 const publicPrefixes = ["/assets/", "/_next/"]
 
 const isAdminPath = (pathname: string) => pathname === "/admin" || pathname.startsWith("/admin/")

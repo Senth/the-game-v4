@@ -89,7 +89,8 @@ Admin creation and self-registration both remain.
 Use `bcryptjs` and iron-session 8. The cookie holds only `{kind: "admin" | "team", id: string}`.
 Sessions last 30 days. Production requires `SESSION_SECRET`.
 `proxy.ts` denies by default.
-Public paths are `/login`, `/logout`, `/register`, `/board`, `/assets/`, `/_next/` and the icons.
+Public paths are `/login`, `/logout`, `/register`, `/board`, `/api/events`, `/assets/`, `/_next/` and the icons.
+`/api/events` authorizes its requested channels against the session itself.
 Guard every server action with `requireAdmin` or `requireTeam`.
 The single login form tries admin then team in one request and returns one generic error on failure.
 Team login keeps the teams whose name and password match.
