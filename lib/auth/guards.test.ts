@@ -4,7 +4,7 @@ import { createAdmin } from "@/lib/db/admins"
 import { collections } from "@/lib/db/collections"
 import { createTeam } from "@/lib/db/teams"
 import { useTestDb } from "@/test/db"
-import { requireAdmin, requireTeam } from "./guards"
+import { redirectSignedIn, requireAdmin, requireTeam } from "./guards"
 import { type SessionData, sessionOptions } from "./session"
 
 const cookie = vi.hoisted(() => ({ value: undefined as string | undefined }))
@@ -77,6 +77,21 @@ describe("guards", () => {
 		cookie.value = "garbage"
 		await expect(requireAdmin()).rejects.toMatchObject(toLogin)
 		await expect(requireTeam()).rejects.toMatchObject(toLogin)
+	})
+
+	it("redirects a signed-in admin or team away and lets anyone else stay", async () => {
+		const admin = await createAdmin({ name: "root", passwordHash: "$2b$10$hash" })
+		await login({ kind: "admin", id: admin._id })
+		await expect(redirectSignedIn()).rejects.toMatchObject({ digest: expect.stringContaining(";/admin;") })
+
+		const foxes = await team("Foxes")
+		await login({ kind: "team", id: foxes._id })
+		await expect(redirectSignedIn()).rejects.toMatchObject({ digest: expect.stringContaining(";/;") })
+
+		await (await collections()).teams.deleteOne({ _id: foxes._id })
+		await expect(redirectSignedIn()).resolves.toBeUndefined()
+		cookie.value = undefined
+		await expect(redirectSignedIn()).resolves.toBeUndefined()
 	})
 
 	it("throws in production without SESSION_SECRET", async () => {
