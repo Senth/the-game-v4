@@ -61,7 +61,7 @@ and Shiki for fenced code. There is no separate v3 `code` field.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `_id` | `string` | Team id, not its name |
-| `name` | `string` | Name unique within a season |
+| `name` | `string` | Name unique within a season, ignoring case |
 | `passwordHash` | `string` | bcrypt hash, never plaintext |
 | `seasonId` | `string \| null` | Assigned season; null until active-season lookup assigns one |
 | `questOrder` | `string[]` | Quest ids in this team's generated play order |
@@ -76,6 +76,7 @@ Each reveal stores the hint's stable id, text and penalty at reveal time, plus i
 History survives advancement to the next quest. Deleting or editing a hint never rewrites these snapshots.
 Reordering hints preserves their ids and snapshots. Deleted hints remain in the team's history and score.
 Create a unique index on `teams` for `{seasonId, name}` and a `{name}` index for login.
+The per-season unique index uses case-insensitive collation (strength 2).
 Admin creation and self-registration both remain.
 
 ### admins and sessions
@@ -120,6 +121,8 @@ is rejected with an error naming that season; the flag never moves automatically
 Opening registration on an ended season is rejected. Ended seasons keep their flag, but it no longer counts.
 Changing `end` so a flagged ended season counts again is rejected the same way while another counting season has it.
 Names may repeat in different seasons, not within one season.
+Self-registration trims names to 1 to 30 characters and needs a password of at least 4.
+A team registering before start gets an empty order. Live Start builds it (#14).
 Live Start sets start and end. The admin can shift end by minus or plus 5 minutes, or confirm End game.
 
 ### Quest order and rail

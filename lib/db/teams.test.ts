@@ -33,7 +33,7 @@ describe("teams", () => {
 	it("lists teams by exact name across seasons", async () => {
 		await createTeam(team("Herons", "spring"))
 		await createTeam(team("Herons", "autumn"))
-		await createTeam(team("herons", "autumn"))
+		await createTeam(team("herons", "summer"))
 
 		expect((await listTeamsByName("Herons")).map((t) => t.seasonId).sort()).toEqual(["autumn", "spring"])
 	})
@@ -58,6 +58,7 @@ describe("teams", () => {
 
 		await expect(createTeam(team("Hawks", "spring"))).rejects.toMatchObject({ code: 11000 })
 		await expect(createTeam(team("Hawks", "spring"))).rejects.toBeInstanceOf(MongoServerError)
+		await expect(createTeam(team("hAWKS", "spring"))).rejects.toMatchObject({ code: 11000 })
 		await expect(createTeam(team("Hawks", "autumn"))).resolves.toMatchObject({ name: "Hawks" })
 	})
 })
