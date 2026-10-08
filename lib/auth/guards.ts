@@ -15,3 +15,9 @@ export async function requireTeam(): Promise<Team> {
 	const team = kind === "team" && id ? await getTeam(id) : null
 	return team ?? redirect("/login")
 }
+
+export async function redirectSignedIn(): Promise<void> {
+	const { kind, id } = await getSession()
+	if (kind === "admin" && id && (await getAdmin(id))) redirect("/admin")
+	if (kind === "team" && id && (await getTeam(id))) redirect("/")
+}
