@@ -92,7 +92,7 @@ Sessions last 30 days. Production requires `SESSION_SECRET`.
 `proxy.ts` denies by default.
 Public paths are `/login`, `/logout`, `/register`, `/board`, `/api/events`, `/assets/`, `/_next/` and the icons.
 `/api/events` authorizes its requested channels against the session itself.
-Guard every server action with `requireAdmin` or `requireTeam`.
+Guard every server action except the public login and register actions with `requireAdmin` or `requireTeam`.
 The single login form tries admin then team in one request and returns one generic error on failure.
 Team login keeps the teams whose name and password match.
 It picks the one in the registration-open season, else the latest season whose start has passed,
@@ -121,7 +121,7 @@ is rejected with an error naming that season; the flag never moves automatically
 Opening registration on an ended season is rejected. Ended seasons keep their flag, but it no longer counts.
 Changing `end` so a flagged ended season counts again is rejected the same way while another counting season has it.
 Names may repeat in different seasons, not within one season.
-Self-registration trims names to 1 to 30 characters and needs a password of at least 4.
+Self-registration trims names, accepts 1 to 30 characters and needs a password of at least 4.
 A team registering before start gets an empty order. Live Start builds it (#14).
 Live Start sets start and end. The admin can shift end by minus or plus 5 minutes, or confirm End game.
 

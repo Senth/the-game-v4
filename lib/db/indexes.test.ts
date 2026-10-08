@@ -1,5 +1,5 @@
-import { MongoClient } from "mongodb"
 import { describe, expect, it } from "vitest"
+import { getDb } from "@/lib/db/client"
 import { useTestDb } from "@/test/db"
 import { ensureIndexes } from "./indexes"
 
@@ -7,9 +7,7 @@ useTestDb()
 
 describe("ensureIndexes", () => {
 	it("replaces the case-sensitive season name index on an existing database", async () => {
-		const client = new MongoClient(process.env.MONGODB_URI ?? "")
-		const db = client.db()
-		await ensureIndexes(db)
+		const db = await getDb()
 		const teams = db.collection("teams")
 		await teams.dropIndex("season_name_ci")
 		await teams.createIndex({ seasonId: 1, name: 1 }, { unique: true })
@@ -17,6 +15,5 @@ describe("ensureIndexes", () => {
 		await ensureIndexes(db)
 
 		expect((await teams.indexes()).map((index) => index.name).sort()).toEqual(["_id_", "name_1", "season_name_ci"])
-		await client.close()
 	})
 })

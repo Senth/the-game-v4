@@ -12,9 +12,8 @@ export type RegisterResult =
 
 export async function registerTeam(name: string, password: string, now = new Date()): Promise<RegisterResult> {
 	const trimmed = name.trim()
-	const length = [...trimmed].length
-	if (length < 1 || length > 30) return { ok: false, error: "invalid-name" }
-	if ([...password].length < 4) return { ok: false, error: "invalid-password" }
+	if (trimmed.length < 1 || trimmed.length > 30) return { ok: false, error: "invalid-name" }
+	if (password.length < 4) return { ok: false, error: "invalid-password" }
 	const season = registrationSeason(await listSeasons(), now)
 	if (!season) return { ok: false, error: "closed" }
 	try {

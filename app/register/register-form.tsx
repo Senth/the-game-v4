@@ -43,7 +43,7 @@ export function RegisterForm() {
 						type="button"
 						onClick={() => setVisible(!visible)}
 						aria-pressed={visible}
-						aria-label={visible ? "Hide password" : "Show password"}
+						aria-label="Show password"
 						className="absolute top-0 right-0 h-11 min-w-11 rounded-md px-3 font-cond text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-accent"
 					>
 						{visible ? "Hide" : "Show"}
