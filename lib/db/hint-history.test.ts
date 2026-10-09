@@ -4,7 +4,7 @@ import { hintPenalty } from "@/lib/domain/scoring"
 import { useTestDb } from "@/test/db"
 import { NotFoundError } from "./collections"
 import { createSeason, setSeasonField } from "./seasons"
-import { createTeam, getTeam, recordSolve, revealHint } from "./teams"
+import { createTeam, getTeam, revealHint, solveCurrentQuest } from "./teams"
 
 useTestDb()
 
@@ -45,6 +45,9 @@ async function setup() {
 	return { seasonId: season._id, teamId: team._id }
 }
 
+const current = { questIndex: 0, questId: "q1" }
+const solveQ1 = { ...current, orderLength: 1, hintCount: 2 }
+
 function snapshot(index: 0 | 1, revealedAt: Date) {
 	const hint = quest.hints[index]
 	if (!hint) throw new Error("fixture")
@@ -66,32 +69,35 @@ describe("revealed-hint history", () => {
 	it("keeps snapshots and score through hint edits, reorder, deletion and solve", async () => {
 		const { seasonId, teamId } = await setup()
 		const snapshots = [snapshot(0, new Date("2026-03-14T18:05:00Z")), snapshot(1, new Date("2026-03-14T18:09:00Z"))]
-		for (const revealed of snapshots) await revealHint(teamId, "q1", revealed)
+		for (const revealed of snapshots) await revealHint(teamId, current, revealed)
 
 		await editAndDeleteHints(seasonId)
 		expect((await getTeam(teamId))?.progress).toEqual([{ questId: "q1", hintsRevealed: snapshots, pointsEarned: 0 }])
 
 		const solvedAt = new Date("2026-03-14T18:12:00Z")
-		await recordSolve(teamId, "q1", solvedAt, 50 - hintPenalty(snapshots))
+		expect(await solveCurrentQuest(teamId, solveQ1, solvedAt, 50 - hintPenalty(snapshots))).toBe(true)
 		const solved = {
 			_id: teamId,
 			score: 35,
+			questIndex: 1,
+			completed: true,
 			progress: [{ questId: "q1", solvedAt, hintsRevealed: snapshots, pointsEarned: 35 }],
 		}
 		expect(await getTeam(teamId)).toMatchObject(solved)
 
 		await editAndDeleteHints(seasonId)
 		await setSeasonField(seasonId, { arcId: "a1", questId: "q1", field: "hints" }, [])
-		await recordSolve(teamId, "q1", new Date(), 50)
+		expect(await solveCurrentQuest(teamId, solveQ1, new Date(), 50)).toBe(false)
 		expect(await getTeam(teamId)).toMatchObject(solved)
 	})
 
 	it("stores one snapshot for repeated and concurrent reveals of the same hint", async () => {
 		const { teamId } = await setup()
 		const first = snapshot(0, new Date("2026-03-14T18:05:00Z"))
-		await Promise.all([revealHint(teamId, "q1", first), revealHint(teamId, "q1", first)])
-		await revealHint(teamId, "q1", snapshot(0, new Date("2026-03-14T18:06:00Z")))
-		await revealHint(teamId, "q1", snapshot(1, new Date()))
+		const appended = await Promise.all([revealHint(teamId, current, first), revealHint(teamId, current, first)])
+		expect(appended.sort()).toEqual([false, true])
+		await revealHint(teamId, current, snapshot(0, new Date("2026-03-14T18:06:00Z")))
+		await revealHint(teamId, current, snapshot(1, new Date()))
 
 		const progress = (await getTeam(teamId))?.progress
 		expect(progress).toHaveLength(1)
@@ -101,17 +107,19 @@ describe("revealed-hint history", () => {
 
 	it("rejects invalid writes and leaves the team unchanged", async () => {
 		const { teamId } = await setup()
-		await revealHint(teamId, "q1", snapshot(0, new Date("2026-03-14T18:05:00Z")))
+		await revealHint(teamId, current, snapshot(0, new Date("2026-03-14T18:05:00Z")))
 		const before = await getTeam(teamId)
 
-		await expect(recordSolve(teamId, "q1", new Date(), Number.NaN)).rejects.toThrow()
-		await expect(recordSolve(teamId, "q1", new Date("invalid"), 50)).rejects.toThrow()
-		await expect(recordSolve(teamId, "", new Date(), 50)).rejects.toThrow()
-		await expect(revealHint(teamId, "", snapshot(1, new Date()))).rejects.toThrow()
+		const solveOne = { ...current, orderLength: 1, hintCount: 1 }
+		await expect(solveCurrentQuest(teamId, solveOne, new Date(), Number.NaN)).rejects.toThrow()
+		await expect(solveCurrentQuest(teamId, solveOne, new Date("invalid"), 50)).rejects.toThrow()
+		await expect(solveCurrentQuest(teamId, { ...solveOne, questId: "" }, new Date(), 50)).rejects.toThrow()
+		await expect(solveCurrentQuest(teamId, { ...solveOne, orderLength: 0 }, new Date(), 50)).rejects.toThrow()
+		await expect(revealHint(teamId, { questIndex: 0, questId: "" }, snapshot(1, new Date()))).rejects.toThrow()
 		expect(await getTeam(teamId)).toEqual(before)
 	})
 
 	it("throws for a missing team", async () => {
-		await expect(revealHint("missing", "q1", snapshot(0, new Date()))).rejects.toThrow(NotFoundError)
+		await expect(revealHint("missing", current, snapshot(0, new Date()))).rejects.toThrow(NotFoundError)
 	})
 })

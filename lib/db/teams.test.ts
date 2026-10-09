@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import type { Team } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
 import { NotFoundError } from "./collections"
-import { createTeam, getTeam, listTeams, listTeamsByName, setTeamField } from "./teams"
+import { createTeam, getTeam, listTeams, listTeamsByName, revealHint, setTeamField, solveCurrentQuest } from "./teams"
 
 useTestDb()
 
@@ -60,5 +60,63 @@ describe("teams", () => {
 		await expect(createTeam(team("Hawks", "spring"))).rejects.toBeInstanceOf(MongoServerError)
 		await expect(createTeam(team("hAWKS", "spring"))).rejects.toMatchObject({ code: 11000 })
 		await expect(createTeam(team("Hawks", "autumn"))).resolves.toMatchObject({ name: "Hawks" })
+	})
+
+	describe("atomic game writes", () => {
+		const hint = { hintId: "h1", text: "Count the flashes", points: 5, revealedAt: new Date("2026-03-14T18:05:00Z") }
+		const q1 = { questIndex: 0, questId: "q1" }
+		const solveQ1 = { ...q1, orderLength: 2, hintCount: 0 }
+
+		async function playing() {
+			return createTeam({ ...team(crypto.randomUUID(), "spring"), questOrder: ["q1", "q2"] })
+		}
+
+		it("adds points and advances once for concurrent solves", async () => {
+			const { _id } = await playing()
+			const solvedAt = new Date("2026-03-14T18:10:00Z")
+			const results = await Promise.all([
+				solveCurrentQuest(_id, solveQ1, solvedAt, 50),
+				solveCurrentQuest(_id, solveQ1, solvedAt, 50),
+			])
+
+			expect(results.sort()).toEqual([false, true])
+			expect(await getTeam(_id)).toMatchObject({
+				score: 50,
+				questIndex: 1,
+				completed: false,
+				progress: [{ questId: "q1", solvedAt, hintsRevealed: [], pointsEarned: 50 }],
+			})
+		})
+
+		it("writes nothing for a reveal after the solve or on a non-current quest", async () => {
+			const { _id } = await playing()
+			expect(await revealHint(_id, { questIndex: 0, questId: "q2" }, hint)).toBe(false)
+			expect(await revealHint(_id, { questIndex: 1, questId: "q2" }, hint)).toBe(false)
+			expect(await getTeam(_id)).toMatchObject({ progress: [] })
+
+			await solveCurrentQuest(_id, solveQ1, new Date(), 50)
+			const solved = await getTeam(_id)
+			expect(await revealHint(_id, q1, hint)).toBe(false)
+			expect(await getTeam(_id)).toEqual(solved)
+		})
+
+		it("does not solve with a stale hint count", async () => {
+			const { _id } = await playing()
+			expect(await revealHint(_id, q1, hint)).toBe(true)
+			const before = await getTeam(_id)
+
+			expect(await solveCurrentQuest(_id, solveQ1, new Date(), 50)).toBe(false)
+			expect(await solveCurrentQuest(_id, { ...solveQ1, orderLength: 3, hintCount: 1 }, new Date(), 50)).toBe(false)
+			expect(await getTeam(_id)).toEqual(before)
+			expect(await solveCurrentQuest(_id, { ...solveQ1, hintCount: 1 }, new Date(), 45)).toBe(true)
+		})
+
+		it("sets completed when the last quest is solved", async () => {
+			const { _id } = await playing()
+			await solveCurrentQuest(_id, solveQ1, new Date(), 50)
+			expect(await solveCurrentQuest(_id, { ...solveQ1, questIndex: 1, questId: "q2" }, new Date(), 30)).toBe(true)
+
+			expect(await getTeam(_id)).toMatchObject({ score: 80, questIndex: 2, completed: true })
+		})
 	})
 })
