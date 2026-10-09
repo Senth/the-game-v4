@@ -1,12 +1,19 @@
-import { beforeAll, describe, expect, it } from "vitest"
-import { createSeason } from "@/lib/db/seasons"
+import { beforeAll, describe, expect, it, vi } from "vitest"
+import * as actions from "@/app/actions"
+import { createSeason, setSeasonField } from "@/lib/db/seasons"
 import { createTeam, getTeam } from "@/lib/db/teams"
 import type { Team } from "@/lib/domain/schemas"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
 import { buildFixture } from "@/scripts/fixture"
 import { useTestDb } from "@/test/db"
 import { secretAnswer, withSecrets } from "@/test/secrets"
-import { loadGame, submitAnswer } from "./game"
+import { loadGame, revealHint, submitAnswer } from "./game"
+
+const session = vi.hoisted(() => ({ teamId: "" }))
+vi.mock("@/lib/auth/guards", async () => {
+	const { getTeam } = await import("@/lib/db/teams")
+	return { requireTeam: async () => getTeam(session.teamId) }
+})
 
 useTestDb()
 
@@ -16,6 +23,7 @@ const season = withSecrets(fixture.season)
 const ninjas = fixture.teams.find((team) => team._id === "team-ninjas") as (typeof fixture.teams)[number]
 const current = "backwards-log"
 const next = ninjas.questOrder[ninjas.questIndex + 1] as string
+const hint = (n: number) => `${current}-h${n}`
 
 let created = 0
 async function freshTeam(overrides: Partial<Team> = {}): Promise<Team> {
@@ -115,5 +123,125 @@ describe("submitAnswer", () => {
 		expect(results.map((result) => (result.ok ? result.correct : result.reason)).toSorted()).toEqual(["stale", true])
 		expect(await getTeam(team._id)).toMatchObject({ score: team.score + 15, questIndex: team.questIndex + 1 })
 		expect(events).toHaveLength(3)
+	})
+})
+
+describe("revealHint", () => {
+	it("stores a snapshot, publishes the three channels once and shows only the revealed text", async () => {
+		const team = await freshTeam()
+		expect(JSON.stringify(await loadGame(team, now))).not.toContain(`secret-hint-${hint(2)}`)
+		const { events, unsubscribe } = recordEvents(team._id)
+		const result = await revealHint(team, hint(2), now)
+		unsubscribe()
+		expect(result).toMatchObject({ ok: true, game: { quest: { id: current, worth: 5 } } })
+		const json = JSON.stringify(result)
+		expect(json).toContain(`secret-hint-${hint(2)}`)
+		expect(json).not.toContain(`secret-hint-${hint(3)}`)
+		expect(events.toSorted()).toEqual([boardChannel, seasonChannel(season._id), teamChannel(team._id)].toSorted())
+		const progress = (await getTeam(team._id))?.progress.find((entry) => entry.questId === current)
+		expect(progress?.hintsRevealed.at(-1)).toEqual({
+			hintId: hint(2),
+			text: `secret-hint-${hint(2)}`,
+			points: 10,
+			revealedAt: now,
+		})
+	})
+
+	it("treats a repeat reveal as a no-op without a publish", async () => {
+		const team = await freshTeam()
+		const { events, unsubscribe } = recordEvents(team._id)
+		expect(await revealHint(team, hint(1), now)).toMatchObject({ ok: true, game: { quest: { id: current } } })
+		unsubscribe()
+		expect(await getTeam(team._id)).toEqual(team)
+		expect(events).toEqual([])
+	})
+
+	it.each([
+		["stale", `${next}-h1`, now],
+		["stale", "missing", now],
+		["not-running", hint(2), season.end as Date],
+	] as const)("returns %s for %s without a write or publish", async (reason, hintId, at) => {
+		const team = await freshTeam()
+		const { events, unsubscribe } = recordEvents(team._id)
+		expect(await revealHint(team, hintId, at)).toEqual({ ok: false, reason })
+		unsubscribe()
+		expect(await getTeam(team._id)).toEqual(team)
+		expect(events).toEqual([])
+	})
+})
+
+describe("hint history through the actions", () => {
+	it("scores snapshots and keeps them through edits, reorder, deletion and solve", async () => {
+		const target = { arcId: "flow-arc", questId: "flow-q" }
+		const flow = await createSeason({
+			title: "Flow",
+			lengthMinutes: 120,
+			start: new Date(Date.now() - 3_600_000),
+			end: new Date(Date.now() + 3_600_000),
+			shuffleArcs: false,
+			arcs: [
+				{
+					id: target.arcId,
+					title: "Flow",
+					shuffleQuests: false,
+					quests: [
+						{
+							id: target.questId,
+							displayTitle: "Beacon",
+							internalTitle: "beacon",
+							content: "",
+							assetPath: null,
+							answers: ["lamp"],
+							points: 50,
+							adminNotes: "",
+							hints: [
+								{ id: "f1", text: "Count the flashes", points: 5 },
+								{ id: "f2", text: "Morse", points: 10 },
+							],
+						},
+					],
+				},
+			],
+		})
+		const team = await createTeam({
+			name: "Flow team",
+			passwordHash: "x",
+			seasonId: flow._id,
+			questOrder: [target.questId],
+			questIndex: 0,
+			score: 0,
+			completed: false,
+			progress: [],
+		})
+		session.teamId = team._id
+
+		expect(await actions.revealHint("f1")).toMatchObject({ ok: true })
+		expect(await actions.revealHint("f2")).toMatchObject({ ok: true })
+		const snapshots = (await getTeam(team._id))?.progress[0]?.hintsRevealed
+		expect(snapshots?.map(({ hintId, text, points }) => ({ hintId, text, points }))).toEqual([
+			{ hintId: "f1", text: "Count the flashes", points: 5 },
+			{ hintId: "f2", text: "Morse", points: 10 },
+		])
+
+		await setSeasonField(flow._id, { ...target, hintId: "f1", field: "text" }, "Rewritten")
+		await setSeasonField(flow._id, { ...target, hintId: "f1", field: "points" }, 20)
+		await setSeasonField(flow._id, { ...target, field: "hints" }, [
+			{ id: "f2", text: "Morse", points: 10 },
+			{ id: "f1", text: "Rewritten", points: 20 },
+		])
+		await setSeasonField(flow._id, { ...target, field: "hints" }, [{ id: "f1", text: "Rewritten", points: 20 }])
+
+		expect(await actions.submitAnswer(target.questId, "Lamp")).toMatchObject({
+			ok: true,
+			correct: true,
+			pointsEarned: 35,
+			game: { lifecycleState: "completed", score: 35 },
+		})
+		await setSeasonField(flow._id, { ...target, hintId: "f1", field: "text" }, "After solve")
+		expect(await getTeam(team._id)).toMatchObject({
+			score: 35,
+			completed: true,
+			progress: [{ questId: target.questId, hintsRevealed: snapshots, pointsEarned: 35 }],
+		})
 	})
 })
