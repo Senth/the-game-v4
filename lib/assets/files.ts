@@ -15,7 +15,8 @@ export function resolveAssetFile(file: string) {
 	const match = assetName.exec(file)
 	if (!match) return null
 
-	const extension = match[1]!.toLowerCase() as keyof typeof contentTypes
+	const extension = match[1]?.toLowerCase() as keyof typeof contentTypes | undefined
+	if (!extension) return null
 	return {
 		path: path.resolve(process.env.ASSETS_DIR ?? ".tmp/assets", file),
 		contentType: contentTypes[extension],
