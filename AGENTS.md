@@ -40,6 +40,7 @@ Keep temporary artifacts under `.tmp/`. Do not use live databases or services in
 | `lib/db/` | MongoDB client, indexes and repository operations |
 | `lib/auth/` | Sessions, password hashing and server-side guards |
 | `lib/events/` | Single-container event bus and live update support |
+| `lib/game/` | Player game flows that load state, write team progress and publish live events |
 | `scripts/` | Development boot, seed, admin creation and v3 import CLIs |
 | `docs/mocks/` | Nine accepted HTML and PNG mock pairs |
 

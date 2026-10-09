@@ -1,4 +1,5 @@
 import {
+	findQuest,
 	lifecycleState,
 	type PaceBand,
 	type PlayerQuest,
@@ -37,8 +38,7 @@ export function playerGame(
 	if (state === "waiting" || !season?.start) return { lifecycleState: "waiting" }
 	if (state === "countdown") return { lifecycleState: state, start: season.start }
 	if (state !== "running") return { lifecycleState: state, score: team.score }
-	const questId = team.questOrder[team.questIndex]
-	const quest = season.arcs.flatMap((arc) => arc.quests).find((candidate) => candidate.id === questId)
+	const quest = findQuest(season, team.questOrder[team.questIndex])
 	const teamPace = pace(season, team, now)
 	return {
 		lifecycleState: state,

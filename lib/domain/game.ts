@@ -196,6 +196,10 @@ export function pickLoginTeam<
 	)
 }
 
+export function findQuest(season: Pick<Season, "arcs">, questId: string | undefined): Quest | undefined {
+	return season.arcs.flatMap((arc) => arc.quests).find((quest) => quest.id === questId)
+}
+
 export type RailArc = { arcId: string; segments: { questId: string; state: "solved" | "current" | "todo" }[] }
 
 export function rail(

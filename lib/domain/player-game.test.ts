@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { buildFixture } from "@/scripts/fixture"
+import { withSecrets } from "@/test/secrets"
 import { playerGame } from "./player-game"
-import type { Season } from "./schemas"
 
 const now = new Date("2026-10-09T18:00:00Z")
 const { season, teams } = buildFixture(now)
@@ -9,19 +9,7 @@ const ninjas = teams.find((team) => team._id === "team-ninjas") as (typeof teams
 const start = season.start as Date
 const end = season.end as Date
 
-const secretSeason: Season = {
-	...season,
-	arcs: season.arcs.map((arc) => ({
-		...arc,
-		quests: arc.quests.map((quest) => ({
-			...quest,
-			internalTitle: `secret-internal-${quest.id}`,
-			adminNotes: `secret-note-${quest.id}`,
-			answers: [`secret-answer-${quest.id}`],
-			hints: quest.hints.map((hint) => ({ ...hint, text: `secret-hint-${hint.id}` })),
-		})),
-	})),
-}
+const secretSeason = withSecrets(season)
 
 const cases = {
 	waiting: [{ ...secretSeason, start: null, end: null }, ninjas, now],
