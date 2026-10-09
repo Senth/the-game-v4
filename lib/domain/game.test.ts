@@ -5,6 +5,7 @@ import {
 	lifecycleState,
 	matchesAnswer,
 	pace,
+	paceFromCounts,
 	paceLabel,
 	pickLoginTeam,
 	playerView,
@@ -211,6 +212,39 @@ describe("pace", () => {
 			band: "pace-ok",
 			n: -2,
 		})
+	})
+
+	it("agrees with the counts-based core at pace and time boundaries", () => {
+		for (const [minute, duration, solved, total] of [
+			[10, 100, 1, 10],
+			[11, 100, 1, 10],
+			[10, 100, 0, 10],
+			[11, 100, 0, 10],
+			[20, 100, 0, 10],
+			[21, 100, 0, 10],
+			[52, 120, 1, 3],
+			[30, 100, 5, 10],
+			[4, 100, 0, 10],
+			[-30, 100, 0, 10],
+			[0, 100, 0, 10],
+			[100, 100, 4, 10],
+			[150, 100, 4, 10],
+			[0, 0, 0, 10],
+			[0, -1, 0, 10],
+			[50, 100, 0, 0],
+		] as const) {
+			const end = minutes(duration)
+			const now = minutes(minute)
+			expect(paceFromCounts({ start, end, solved, total, now })).toEqual(
+				pace({ start, end }, team(solved, order.slice(0, total)), now),
+			)
+		}
+		for (const times of [
+			{ start: null, end: running.end },
+			{ start, end: null },
+		]) {
+			expect(paceFromCounts({ ...times, solved: 0, total: 10, now: start })).toBeNull()
+		}
 	})
 
 	it("colors by percentage when N rounds to 0", () => {
