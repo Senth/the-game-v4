@@ -79,6 +79,7 @@ export function QuestContent({ quest }: { quest: Pick<PlayerQuest, "displayTitle
 						Open PDF
 					</a>
 				) : (
+					// biome-ignore lint/performance/noImgElement: Authored assets have no stored dimensions and must retain their intrinsic aspect ratio.
 					<img
 						src={quest.assetPath}
 						alt={quest.displayTitle}
