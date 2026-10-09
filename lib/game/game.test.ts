@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest"
 import * as actions from "@/app/actions"
 import { createSeason, setSeasonField } from "@/lib/db/seasons"
-import { createTeam, getTeam } from "@/lib/db/teams"
+import { createTeam, getTeam, solveCurrentQuest } from "@/lib/db/teams"
 import type { Team } from "@/lib/domain/schemas"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
 import { buildFixture } from "@/scripts/fixture"
@@ -13,6 +13,11 @@ const session = vi.hoisted(() => ({ teamId: "" }))
 vi.mock("@/lib/auth/guards", async () => {
 	const { getTeam } = await import("@/lib/db/teams")
 	return { requireTeam: async () => getTeam(session.teamId) }
+})
+
+vi.mock("@/lib/db/teams", async (importOriginal) => {
+	const original = await importOriginal<typeof import("@/lib/db/teams")>()
+	return { ...original, solveCurrentQuest: vi.fn(original.solveCurrentQuest) }
 })
 
 useTestDb()
@@ -98,6 +103,19 @@ describe("submitAnswer", () => {
 		expect(await submitAnswer(stale, current, secretAnswer(current), now)).toMatchObject({ ok: true, pointsEarned: 15 })
 	})
 
+	it("gives up as stale after three retries without a publish", async () => {
+		const team = await freshTeam()
+		const solve = vi.mocked(solveCurrentQuest).mockClear().mockResolvedValue(false)
+		const { events, unsubscribe } = recordEvents(team._id)
+		const result = await submitAnswer(team, current, secretAnswer(current), now)
+		unsubscribe()
+		const calls = solve.mock.calls.length
+		solve.mockReset()
+		expect(result).toEqual({ ok: false, reason: "stale" })
+		expect(calls).toBe(4)
+		expect(events).toEqual([])
+	})
+
 	it.each([
 		["stale", next, secretAnswer(next), now],
 		["not-running", current, secretAnswer(current), season.end as Date],
@@ -154,6 +172,17 @@ describe("revealHint", () => {
 		unsubscribe()
 		expect(await getTeam(team._id)).toEqual(team)
 		expect(events).toEqual([])
+	})
+
+	it("stores one snapshot and publishes once for a concurrent reveal pair", async () => {
+		const team = await freshTeam()
+		const { events, unsubscribe } = recordEvents(team._id)
+		const results = await Promise.all([revealHint(team, hint(2), now), revealHint(team, hint(2), now)])
+		unsubscribe()
+		expect(results.map((result) => result.ok)).toEqual([true, true])
+		const progress = (await getTeam(team._id))?.progress.find((entry) => entry.questId === current)
+		expect(progress?.hintsRevealed.filter((snapshot) => snapshot.hintId === hint(2))).toHaveLength(1)
+		expect(events).toHaveLength(3)
 	})
 
 	it.each([

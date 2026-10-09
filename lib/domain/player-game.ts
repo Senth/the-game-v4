@@ -1,5 +1,5 @@
 import {
-	findQuest,
+	currentQuest,
 	lifecycleState,
 	type PaceBand,
 	type PlayerQuest,
@@ -38,16 +38,11 @@ export function playerGame(
 	if (state === "waiting" || !season?.start) return { lifecycleState: "waiting" }
 	if (state === "countdown") return { lifecycleState: state, start: season.start }
 	if (state !== "running") return { lifecycleState: state, score: team.score }
-	const quest = findQuest(season, team.questOrder[team.questIndex])
+	const current = currentQuest(season, team)
 	const teamPace = pace(season, team, now)
 	return {
 		lifecycleState: state,
-		quest: quest
-			? playerView(
-					quest,
-					team.progress.find((entry) => entry.questId === quest.id),
-				)
-			: null,
+		quest: current ? playerView(current.quest, current.progress) : null,
 		score: team.score,
 		start: season.start,
 		end: season.end,
