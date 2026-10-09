@@ -1,6 +1,8 @@
 import type { Quest, Season, Team, TeamQuestProgress } from "./schemas"
 import { hintPenalty } from "./scoring"
 
+export const maxAnswerLength = 200
+
 const normalizeAnswer = (answer: string) => answer.normalize("NFC").trim().toLowerCase()
 
 export function matchesAnswer(submitted: string, answers: string[]): boolean {
@@ -195,6 +197,21 @@ export function pickLoginTeam<
 		null
 	)
 }
+
+export function findQuest(season: Pick<Season, "arcs">, questId: string | undefined): Quest | undefined {
+	return season.arcs.flatMap((arc) => arc.quests).find((quest) => quest.id === questId)
+}
+
+export function currentQuest(
+	season: Pick<Season, "arcs">,
+	team: Pick<Team, "questOrder" | "questIndex" | "progress">,
+): { quest: Quest; progress: TeamQuestProgress | undefined } | undefined {
+	const quest = findQuest(season, team.questOrder[team.questIndex])
+	return quest && { quest, progress: team.progress.find((entry) => entry.questId === quest.id) }
+}
+
+export const isRevealed = (progress: Pick<TeamQuestProgress, "hintsRevealed"> | undefined, hintId: string) =>
+	progress?.hintsRevealed.some((snapshot) => snapshot.hintId === hintId) ?? false
 
 export type RailArc = { arcId: string; segments: { questId: string; state: "solved" | "current" | "todo" }[] }
 
