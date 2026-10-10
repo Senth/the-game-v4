@@ -56,10 +56,16 @@ describe("loadGame", () => {
 		expect(await loadGame(await freshTeam({ seasonId: null }), now)).toEqual({ lifecycleState: "waiting" })
 	})
 
+	it("keeps join URLs out of getGame JSON", async () => {
+		session.teamId = (await freshTeam())._id
+		expect(JSON.stringify(await actions.getGame())).not.toContain("/join/")
+	})
+
 	it("returns the running view without secrets", async () => {
 		const game = await loadGame(await freshTeam(), now)
 		expect(game).toMatchObject({ lifecycleState: "running", quest: { id: current } })
 		expect(JSON.stringify(game)).not.toContain("secret-")
+		expect(JSON.stringify(game)).not.toContain("/join/")
 	})
 })
 

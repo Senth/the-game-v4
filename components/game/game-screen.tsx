@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react"
+import { type ReactNode, useCallback, useEffect, useRef, useState, useTransition } from "react"
 import { getGame, revealHint, submitAnswer } from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
@@ -17,10 +17,12 @@ export function GameScreen({
 	initial,
 	channels,
 	initialNow,
+	qr,
 }: {
 	initial: PlayerGame
 	channels: string[]
 	initialNow: number
+	qr?: ReactNode
 }) {
 	const [game, setGame] = useLiveState(getGame, channels, initial)
 	const [previous, setPrevious] = useState(initial)
@@ -156,7 +158,7 @@ export function GameScreen({
 		})
 	}
 
-	if (game.lifecycleState !== "running") return <LifecycleScreen game={game} now={now} />
+	if (game.lifecycleState !== "running") return <LifecycleScreen game={game} now={now} qr={qr} />
 	const pace = paceFromCounts({ start: game.start, end: game.end, solved: game.solved, total: game.total, now })
 	return (
 		<>
