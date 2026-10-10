@@ -90,7 +90,7 @@ Admin creation and self-registration both remain.
 Use `bcryptjs` and iron-session 8. The cookie holds only `{kind: "admin" | "team", id: string}`.
 Sessions last 30 days. Production requires `SESSION_SECRET`.
 `proxy.ts` denies by default.
-Public paths are `/login`, `/logout`, `/register`, `/board`, `/api/events`, `/assets/`, `/_next/` and the icons.
+Public paths are `/login`, `/logout`, `/register`, `/board`, `/api/events`, `/assets/`, `/_next/`, `/join/` and the icons.
 `/api/events` authorizes its requested channels against the session itself.
 Guard every server action except the public login and register actions with `requireAdmin` or `requireTeam`.
 The single login form tries admin then team in one request and returns one generic error on failure.
@@ -221,6 +221,9 @@ Players never receive internal titles, admin notes, answers or unrevealed hint t
 and live responses. Hidden hints may expose their id, position and penalty, not their text.
 Players reveal hints by id, not by index, so edits and deletions cannot shift a reveal onto another hint.
 Construct a player view without deleting fields from the shared season object.
+
+Team join URLs are absolute, built from the request's `host` and `x-forwarded-proto`.
+They log teammates into that team's own `/`, never standings, board or admin JSON.
 
 ## Live events
 
