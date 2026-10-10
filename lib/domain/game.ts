@@ -41,25 +41,43 @@ export type Pace = {
 	n: number
 }
 
-export function pace(
-	season: Pick<Season, "start" | "end">,
-	team: Pick<Team, "questOrder" | "progress">,
-	now: Date,
-): Pace | null {
-	const { start, end } = season
-	const total = team.questOrder.length
+export function questCounts(team: Pick<Team, "questOrder" | "progress">): { solved: number; total: number } {
+	const order = new Set(team.questOrder)
+	return {
+		solved: team.progress.filter((entry) => entry.solvedAt && order.has(entry.questId)).length,
+		total: team.questOrder.length,
+	}
+}
+
+export function paceFromCounts({
+	start,
+	end,
+	solved,
+	total,
+	now,
+}: Pick<Season, "start" | "end"> & {
+	solved: number
+	total: number
+	now: Date
+}): Pace | null {
 	if (!start || !end || end.getTime() <= start.getTime() || total === 0) return null
 	const duration = end.getTime() - start.getTime()
 	const elapsed = Math.min(Math.max(now.getTime() - start.getTime(), 0), duration)
 	const timeFraction = elapsed / duration
-	const order = new Set(team.questOrder)
-	const solved = team.progress.filter((entry) => entry.solvedAt && order.has(entry.questId)).length
 	const timePercent = 100 * timeFraction
 	const solvedPercent = 100 * (solved / total)
 	const behindPercent = (100 * (elapsed * total - solved * duration)) / (duration * total)
 	const band =
 		behindPercent <= 0 ? "pace-ok" : behindPercent <= 10 ? "pace-1" : behindPercent <= 20 ? "pace-2" : "pace-3"
 	return { timePercent, solvedPercent, behindPercent, band, n: Math.round(timeFraction * total) - solved }
+}
+
+export function pace(
+	season: Pick<Season, "start" | "end">,
+	team: Pick<Team, "questOrder" | "progress">,
+	now: Date,
+): Pace | null {
+	return paceFromCounts({ ...season, ...questCounts(team), now })
 }
 
 export function paceLabel(n: number): string {

@@ -41,7 +41,14 @@ describe("playerGame", () => {
 		expect(game.quest?.id).toBe("backwards-log")
 		expect(game.quest?.displayTitle).toBe("The keeper's last log")
 		expect(game.quest?.hints.map((hint) => hint.revealed)).toEqual([true, false, false])
-		expect(game).toMatchObject({ score: ninjas.score, start, end, pace: { band: "pace-2", label: "2 behind" } })
+		expect(game).toMatchObject({
+			solved: 5,
+			total: 12,
+			score: ninjas.score,
+			start,
+			end,
+			pace: { band: "pace-2", label: "2 behind" },
+		})
 		expect(game.rail.map((arc) => arc.arcId)).toEqual(["lighthouse", "old-town", "finale"])
 		expect(game.rail.flatMap((arc) => arc.segments).filter((segment) => segment.state === "current")).toEqual([
 			{ questId: "backwards-log", state: "current" },
@@ -49,9 +56,28 @@ describe("playerGame", () => {
 		expect(game.strip.map((entry) => (entry.kind === "team" ? entry.rank : "gap"))).toEqual([1, "gap", 6, 7])
 	})
 
+	it("counts solved quests in the team order, excluding removed solves and unsolved progress", () => {
+		const team = {
+			...ninjas,
+			questOrder: ninjas.questOrder.slice(1),
+			progress: [
+				...ninjas.progress,
+				{ questId: "gone", solvedAt: now, hintsRevealed: [], pointsEarned: 10 },
+				{ questId: "skipped", hintsRevealed: [], pointsEarned: 0 },
+			],
+		}
+		expect(playerGame(season, team, teams, now)).toMatchObject({ solved: 4, total: 11 })
+	})
+
 	it("returns a null quest and pace for a running team with an empty order", () => {
 		const team = { ...ninjas, questOrder: [], questIndex: 0, progress: [] }
-		expect(playerGame(season, team, teams, now)).toMatchObject({ lifecycleState: "running", quest: null, pace: null })
+		expect(playerGame(season, team, teams, now)).toMatchObject({
+			lifecycleState: "running",
+			quest: null,
+			pace: null,
+			solved: 0,
+			total: 0,
+		})
 	})
 
 	it("returns only the score when completed, including after end", () => {

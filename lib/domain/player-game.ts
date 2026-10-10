@@ -3,9 +3,10 @@ import {
 	lifecycleState,
 	type PaceBand,
 	type PlayerQuest,
-	pace,
+	paceFromCounts,
 	paceLabel,
 	playerView,
+	questCounts,
 	type RailArc,
 	rail,
 	type StripEntry,
@@ -20,6 +21,8 @@ export type PlayerGame =
 			lifecycleState: "running"
 			quest: PlayerQuest | null
 			score: number
+			solved: number
+			total: number
 			start: Date
 			end: Date | null
 			pace: { band: PaceBand; label: string } | null
@@ -39,11 +42,13 @@ export function playerGame(
 	if (state === "countdown") return { lifecycleState: state, start: season.start }
 	if (state !== "running") return { lifecycleState: state, score: team.score }
 	const current = currentQuest(season, team)
-	const teamPace = pace(season, team, now)
+	const counts = questCounts(team)
+	const teamPace = paceFromCounts({ ...season, ...counts, now })
 	return {
 		lifecycleState: state,
 		quest: current ? playerView(current.quest, current.progress) : null,
 		score: team.score,
+		...counts,
 		start: season.start,
 		end: season.end,
 		pace: teamPace && { band: teamPace.band, label: paceLabel(teamPace.n) },
