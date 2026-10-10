@@ -4,12 +4,21 @@ import fs from "node:fs"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
+import { setTimeout as sleep } from "node:timers/promises"
 
 const FIRST_PORT = 7000
 const PORT_COUNT = 1000
-const CLAIM_GRACE_MS = 10_000
+const CLAIM_GRACE_MS = 3_000
+const LOCK_STALE_MS = 5_000
 
-export type DevStack = { web: number; mongo?: number; pid: number; start?: string }
+export type DevStack = {
+	web: number
+	mongo?: number
+	pid: number
+	start?: string
+	mongoPid?: number
+	mongoStart?: string
+}
 
 function registryDir() {
 	return path.resolve(process.env.DEV_STACK_REGISTRY ?? path.join(os.homedir(), ".local/state/dev-ports"))
@@ -78,50 +87,88 @@ function claimLive(dir: string) {
 	}
 }
 
-function mkdirClaim(dir: string) {
+function alive(pid: number | undefined, start: string | undefined) {
+	return pid !== undefined && pidAlive(pid) && (procStart(pid) ?? "") === (start ?? "")
+}
+
+const lockOwner = () => `${process.pid} ${procStart(process.pid) ?? ""}`
+
+function createExclusive(file: string) {
+	const temp = `${file}.${randomUUID()}`
+	fs.writeFileSync(temp, lockOwner())
 	try {
-		fs.mkdirSync(dir)
+		fs.linkSync(temp, file)
 		return true
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "EEXIST") return false
+		throw error
+	} finally {
+		fs.rmSync(temp, { force: true })
+	}
+}
+
+function lockStale(file: string) {
+	try {
+		const [pid, start] = fs.readFileSync(file, "utf8").split(" ")
+		return !alive(Number(pid), start) || Date.now() - fs.statSync(file).mtimeMs > LOCK_STALE_MS
 	} catch {
 		return false
 	}
 }
 
-// ponytail: a third allocator re-claiming during the restore rename strands the tomb; add a registry lock if that shows up
-function retire(dir: string, removable: (tomb: string) => boolean) {
-	const tomb = path.join(registryDir(), `.tomb-${path.basename(dir)}-${randomUUID()}`)
+function lockHeld(file: string) {
 	try {
-		fs.renameSync(dir, tomb)
+		return fs.readFileSync(file, "utf8") === lockOwner()
 	} catch {
 		return false
 	}
-	if (removable(tomb)) {
-		fs.rmSync(tomb, { recursive: true, force: true })
-		return true
+}
+
+export async function withLock<T>(fn: () => T) {
+	const lock = path.join(registryDir(), ".lock")
+	const breaker = `${lock}.break`
+	fs.mkdirSync(registryDir(), { recursive: true })
+	while (!createExclusive(lock)) {
+		if (lockStale(lock) && createExclusive(breaker)) {
+			try {
+				if (lockStale(lock)) fs.rmSync(lock, { force: true })
+			} finally {
+				fs.rmSync(breaker, { force: true })
+			}
+		} else if (lockStale(breaker)) {
+			// breaker is held for a few syscalls, so a stale one means its holder died mid-break
+			fs.rmSync(breaker, { force: true })
+		} else {
+			await sleep(10)
+		}
 	}
 	try {
-		fs.renameSync(tomb, dir)
-	} catch {
-		console.error(`dev-ports: could not restore claim ${dir} from ${tomb}`)
+		return fn()
+	} finally {
+		if (lockHeld(lock)) fs.rmSync(lock)
 	}
-	return false
 }
 
 async function claimPort(port: number, pid: number, root: string) {
 	if (!(await portFree(port))) return false
 	const dir = path.join(registryDir(), String(port))
-	if (!mkdirClaim(dir) && (claimLive(dir) || !retire(dir, (tomb) => !claimLive(tomb)) || !mkdirClaim(dir))) return false
-	try {
-		fs.writeFileSync(path.join(dir, "pid"), String(pid))
-		fs.writeFileSync(path.join(dir, "worktree"), root)
-		return true
-	} catch {
-		return false
-	}
+	return withLock(() => {
+		if (fs.existsSync(dir)) {
+			if (claimLive(dir)) return false
+			fs.rmSync(dir, { recursive: true, force: true })
+		}
+		try {
+			fs.mkdirSync(dir)
+			fs.writeFileSync(path.join(dir, "pid"), String(pid))
+			fs.writeFileSync(path.join(dir, "worktree"), root)
+			return true
+		} catch {
+			return false
+		}
+	})
 }
 
 export async function allocPorts(names: string[], pid: number, root = worktreeRoot()) {
-	fs.mkdirSync(registryDir(), { recursive: true })
 	const pending = [...names]
 	const ports: Record<string, number> = {}
 	const offset = scanStart(root) - FIRST_PORT
@@ -130,7 +177,7 @@ export async function allocPorts(names: string[], pid: number, root = worktreeRo
 		if (await claimPort(port, pid, root)) ports[pending.shift() as string] = port
 	}
 	if (pending.length > 0) {
-		releasePorts(ports, pid)
+		await releasePorts(ports, pid)
 		throw new Error(`no free ports in ${FIRST_PORT}-${FIRST_PORT + PORT_COUNT - 1} for: ${pending.join(" ")}`)
 	}
 	return ports
@@ -141,16 +188,25 @@ export function portArg(args: string[]) {
 	return i < 0 ? undefined : Number(args[i]?.split("=")[1] ?? args[i + 1])
 }
 
-export function releasePorts(ports: Record<string, number>, pid: number) {
-	for (const port of Object.values(ports)) {
-		const dir = path.join(registryDir(), String(port))
-		if (claimPid(dir) === pid) retire(dir, (tomb) => claimPid(tomb) === pid)
-	}
+export async function releasePorts(ports: Record<string, number>, pid: number) {
+	const errors = await withLock(() =>
+		Object.values(ports).flatMap((port) => {
+			const dir = path.join(registryDir(), String(port))
+			try {
+				if (claimPid(dir) === pid) fs.rmSync(dir, { recursive: true, force: true })
+				return []
+			} catch (error) {
+				return [error]
+			}
+		}),
+	)
+	if (errors.length > 0) throw new AggregateError(errors, `could not release ${errors.length} port claim(s)`)
 }
 
 export function writeStack(state: DevStack) {
 	fs.mkdirSync(path.dirname(stackFile()), { recursive: true })
-	fs.writeFileSync(stackFile(), JSON.stringify({ ...state, start: procStart(state.pid) }))
+	const mongoStart = state.mongoPid === undefined ? undefined : procStart(state.mongoPid)
+	fs.writeFileSync(stackFile(), JSON.stringify({ ...state, start: procStart(state.pid), mongoStart }))
 }
 
 export function readStack(): DevStack | undefined {
@@ -161,7 +217,8 @@ export function readStack(): DevStack | undefined {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
 		throw error
 	}
-	return pidAlive(state.pid) && procStart(state.pid) === state.start ? state : undefined
+	if (!alive(state.pid, state.start)) return undefined
+	return alive(state.mongoPid, state.mongoStart) ? state : { ...state, mongo: undefined }
 }
 
 export function clearStack(pid: number) {

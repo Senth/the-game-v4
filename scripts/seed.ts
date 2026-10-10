@@ -66,7 +66,7 @@ async function main() {
 	} finally {
 		await closeDb()
 		await mongo?.stop()
-		releasePorts(ports, process.pid)
+		await releasePorts(ports, process.pid)
 	}
 }
 

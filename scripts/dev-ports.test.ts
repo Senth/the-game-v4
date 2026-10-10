@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { allocPorts, portArg, readStack, releasePorts, scanStart, writeStack } from "./dev-ports"
 
 const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid as number
+const startOf = (pid: number) => fs.readFileSync(`/proc/${pid}/stat`, "utf8").split(") ").pop()?.split(" ")[19]
 const root = "/test/worktree"
 let tmp: string
 
@@ -48,7 +49,7 @@ describe("allocPorts", () => {
 
 	it.each(["127.0.0.1", "::1"])("skips a port with a live listener on %s", async (host) => {
 		const { web } = await allocPorts(["web"], process.pid, root)
-		releasePorts({ web: web as number }, process.pid)
+		await releasePorts({ web: web as number }, process.pid)
 		const server = await listen(web as number, host)
 		try {
 			expect((await allocPorts(["web"], process.pid, root)).web).not.toBe(web)
@@ -79,17 +80,58 @@ describe("allocPorts", () => {
 		expect((await allocPorts(["web"], process.pid, root)).web).toBe(web)
 	})
 
-	it("never removes a claim that replaced a dead one after it was read", async () => {
-		const { web } = await allocPorts(["web"], process.pid, root)
-		const pidFile = path.join(claimDir(web as number), "pid")
-		fs.writeFileSync(pidFile, String(deadPid()))
-		const rename = fs.renameSync
-		vi.spyOn(fs, "renameSync").mockImplementationOnce((from, to) => {
-			fs.writeFileSync(pidFile, String(process.pid))
-			rename(from, to)
-		})
-		expect((await allocPorts(["web"], process.pid, root)).web).not.toBe(web)
-		expect(fs.readFileSync(pidFile, "utf8")).toBe(String(process.pid))
+	it.each([
+		[
+			"finishes publishing a claim it created before pausing",
+			(dir: string) => {
+				fs.mkdirSync(dir, { recursive: true })
+				const old = new Date(Date.now() - 60_000)
+				fs.utimesSync(dir, old, old)
+			},
+		],
+		[
+			"replaces a dead claim",
+			(dir: string) => {
+				fs.mkdirSync(dir, { recursive: true })
+				fs.writeFileSync(path.join(dir, "pid"), String(deadPid()))
+			},
+		],
+	])("waits while another process holding the registry lock %s", async (_, prepare) => {
+		const port = scanStart(root)
+		const dir = claimDir(port)
+		prepare(dir)
+		const script = `Promise.all([import("node:fs"), import("./scripts/dev-ports.ts")]).then(([fs, { withLock }]) => withLock(() => {
+			console.log("locked")
+			fs.readSync(0, Buffer.alloc(1))
+			fs.rmSync(${JSON.stringify(dir)}, { recursive: true, force: true })
+			fs.mkdirSync(${JSON.stringify(dir)})
+			fs.writeFileSync(${JSON.stringify(path.join(dir, "pid"))}, String(process.pid))
+		})).then(() => process.stdin.resume())`
+		const holder = spawn(process.execPath, ["-e", script])
+		try {
+			await new Promise((resolve) => holder.stdout.once("data", resolve))
+			const allocating = allocPorts(["web"], process.pid, root)
+			await new Promise((resolve) => setTimeout(resolve, 300))
+			holder.stdin.write("g")
+			expect((await allocating).web).not.toBe(port)
+			expect(fs.readFileSync(path.join(dir, "pid"), "utf8")).toBe(String(holder.pid))
+		} finally {
+			holder.kill()
+		}
+	})
+
+	it.each([
+		["a dead holder", () => `${deadPid()} 1`],
+		["a reused pid", () => `${process.pid} 1`],
+		["a live holder past the stale limit", () => `${process.pid} ${startOf(process.pid)}`],
+	])("breaks a registry lock left by %s", async (_, owner) => {
+		const lock = path.join(tmp, "registry", ".lock")
+		fs.mkdirSync(path.dirname(lock), { recursive: true })
+		fs.writeFileSync(lock, owner())
+		const old = new Date(Date.now() - 60_000)
+		fs.utimesSync(lock, old, old)
+		expect((await allocPorts(["web"], process.pid, root)).web).toBe(scanStart(root))
+		expect(fs.existsSync(lock)).toBe(false)
 	})
 
 	it("hands distinct ports to concurrent processes", async () => {
@@ -128,10 +170,24 @@ describe("allocPorts", () => {
 describe("releasePorts", () => {
 	it("removes only claims owned by the given pid", async () => {
 		const ports = await allocPorts(["web"], process.pid, root)
-		releasePorts(ports, deadPid())
+		await releasePorts(ports, deadPid())
 		expect(fs.existsSync(claimDir(ports.web as number))).toBe(true)
-		releasePorts(ports, process.pid)
+		await releasePorts(ports, process.pid)
 		expect(fs.existsSync(claimDir(ports.web as number))).toBe(false)
+	})
+
+	it("releases every other claim when one fails, then throws", async () => {
+		const { web, mongo } = await allocPorts(["web", "mongo"], process.pid, root)
+		const rm = fs.rmSync
+		vi.spyOn(fs, "rmSync").mockImplementation((target, options) => {
+			if (target === claimDir(web as number)) throw new Error("EBUSY")
+			rm(target, options)
+		})
+		await expect(releasePorts({ web: web as number, mongo: mongo as number }, process.pid)).rejects.toThrow(
+			AggregateError,
+		)
+		expect(fs.existsSync(claimDir(web as number))).toBe(true)
+		expect(fs.existsSync(claimDir(mongo as number))).toBe(false)
 	})
 })
 
@@ -145,7 +201,7 @@ describe("stack state", () => {
 	})
 
 	it("round-trips a live stack and ignores a dead pid", () => {
-		writeStack({ web: 7001, mongo: 7002, pid: process.pid })
+		writeStack({ web: 7001, mongo: 7002, pid: process.pid, mongoPid: process.pid })
 		expect(readStack()).toMatchObject({ web: 7001, mongo: 7002, pid: process.pid })
 		writeStack({ web: 7001, pid: deadPid() })
 		expect(readStack()).toBeUndefined()
@@ -156,6 +212,15 @@ describe("stack state", () => {
 		const file = path.join(tmp, ".tmp/dev-stack/stack.json")
 		fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), start: "1" }))
 		expect(readStack()).toBeUndefined()
+	})
+
+	it("drops the mongo port unless its mongod is alive with the recorded start time", () => {
+		writeStack({ web: 7001, mongo: 7002, pid: process.pid, mongoPid: deadPid() })
+		expect(readStack()).toMatchObject({ web: 7001, mongo: undefined })
+		writeStack({ web: 7001, mongo: 7002, pid: process.pid, mongoPid: process.pid })
+		const file = path.join(tmp, ".tmp/dev-stack/stack.json")
+		fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), mongoStart: "1" }))
+		expect(readStack()).toMatchObject({ web: 7001, mongo: undefined })
 	})
 })
 

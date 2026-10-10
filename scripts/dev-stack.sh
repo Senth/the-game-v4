@@ -5,8 +5,10 @@
 # under setsid so `down` can signal the whole process group (pnpm, tsx, next and
 # mongod) instead of a wrapper that would leave children holding the ports.
 #
-# Only this checkout's stack.json with a live pid counts as "up". A listening port
-# alone is never adopted, and `down` never stops anything it did not start.
+# Only this checkout's stack.json with a live pid counts as "up", and only when
+# every listener on its web port and its pid belong to the process group `up`
+# launched. A listening port alone is never adopted, and `down` never stops
+# anything it did not start.
 # A pid only counts when its /proc start time matches the one recorded with it,
 # so a reused pid is never trusted. A dead group leader with a live group is
 # still ours: Linux does not reuse a pid while its process group exists.
@@ -28,19 +30,44 @@ STACK="$STATE/stack.json"
 
 port_open() { timeout 1 bash -c "</dev/tcp/127.0.0.1/$1" 2>/dev/null; }
 
-proc_start() {
-	local stat
+proc_field() {
+	local field=$2 stat
 	stat=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
 	# shellcheck disable=SC2086
 	set -- ${stat##*) }
-	echo "${20}"
+	echo "${!field}"
 }
 
-live() {
+proc_start() { proc_field "$1" 20; }
+
+owner_alive() {
 	[ -f "$STACK" ] || return 1
 	local pid
 	pid=$(jq -r .pid "$STACK")
 	kill -0 "$pid" 2>/dev/null && [ "$(proc_start "$pid")" = "$(jq -r '.start // empty' "$STACK")" ]
+}
+
+web_pids() { ss -ltnpH "sport = :$(jq -r .web "$STACK")" | { grep -o 'pid=[0-9]*' || true; } | cut -d= -f2 | sort -u; }
+
+web_foreign() {
+	local pgid pid pids
+	pids=$(web_pids)
+	if [ -z "$pids" ]; then
+		port_open "$(jq -r .web "$STACK")"
+		return
+	fi
+	read -r pgid _ <"$STATE/dev.pid" 2>/dev/null || return 0
+	for pid in $pids $(jq -r .pid "$STACK"); do
+		[ "$(proc_field "$pid" 3)" = "$pgid" ] || return 0
+	done
+	return 1
+}
+
+live() { owner_alive && launch_alive && [ -n "$(web_pids)" ] && ! web_foreign; }
+
+refuse_foreign() {
+	echo "dev-stack: web port $(jq -r .web "$STACK") is held by a process outside this checkout's launch (pids: $(web_pids | xargs echo)); not adopting it" >&2
+	exit 1
 }
 
 launch_alive() {
@@ -74,6 +101,8 @@ cmd_up() {
 
 	if live; then
 		echo "web: already up (ours)"
+	elif owner_alive && web_foreign; then
+		refuse_foreign
 	else
 		if launch_alive; then
 			echo "dev-stack: joining launch in progress (pgid $(cut -d' ' -f1 "$STATE/dev.pid"))"
@@ -85,6 +114,7 @@ cmd_up() {
 		local timeout=${DEV_STACK_WEB_TIMEOUT:-180}
 		local deadline=$((SECONDS + timeout))
 		until live && curl -s -o /dev/null -m 10 "$(web_url)"; do
+			if [ -f "$STACK" ] && web_foreign; then refuse_foreign; fi
 			if [ "$SECONDS" -ge "$deadline" ] || ! launch_alive; then
 				echo "dev-stack: web did not answer within ${timeout}s; last lines of $STATE/dev.log:" >&2
 				tail -n 20 "$STATE/dev.log" >&2

@@ -16,15 +16,20 @@ async function main() {
 	let stopping: Promise<void> | undefined
 	const stop = (code: number) => {
 		stopping ??= (async () => {
-			try {
-				await (await booting?.catch(() => undefined))?.stop()
-			} finally {
-				releasePorts((await allocating?.catch(() => undefined)) ?? {}, process.pid)
-				clearStack(process.pid)
+			let failed = false
+			const cleanup = async (step: () => unknown) => {
+				try {
+					await step()
+				} catch (error) {
+					console.error(error)
+					failed = true
+				}
 			}
+			await cleanup(async () => (await booting?.catch(() => undefined))?.stop())
+			await cleanup(async () => releasePorts((await allocating?.catch(() => undefined)) ?? {}, process.pid))
+			await cleanup(() => clearStack(process.pid))
+			process.exit(failed && code === 0 ? 1 : code)
 		})()
-			.catch(console.error)
-			.finally(() => process.exit(code))
 		return stopping
 	}
 	for (const [signal, code] of [
@@ -38,9 +43,12 @@ async function main() {
 		allocating = allocPorts(names, process.pid)
 		const ports = await allocating
 		if (stopping) return
+		let mongoPid: number | undefined
 		if (ports.mongo) {
 			booting = startDevMongo(ports.mongo)
-			process.env.MONGODB_URI = (await booting).uri
+			const mongo = await booting
+			process.env.MONGODB_URI = mongo.uri
+			mongoPid = mongo.pid
 			if (stopping) return
 			try {
 				const db = await getDb()
@@ -51,7 +59,7 @@ async function main() {
 		}
 		if (stopping) return
 		const web = userPort ?? (ports.web as number)
-		writeStack({ web, mongo: ports.mongo, pid: process.pid })
+		writeStack({ web, mongo: ports.mongo, pid: process.pid, mongoPid })
 		next = spawn("next", ["dev", ...(ports.web ? ["-p", String(web)] : []), ...args], { stdio: "inherit" })
 		next.on("error", (error) => {
 			console.error(error)
