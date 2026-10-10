@@ -3,7 +3,7 @@ import fs from "node:fs"
 import net from "node:net"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { allocPorts, readStack, releasePorts, scanStart, writeStack } from "./dev-ports"
+import { allocPorts, portArg, readStack, releasePorts, scanStart, writeStack } from "./dev-ports"
 
 const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid as number
 const root = "/test/worktree"
@@ -104,5 +104,14 @@ describe("stack state", () => {
 		expect(readStack()).toEqual({ web: 7001, mongo: 7002, pid: process.pid })
 		writeStack({ web: 7001, pid: deadPid() })
 		expect(readStack()).toBeUndefined()
+	})
+})
+
+describe("portArg", () => {
+	it("reads -p, --port and --port=", () => {
+		expect(portArg(["-p", "7100"])).toBe(7100)
+		expect(portArg(["--turbo", "--port", "7101"])).toBe(7101)
+		expect(portArg(["--port=7102"])).toBe(7102)
+		expect(portArg(["--turbo"])).toBeUndefined()
 	})
 })

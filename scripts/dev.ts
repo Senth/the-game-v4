@@ -1,15 +1,15 @@
 import { spawn } from "node:child_process"
 import { loadEnvConfig } from "@next/env"
 import { closeDb, getDb } from "@/lib/db/client"
-import { allocPorts, clearStack, releasePorts, writeStack } from "./dev-ports"
+import { allocPorts, clearStack, portArg, releasePorts, writeStack } from "./dev-ports"
 import { startDevMongo } from "./mongo-dev"
 import { isEmpty, seed } from "./seed"
 
 async function main() {
 	loadEnvConfig(process.cwd(), true)
 	const args = process.argv.slice(2)
-	const portFlag = args.findIndex((arg) => arg === "-p" || arg === "--port")
-	const names = [portFlag < 0 && "web", !process.env.MONGODB_URI && "mongo"].filter((name) => name !== false)
+	const userPort = portArg(args)
+	const names = [userPort === undefined && "web", !process.env.MONGODB_URI && "mongo"].filter((name) => name !== false)
 	const ports = await allocPorts(names, process.pid)
 	let mongo: Awaited<ReturnType<typeof startDevMongo>> | undefined
 	const stop = async () => {
@@ -34,7 +34,7 @@ async function main() {
 		throw error
 	}
 
-	const web = ports.web ?? Number(args[portFlag + 1])
+	const web = userPort ?? (ports.web as number)
 	writeStack({ web, mongo: ports.mongo, pid: process.pid })
 	const next = spawn("next", ["dev", ...(ports.web ? ["-p", String(web)] : []), ...args], { stdio: "inherit" })
 	for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => next.kill(signal))

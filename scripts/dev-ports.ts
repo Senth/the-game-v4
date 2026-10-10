@@ -94,6 +94,11 @@ export async function allocPorts(names: string[], pid: number, root = worktreeRo
 	return ports
 }
 
+export function portArg(args: string[]) {
+	const i = args.findIndex((arg) => /^(-p|--port)(=|$)/.test(arg))
+	return i < 0 ? undefined : Number(args[i]?.split("=")[1] ?? args[i + 1])
+}
+
 export function releasePorts(ports: Record<string, number>, pid: number) {
 	for (const port of Object.values(ports)) {
 		const dir = path.join(registryDir(), String(port))
