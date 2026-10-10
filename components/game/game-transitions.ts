@@ -22,16 +22,3 @@ export function gameTransitions(previous: PlayerGame, next: PlayerGame) {
 				: null,
 	}
 }
-
-export function gamePlaceholder(game: Exclude<PlayerGame, { lifecycleState: "running" }>): string {
-	switch (game.lifecycleState) {
-		case "waiting":
-			return "Waiting for the game."
-		case "countdown":
-			return "The game starts soon."
-		case "completed":
-			return `Completed. ${game.score}p.`
-		case "ended":
-			return `Game ended. ${game.score}p.`
-	}
-}

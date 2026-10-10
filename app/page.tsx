@@ -1,6 +1,6 @@
 import type { Viewport } from "next"
 import { GameScreen } from "@/components/game/game-screen"
-import { gamePlaceholder } from "@/components/game/game-transitions"
+import { lifecycleView } from "@/components/game/lifecycle"
 import { requireTeam } from "@/lib/auth/guards"
 import { seasonChannel, teamChannel } from "@/lib/events/bus"
 import { getGame } from "./actions"
@@ -15,9 +15,12 @@ export default async function Home() {
 		if (team.seasonId) channels.push(seasonChannel(team.seasonId))
 		return <GameScreen initial={game} channels={channels} initialNow={Date.now()} />
 	}
+	const view = lifecycleView(game, new Date())
 	return (
 		<main className="flex min-h-dvh items-center justify-center px-4 text-center">
-			<p className="text-muted">{gamePlaceholder(game)}</p>
+			<p className="text-muted">
+				{view.sentence} {view.value?.text}
+			</p>
 		</main>
 	)
 }

@@ -54,7 +54,8 @@ describe("GameScreen", () => {
 
 	it("replaces running UI with the one-line lifecycle placeholder", () => {
 		const html = renderToStaticMarkup(<GameScreen {...props} initial={{ lifecycleState: "completed", score: 99 }} />)
-		expect(html).toContain("Completed. 99p.")
+		expect(html).toContain("You solved every quest.")
+		expect(html).toContain("99p")
 		expect(html).not.toContain("<input")
 	})
 })
@@ -85,7 +86,7 @@ describe("player home route", () => {
 		vi.mocked(requireTeam).mockResolvedValue({ ...team, passwordHash: "x" })
 		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting" })
 		const html = renderToStaticMarkup(await Home())
-		expect(html).toContain("Waiting for the game.")
+		expect(html).toContain("The game hasn&#x27;t been scheduled yet.")
 		expect(html).not.toContain("Log out")
 		expect(html).not.toContain("<input")
 	})

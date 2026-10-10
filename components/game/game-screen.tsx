@@ -8,8 +8,9 @@ import { useLiveState } from "@/lib/events/use-live-state"
 import { AnswerDock, type AnswerFeedback } from "./answer-dock"
 import { endRefreshDelay } from "./end-refresh"
 import { GameHeader } from "./game-header"
-import { gamePlaceholder, gameTransitions } from "./game-transitions"
+import { gameTransitions } from "./game-transitions"
 import { Intel } from "./intel"
+import { lifecycleView } from "./lifecycle"
 import { QuestContent } from "./quest-content"
 
 export function GameScreen({
@@ -142,12 +143,16 @@ export function GameScreen({
 		})
 	}
 
-	if (game.lifecycleState !== "running")
+	if (game.lifecycleState !== "running") {
+		const view = lifecycleView(game, now)
 		return (
 			<main className="flex min-h-dvh items-center justify-center px-4 text-center">
-				<p className="text-muted">{gamePlaceholder(game)}</p>
+				<p className="text-muted">
+					{view.sentence} {view.value?.text}
+				</p>
 			</main>
 		)
+	}
 	const pace = paceFromCounts({ start: game.start, end: game.end, solved: game.solved, total: game.total, now })
 	return (
 		<>
