@@ -4,12 +4,16 @@ import type { PlayerHint } from "@/lib/domain/game"
 import { AnswerDock, type AnswerFeedback } from "./answer-dock"
 import { Intel } from "./intel"
 
+const intelProps = { decrypting: new Set<string>(), onDecryptComplete: vi.fn() }
+
 describe("Intel", () => {
 	it("shows current/full worth and revealed text with a right-aligned penalty", () => {
 		const hints: PlayerHint[] = [
 			{ id: "first", position: 1, points: 5, text: "Start from the bottom.", revealed: true },
 		]
-		const html = renderToStaticMarkup(<Intel quest={{ worth: 35, points: 50, hints }} onReveal={vi.fn()} />)
+		const html = renderToStaticMarkup(
+			<Intel {...intelProps} quest={{ worth: 35, points: 50, hints }} onReveal={vi.fn()} />,
+		)
 		expect(html).toContain('text-head">35p</span>')
 		expect(html).toContain('text-muted"> / 50p</span>')
 		expect(html).toContain("Start from the bottom.")
@@ -21,7 +25,9 @@ describe("Intel", () => {
 
 	it("never renders text from a locked hint, even if extra text reaches the component", () => {
 		const hint = { id: "locked", position: 2, points: 10, revealed: false as const, text: "Unrevealed secret" }
-		const html = renderToStaticMarkup(<Intel quest={{ worth: 40, points: 50, hints: [hint] }} onReveal={vi.fn()} />)
+		const html = renderToStaticMarkup(
+			<Intel {...intelProps} quest={{ worth: 40, points: 50, hints: [hint] }} onReveal={vi.fn()} />,
+		)
 		expect(html).not.toContain(hint.text)
 		expect(html).toContain("Hold to decrypt")
 		expect(html).toContain('text-muted">−10p</span>')
@@ -31,7 +37,9 @@ describe("Intel", () => {
 	})
 
 	it("keeps negative worth without clamping it", () => {
-		const html = renderToStaticMarkup(<Intel quest={{ worth: -5, points: 10, hints: [] }} onReveal={vi.fn()} />)
+		const html = renderToStaticMarkup(
+			<Intel {...intelProps} quest={{ worth: -5, points: 10, hints: [] }} onReveal={vi.fn()} />,
+		)
 		expect(html).toContain('text-head">-5p</span>')
 	})
 })
@@ -65,6 +73,15 @@ describe("AnswerDock", () => {
 	it("enables Send for a nonempty answer", () => {
 		const html = renderToStaticMarkup(<AnswerDock {...dockProps} />)
 		expect(html).not.toMatch(/<button[^>]* disabled=/)
+	})
+
+	it("shows mutation failures in the existing reserved line without losing the answer", () => {
+		const html = renderToStaticMarkup(
+			<AnswerDock {...dockProps} feedback={{ id: 1, kind: "error", message: "Could not send. Try again." }} />,
+		)
+		expect(html).toContain("Could not send. Try again.")
+		expect(html).toContain('value="lighthouse"')
+		expect(html).toContain("border-warn ring-warn/40")
 	})
 
 	it("truncates a 200-character wrong answer inside the quotes and retains the input", () => {

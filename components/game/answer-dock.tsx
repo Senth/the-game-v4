@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react"
 export type AnswerFeedback =
 	| { id: number; kind: "wrong"; answer: string }
 	| { id: number; kind: "correct"; points: number | null }
+	| { id: number; kind: "error"; message: string }
 
 export function AnswerDock({
 	answer,
@@ -23,7 +24,7 @@ export function AnswerDock({
 	useEffect(() => {
 		if (feedback?.kind === "wrong") input.current?.select()
 	}, [feedback])
-	const wrong = feedback?.kind === "wrong"
+	const warning = feedback?.kind !== "correct"
 	return (
 		<div className="fixed inset-x-0 bottom-0 z-20 border-t border-z2 bg-z1">
 			<div className="mx-auto max-w-2xl">
@@ -31,7 +32,7 @@ export function AnswerDock({
 					{feedback && (
 						<span
 							key={feedback.id}
-							className={`flex min-w-0 animate-[answer-feedback_4s_linear_forwards] ${wrong ? "text-warn" : "text-pace-ok"}`}
+							className={`flex min-w-0 animate-[answer-feedback_4s_linear_forwards] ${warning ? "text-warn" : "text-pace-ok"}`}
 						>
 							{feedback.kind === "wrong" ? (
 								<>
@@ -39,6 +40,8 @@ export function AnswerDock({
 									<span className="min-w-0 truncate">{feedback.answer}</span>
 									<span className="shrink-0">{'" is not it.'}</span>
 								</>
+							) : feedback.kind === "error" ? (
+								feedback.message
 							) : (
 								`Solved.${feedback.points === null ? "" : ` ${feedback.points >= 0 ? "+" : ""}${feedback.points}p`}`
 							)}
@@ -71,7 +74,7 @@ export function AnswerDock({
 							<span
 								key={feedback.id}
 								aria-hidden="true"
-								className={`pointer-events-none absolute inset-0 animate-[answer-feedback_4s_linear_forwards] rounded-md border ring-2 ${wrong ? "border-warn ring-warn/40" : "border-pace-ok ring-pace-ok/40"}`}
+								className={`pointer-events-none absolute inset-0 animate-[answer-feedback_4s_linear_forwards] rounded-md border ring-2 ${warning ? "border-warn ring-warn/40" : "border-pace-ok ring-pace-ok/40"}`}
 							/>
 						)}
 					</div>

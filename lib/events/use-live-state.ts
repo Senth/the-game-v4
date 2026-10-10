@@ -1,9 +1,13 @@
 "use client"
 
-import { useEffect, useEffectEvent, useState } from "react"
+import { type Dispatch, type SetStateAction, useEffect, useEffectEvent, useState } from "react"
 import { createLiveConnection } from "./live-connection"
 
-export function useLiveState<T>(fetcher: () => Promise<T>, channels: string[], initial: T): T {
+export function useLiveState<T>(
+	fetcher: () => Promise<T>,
+	channels: string[],
+	initial: T,
+): [T, Dispatch<SetStateAction<T>>] {
 	const [state, setState] = useState(initial)
 	const fetchLatest = useEffectEvent(fetcher)
 	const key = [...channels].sort().join(",")
@@ -26,5 +30,5 @@ export function useLiveState<T>(fetcher: () => Promise<T>, channels: string[], i
 		}
 	}, [key])
 
-	return state
+	return [state, setState]
 }

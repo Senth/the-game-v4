@@ -2,8 +2,10 @@ import { beforeAll, describe, expect, it, vi } from "vitest"
 import * as actions from "@/app/actions"
 import { createSeason, setSeasonField } from "@/lib/db/seasons"
 import { createTeam, getTeam, solveCurrentQuest } from "@/lib/db/teams"
+import type { PlayerGame } from "@/lib/domain/player-game"
 import type { Team } from "@/lib/domain/schemas"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
+import { createLiveConnection } from "@/lib/events/live-connection"
 import { buildFixture } from "@/scripts/fixture"
 import { useTestDb } from "@/test/db"
 import { secretAnswer, withSecrets } from "@/test/secrets"
@@ -62,6 +64,49 @@ describe("loadGame", () => {
 })
 
 describe("submitAnswer", () => {
+	it("advances two sessions of the same team through live events within 1 second", async () => {
+		const team = await freshTeam()
+		const sessions = [0, 1].map(() => {
+			const received = Promise.withResolvers<PlayerGame>()
+			const source = {
+				readyState: 1,
+				close: vi.fn(),
+				onopen: null as (() => void) | null,
+				onmessage: null as (() => void) | null,
+				onerror: null as (() => void) | null,
+			}
+			const connection = createLiveConnection({
+				url: `/api/events?channel=${teamChannel(team._id)}`,
+				fetcher: async () => loadGame((await getTeam(team._id)) as Team, now),
+				onData: received.resolve,
+				createEventSource: () => source,
+			})
+			connection.start()
+			const unsubscribe = subscribe([teamChannel(team._id), seasonChannel(season._id)], () => source.onmessage?.())
+			return { received, connection, unsubscribe }
+		})
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const deadline = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error("Team sessions did not advance within 1 second")), 1000)
+		})
+		try {
+			const states = await Promise.race([
+				submitAnswer(team, current, secretAnswer(current), now).then((result) => {
+					expect(result).toMatchObject({ ok: true, correct: true })
+					return Promise.all(sessions.map((session) => session.received.promise))
+				}),
+				deadline,
+			])
+			for (const state of states) expect(state).toMatchObject({ lifecycleState: "running", quest: { id: next } })
+		} finally {
+			clearTimeout(timer)
+			for (const session of sessions) {
+				session.unsubscribe()
+				session.connection.stop()
+			}
+		}
+	})
+
 	it("leaves the team unchanged and publishes nothing on a wrong answer", async () => {
 		const team = await freshTeam()
 		const { events, unsubscribe } = recordEvents(team._id)

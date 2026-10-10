@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import type { PlayerHint, PlayerQuest } from "@/lib/domain/game"
 import { createHold } from "./hold"
 import { scrambleFrame } from "./scramble"
@@ -181,35 +181,19 @@ function RevealedHint({
 export function Intel({
 	quest,
 	onReveal,
+	decrypting,
+	onDecryptComplete,
 }: {
 	quest: Pick<PlayerQuest, "worth" | "points" | "hints">
 	onReveal: (hintId: string) => Promise<void>
+	decrypting: ReadonlySet<string>
+	onDecryptComplete: (hintId: string) => void
 }) {
 	const reducedMotion = useSyncExternalStore(
 		subscribeReducedMotion,
 		() => window.matchMedia(reducedMotionQuery).matches,
 		() => false,
 	)
-	const [previousHints, setPreviousHints] = useState(quest.hints)
-	const [decrypting, setDecrypting] = useState(() => new Set<string>())
-	if (previousHints !== quest.hints) {
-		const previous = new Set(previousHints.filter((hint) => hint.revealed).map((hint) => hint.id))
-		setPreviousHints(quest.hints)
-		setDecrypting(
-			new Set(
-				quest.hints
-					.filter((hint) => hint.revealed && (decrypting.has(hint.id) || !previous.has(hint.id)))
-					.map((hint) => hint.id),
-			),
-		)
-	}
-	const finishScramble = useCallback((hintId: string) => {
-		setDecrypting((current) => {
-			const next = new Set(current)
-			next.delete(hintId)
-			return next
-		})
-	}, [])
 
 	return (
 		<section className="mt-7" aria-label="Intel">
@@ -228,7 +212,7 @@ export function Intel({
 								hint={hint}
 								decrypting={decrypting.has(hint.id)}
 								reducedMotion={reducedMotion}
-								onComplete={finishScramble}
+								onComplete={onDecryptComplete}
 							/>
 						) : (
 							<LockedHint hint={hint} reducedMotion={reducedMotion} onReveal={onReveal} />
