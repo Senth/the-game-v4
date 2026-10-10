@@ -116,3 +116,7 @@ export function readStack(): DevStack | undefined {
 	}
 	return pidAlive(state.pid) ? state : undefined
 }
+
+export function clearStack(pid: number) {
+	if (readStack()?.pid === pid) fs.rmSync(stackFile(), { force: true })
+}

@@ -1,13 +1,14 @@
 import { copyFile, mkdir } from "node:fs/promises"
 import path from "node:path"
 import { loadEnvConfig } from "@next/env"
-import { type Db, MongoClient } from "mongodb"
+import type { Db } from "mongodb"
 import { hashPassword } from "@/lib/auth/password"
 import { closeDb, getDb } from "@/lib/db/client"
 import { collectionsOf } from "@/lib/db/collections"
 import { ensureIndexes } from "@/lib/db/indexes"
+import { allocPorts, type DevStack, readStack, releasePorts } from "./dev-ports"
 import { backwardsLogAsset, buildFixture } from "./fixture"
-import { devMongoUri, startDevMongo } from "./mongo-dev"
+import { mongoUri, startDevMongo } from "./mongo-dev"
 
 const localHosts = ["localhost", "127.0.0.1"]
 
@@ -47,30 +48,25 @@ export async function seed(db: Db, now: Date): Promise<string> {
 	return `Seeded "${fixture.season.title}" into ${db.databaseName}: 1 season, ${teams.length} teams, ${admins.length} admin`
 }
 
-async function isUp(uri: string): Promise<boolean> {
-	const client = new MongoClient(uri, { serverSelectionTimeoutMS: 1000 })
-	try {
-		await client.connect()
-		return true
-	} catch {
-		return false
-	} finally {
-		await client.close()
-	}
+export function seedUri(envUri: string | undefined, stack: DevStack | undefined): string | undefined {
+	return envUri ?? (stack?.mongo ? mongoUri(stack.mongo) : undefined)
 }
 
 async function main() {
 	loadEnvConfig(process.cwd(), true)
-	const fromEnv = process.env.MONGODB_URI
-	const uri = fromEnv ?? devMongoUri
-	assertSeedTarget(uri, process.env.NODE_ENV, process.argv.includes("--force"))
-	const mongo = fromEnv || (await isUp(uri)) ? undefined : await startDevMongo()
-	process.env.MONGODB_URI = uri
+	const known = seedUri(process.env.MONGODB_URI, readStack())
+	const ports: Record<string, number> = known ? {} : await allocPorts(["mongo"], process.pid)
+	let mongo: Awaited<ReturnType<typeof startDevMongo>> | undefined
 	try {
+		const uri = known ?? mongoUri(ports.mongo as number)
+		assertSeedTarget(uri, process.env.NODE_ENV, process.argv.includes("--force"))
+		if (ports.mongo) mongo = await startDevMongo(ports.mongo)
+		process.env.MONGODB_URI = uri
 		console.log(await seed(await getDb(), new Date()))
 	} finally {
 		await closeDb()
 		await mongo?.stop()
+		releasePorts(ports, process.pid)
 	}
 }
 
