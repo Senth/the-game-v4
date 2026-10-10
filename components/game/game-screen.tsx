@@ -10,7 +10,7 @@ import { endRefreshDelay } from "./end-refresh"
 import { GameHeader } from "./game-header"
 import { gameTransitions } from "./game-transitions"
 import { Intel } from "./intel"
-import { lifecycleView } from "./lifecycle"
+import { LifecycleScreen } from "./lifecycle-screen"
 import { QuestContent } from "./quest-content"
 
 export function GameScreen({
@@ -52,8 +52,9 @@ export function GameScreen({
 		return () => clearInterval(timer)
 	}, [initialNow])
 	const end = game.lifecycleState === "running" ? (game.end?.getTime() ?? null) : null
+	const refreshAt = game.lifecycleState === "countdown" ? game.start.getTime() : end
 	useEffect(() => {
-		if (end === null) return
+		if (refreshAt === null) return
 		let cancelled = false
 		let attempt = 0
 		let timer: ReturnType<typeof setTimeout>
@@ -61,12 +62,24 @@ export function GameScreen({
 			const currentNow = initialNow + performance.now() - clockStartedAt.current
 			timer = setTimeout(
 				() => {
+					const boundaryNow = initialNow + performance.now() - clockStartedAt.current
+					if (boundaryNow < refreshAt) {
+						schedule()
+						return
+					}
+					setNow(new Date(boundaryNow))
 					startTransition(async () => {
 						try {
 							const next = await getGame()
 							if (cancelled) return
 							setGame(next)
-							if (next.lifecycleState !== "running" || next.end?.getTime() !== end) return
+							const nextRefreshAt =
+								next.lifecycleState === "countdown"
+									? next.start.getTime()
+									: next.lifecycleState === "running"
+										? next.end?.getTime()
+										: null
+							if (next.lifecycleState !== game.lifecycleState || nextRefreshAt !== refreshAt) return
 						} catch {}
 						if (!cancelled) {
 							attempt++
@@ -74,7 +87,7 @@ export function GameScreen({
 						}
 					})
 				},
-				endRefreshDelay(end, currentNow, attempt),
+				Math.min(endRefreshDelay(refreshAt, currentNow, attempt), 2_147_483_647),
 			)
 		}
 		schedule()
@@ -82,7 +95,7 @@ export function GameScreen({
 			cancelled = true
 			clearTimeout(timer)
 		}
-	}, [end, initialNow, setGame])
+	}, [refreshAt, game.lifecycleState, initialNow, setGame])
 
 	const finishScramble = useCallback((hintId: string) => {
 		setDecrypting((current) => {
@@ -143,16 +156,7 @@ export function GameScreen({
 		})
 	}
 
-	if (game.lifecycleState !== "running") {
-		const view = lifecycleView(game, now)
-		return (
-			<main className="flex min-h-dvh items-center justify-center px-4 text-center">
-				<p className="text-muted">
-					{view.sentence} {view.value?.text}
-				</p>
-			</main>
-		)
-	}
+	if (game.lifecycleState !== "running") return <LifecycleScreen game={game} now={now} />
 	const pace = paceFromCounts({ start: game.start, end: game.end, solved: game.solved, total: game.total, now })
 	return (
 		<>

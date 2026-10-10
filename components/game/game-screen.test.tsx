@@ -52,10 +52,11 @@ describe("GameScreen", () => {
 		expect(renderToStaticMarkup(<GameScreen {...props} />)).toBe(before)
 	})
 
-	it("replaces running UI with the one-line lifecycle placeholder", () => {
+	it("replaces running UI with the lifecycle screen and logout", () => {
 		const html = renderToStaticMarkup(<GameScreen {...props} initial={{ lifecycleState: "completed", score: 99 }} />)
 		expect(html).toContain("You solved every quest.")
 		expect(html).toContain("99p")
+		expect(html).toContain("Log out")
 		expect(html).not.toContain("<input")
 	})
 })
@@ -82,12 +83,23 @@ describe("player home route", () => {
 		expect(getGame).not.toHaveBeenCalled()
 	})
 
-	it("renders non-running placeholders without logout or game controls", async () => {
+	it("keeps waiting live with team and season channels, logout and no game controls", async () => {
 		vi.mocked(requireTeam).mockResolvedValue({ ...team, passwordHash: "x" })
 		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting" })
-		const html = renderToStaticMarkup(await Home())
+		const page = await Home()
+		expect(page.type).toBe(GameScreen)
+		expect(page.props.channels).toEqual(props.channels)
+		const html = renderToStaticMarkup(page)
 		expect(html).toContain("The game hasn&#x27;t been scheduled yet.")
-		expect(html).not.toContain("Log out")
+		expect(html).toContain("Log out")
 		expect(html).not.toContain("<input")
+	})
+
+	it("keeps seasonless waiting teams live on their own team channel", async () => {
+		vi.mocked(requireTeam).mockResolvedValue({ ...team, seasonId: null, passwordHash: "x" })
+		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting" })
+		const page = await Home()
+		expect(page.type).toBe(GameScreen)
+		expect(page.props.channels).toEqual([`team:${team._id}`])
 	})
 })
