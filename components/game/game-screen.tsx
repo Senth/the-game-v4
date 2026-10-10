@@ -6,6 +6,7 @@ import { paceFromCounts, paceLabel } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { useLiveState } from "@/lib/events/use-live-state"
 import { AnswerDock, type AnswerFeedback } from "./answer-dock"
+import { endRefreshDelay } from "./end-refresh"
 import { GameHeader } from "./game-header"
 import { gamePlaceholder, gameTransitions } from "./game-transitions"
 import { Intel } from "./intel"
@@ -27,7 +28,7 @@ export function GameScreen({
 	const [feedback, setFeedback] = useState<(AnswerFeedback & { questId: string }) | null>(null)
 	const [decrypting, setDecrypting] = useState(() => new Set<string>())
 	const [pending, startTransition] = useTransition()
-	const refetchedEnd = useRef<number | null>(null)
+	const clockStartedAt = useRef(0)
 
 	if (previous !== game) {
 		const changes = gameTransitions(previous, game)
@@ -45,19 +46,42 @@ export function GameScreen({
 	}
 
 	useEffect(() => {
-		const timer = setInterval(() => setNow(new Date()), 1000)
+		clockStartedAt.current = performance.now()
+		const timer = setInterval(() => setNow(new Date(initialNow + performance.now() - clockStartedAt.current)), 1000)
 		return () => clearInterval(timer)
-	}, [])
+	}, [initialNow])
 	const end = game.lifecycleState === "running" ? (game.end?.getTime() ?? null) : null
 	useEffect(() => {
-		if (end === null || now.getTime() < end || refetchedEnd.current === end) return
-		refetchedEnd.current = end
-		startTransition(async () => {
-			try {
-				setGame(await getGame())
-			} catch {}
-		})
-	}, [end, now, setGame])
+		if (end === null) return
+		let cancelled = false
+		let attempt = 0
+		let timer: ReturnType<typeof setTimeout>
+		const schedule = () => {
+			const currentNow = initialNow + performance.now() - clockStartedAt.current
+			timer = setTimeout(
+				() => {
+					startTransition(async () => {
+						try {
+							const next = await getGame()
+							if (cancelled) return
+							setGame(next)
+							if (next.lifecycleState !== "running" || next.end?.getTime() !== end) return
+						} catch {}
+						if (!cancelled) {
+							attempt++
+							schedule()
+						}
+					})
+				},
+				endRefreshDelay(end, currentNow, attempt),
+			)
+		}
+		schedule()
+		return () => {
+			cancelled = true
+			clearTimeout(timer)
+		}
+	}, [end, initialNow, setGame])
 
 	const finishScramble = useCallback((hintId: string) => {
 		setDecrypting((current) => {
