@@ -1,0 +1,108 @@
+import { spawnSync } from "node:child_process"
+import fs from "node:fs"
+import net from "node:net"
+import path from "node:path"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { allocPorts, readStack, releasePorts, scanStart, writeStack } from "./dev-ports"
+
+const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid as number
+const root = "/test/worktree"
+let tmp: string
+
+beforeEach(() => {
+	tmp = path.resolve(`.tmp/test-dev-ports-${crypto.randomUUID()}`)
+	vi.stubEnv("DEV_STACK_REGISTRY", path.join(tmp, "registry"))
+})
+
+afterEach(() => {
+	vi.unstubAllEnvs()
+	vi.restoreAllMocks()
+	fs.rmSync(tmp, { recursive: true, force: true })
+})
+
+const claimDir = (port: number) => path.join(tmp, "registry", String(port))
+
+function listen(port: number, host: string) {
+	return new Promise<net.Server>((resolve, reject) => {
+		const server = net.createServer()
+		server.once("error", reject)
+		server.listen(port, host, () => resolve(server))
+	})
+}
+
+describe("allocPorts", () => {
+	it("starts the scan at the same offset for the same root", () => {
+		expect(scanStart(root)).toBe(scanStart(root))
+		expect(scanStart(root)).toBeGreaterThanOrEqual(7000)
+		expect(scanStart(root)).toBeLessThanOrEqual(7999)
+	})
+
+	it("never returns the same port twice and records the claim", async () => {
+		const first = await allocPorts(["web", "mongo"], process.pid, root)
+		const second = await allocPorts(["web", "mongo"], process.pid, root)
+		const ports = [...Object.values(first), ...Object.values(second)]
+		expect(new Set(ports).size).toBe(4)
+		expect(fs.readFileSync(path.join(claimDir(first.web as number), "pid"), "utf8")).toBe(String(process.pid))
+		expect(fs.readFileSync(path.join(claimDir(first.web as number), "worktree"), "utf8")).toBe(root)
+	})
+
+	it.each(["127.0.0.1", "::1"])("skips a port with a live listener on %s", async (host) => {
+		const { web } = await allocPorts(["web"], process.pid, root)
+		releasePorts({ web: web as number }, process.pid)
+		const server = await listen(web as number, host)
+		try {
+			expect((await allocPorts(["web"], process.pid, root)).web).not.toBe(web)
+		} finally {
+			server.close()
+		}
+	})
+
+	it("reclaims a claim held by a dead pid", async () => {
+		const { web } = await allocPorts(["web"], process.pid, root)
+		fs.writeFileSync(path.join(claimDir(web as number), "pid"), String(deadPid()))
+		expect((await allocPorts(["web"], process.pid, root)).web).toBe(web)
+	})
+
+	it("keeps a claim held by a live pid", async () => {
+		const { web } = await allocPorts(["web"], process.pid, root)
+		expect((await allocPorts(["web"], process.pid, root)).web).not.toBe(web)
+		expect(fs.existsSync(claimDir(web as number))).toBe(true)
+	})
+
+	it("wraps the scan from 7999 to 7000", async () => {
+		let wrapRoot = ""
+		for (let i = 0; scanStart(wrapRoot) !== 7999; i++) wrapRoot = `/wrap/${i}`
+		fs.mkdirSync(claimDir(7999), { recursive: true })
+		fs.writeFileSync(path.join(claimDir(7999), "pid"), String(process.pid))
+		const { web } = await allocPorts(["web"], process.pid, wrapRoot)
+		expect(web).toBeGreaterThanOrEqual(7000)
+		expect(web).toBeLessThan(7999)
+	})
+})
+
+describe("releasePorts", () => {
+	it("removes only claims owned by the given pid", async () => {
+		const ports = await allocPorts(["web"], process.pid, root)
+		releasePorts(ports, deadPid())
+		expect(fs.existsSync(claimDir(ports.web as number))).toBe(true)
+		releasePorts(ports, process.pid)
+		expect(fs.existsSync(claimDir(ports.web as number))).toBe(false)
+	})
+})
+
+describe("stack state", () => {
+	beforeEach(() => {
+		vi.spyOn(process, "cwd").mockReturnValue(tmp)
+	})
+
+	it("returns undefined when the file is missing", () => {
+		expect(readStack()).toBeUndefined()
+	})
+
+	it("round-trips a live stack and ignores a dead pid", () => {
+		writeStack({ web: 7001, mongo: 7002, pid: process.pid })
+		expect(readStack()).toEqual({ web: 7001, mongo: 7002, pid: process.pid })
+		writeStack({ web: 7001, pid: deadPid() })
+		expect(readStack()).toBeUndefined()
+	})
+})
