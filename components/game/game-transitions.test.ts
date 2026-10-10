@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { PlayerGame } from "@/lib/domain/player-game"
-import { gamePlaceholder, gameTransitions } from "./game-transitions"
+import { gameTransitions } from "./game-transitions"
 
 const running: Extract<PlayerGame, { lifecycleState: "running" }> = {
 	lifecycleState: "running",
@@ -101,14 +101,5 @@ describe("gameTransitions", () => {
 	])("clears the input when running quest disappears: $lifecycleState", (next) => {
 		expect(gameTransitions(running, next).questChanged).toBe(true)
 		expect(gameTransitions(running, next).solvedQuestId).toBeNull()
-	})
-})
-
-describe("gamePlaceholder", () => {
-	it("keeps non-running states to one sentence/line until lifecycle UI lands", () => {
-		expect(gamePlaceholder({ lifecycleState: "waiting" })).toBe("Waiting for the game.")
-		expect(gamePlaceholder({ lifecycleState: "countdown", start: running.start })).toBe("The game starts soon.")
-		expect(gamePlaceholder({ lifecycleState: "completed", score: 64 })).toBe("Completed. 64p.")
-		expect(gamePlaceholder({ lifecycleState: "ended", score: -5 })).toBe("Game ended. -5p.")
 	})
 })

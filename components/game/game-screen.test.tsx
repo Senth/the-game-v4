@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { getGame } from "@/app/actions"
 import Home, { viewport } from "@/app/page"
+import { TeamQr } from "@/components/team-qr"
 import { requireTeam } from "@/lib/auth/guards"
 import { playerGame } from "@/lib/domain/player-game"
 import { buildFixture } from "@/scripts/fixture"
@@ -10,6 +11,7 @@ import { GameScreen } from "./game-screen"
 
 vi.mock("@/app/actions", () => ({ getGame: vi.fn(), submitAnswer: vi.fn(), revealHint: vi.fn() }))
 vi.mock("@/lib/auth/guards", () => ({ requireTeam: vi.fn() }))
+vi.mock("@/components/team-qr", () => ({ TeamQr: () => <div>Test /join/token</div> }))
 
 const now = new Date("2026-10-10T18:00:00Z")
 const fixture = buildFixture(now)
@@ -52,11 +54,30 @@ describe("GameScreen", () => {
 		expect(renderToStaticMarkup(<GameScreen {...props} />)).toBe(before)
 	})
 
-	it("replaces running UI with the one-line lifecycle placeholder", () => {
+	it("replaces running UI with the lifecycle screen and logout", () => {
 		const html = renderToStaticMarkup(<GameScreen {...props} initial={{ lifecycleState: "completed", score: 99 }} />)
-		expect(html).toContain("Completed. 99p.")
+		expect(html).toContain("You solved every quest.")
+		expect(html).toContain("99p")
+		expect(html).toContain("Log out")
 		expect(html).not.toContain("<input")
 	})
+
+	it.each([
+		{ lifecycleState: "waiting" },
+		{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000) },
+		{ lifecycleState: "countdown", start: now },
+	] as const)("shows the join slot for $lifecycleState, including starting", (initial) => {
+		const html = renderToStaticMarkup(<GameScreen {...props} initial={initial} qr={<div>/join/token</div>} />)
+		expect(html).toContain("/join/token")
+	})
+
+	it.each([game, { lifecycleState: "completed", score: 120 }, { lifecycleState: "ended", score: 64 }] as const)(
+		"omits join links from $lifecycleState markup even with a QR slot",
+		(initial) => {
+			const html = renderToStaticMarkup(<GameScreen {...props} initial={initial} qr={<div>/join/token</div>} />)
+			expect(html).not.toContain("/join/")
+		},
+	)
 })
 
 describe("player home route", () => {
@@ -72,6 +93,7 @@ describe("player home route", () => {
 		expect(page.type).toBe(GameScreen)
 		expect(page.props.channels).toEqual(props.channels)
 		expect(page.props).not.toHaveProperty("team")
+		expect(page.props.qr).toBeNull()
 		expect(viewport).toEqual({ interactiveWidget: "resizes-content" })
 	})
 
@@ -81,12 +103,37 @@ describe("player home route", () => {
 		expect(getGame).not.toHaveBeenCalled()
 	})
 
-	it("renders non-running placeholders without logout or game controls", async () => {
+	it("keeps waiting live with team and season channels, logout and no game controls", async () => {
 		vi.mocked(requireTeam).mockResolvedValue({ ...team, passwordHash: "x" })
 		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting" })
-		const html = renderToStaticMarkup(await Home())
-		expect(html).toContain("Waiting for the game.")
-		expect(html).not.toContain("Log out")
+		const page = await Home()
+		expect(page.type).toBe(GameScreen)
+		expect(page.props.channels).toEqual(props.channels)
+		const html = renderToStaticMarkup(page)
+		expect(html).toContain("The game hasn&#x27;t been scheduled yet.")
+		expect(html).toContain("Log out")
 		expect(html).not.toContain("<input")
+		expect(html).toContain("/join/token")
+		expect(page.props.qr.type).toBe(TeamQr)
+		expect(page.props.qr.props.team._id).toBe(team._id)
+	})
+
+	it("keeps seasonless waiting teams live on their own team channel", async () => {
+		vi.mocked(requireTeam).mockResolvedValue({ ...team, seasonId: null, passwordHash: "x" })
+		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting" })
+		const page = await Home()
+		expect(page.type).toBe(GameScreen)
+		expect(page.props.channels).toEqual([`team:${team._id}`])
+	})
+
+	it.each([
+		{ lifecycleState: "completed", score: 120 },
+		{ lifecycleState: "ended", score: 64 },
+	] as const)("does not create a QR slot for $lifecycleState server responses", async (initial) => {
+		vi.mocked(requireTeam).mockResolvedValue({ ...team, passwordHash: "x" })
+		vi.mocked(getGame).mockResolvedValue(initial)
+		const page = await Home()
+		expect(page.props.qr).toBeNull()
+		expect(renderToStaticMarkup(page)).not.toContain("/join/")
 	})
 })
