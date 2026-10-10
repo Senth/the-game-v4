@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import net from "node:net"
 import path from "node:path"
@@ -69,6 +69,51 @@ describe("allocPorts", () => {
 		expect(fs.existsSync(claimDir(web as number))).toBe(true)
 	})
 
+	it("keeps a fresh claim that has no pid yet and reclaims a stale one", async () => {
+		const { web } = await allocPorts(["web"], process.pid, root)
+		fs.rmSync(path.join(claimDir(web as number), "pid"))
+		expect((await allocPorts(["web"], process.pid, root)).web).not.toBe(web)
+		expect(fs.existsSync(claimDir(web as number))).toBe(true)
+		const old = new Date(Date.now() - 60_000)
+		fs.utimesSync(claimDir(web as number), old, old)
+		expect((await allocPorts(["web"], process.pid, root)).web).toBe(web)
+	})
+
+	it("never removes a claim that replaced a dead one after it was read", async () => {
+		const { web } = await allocPorts(["web"], process.pid, root)
+		const pidFile = path.join(claimDir(web as number), "pid")
+		fs.writeFileSync(pidFile, String(deadPid()))
+		const rename = fs.renameSync
+		vi.spyOn(fs, "renameSync").mockImplementationOnce((from, to) => {
+			fs.writeFileSync(pidFile, String(process.pid))
+			rename(from, to)
+		})
+		expect((await allocPorts(["web"], process.pid, root)).web).not.toBe(web)
+		expect(fs.readFileSync(pidFile, "utf8")).toBe(String(process.pid))
+	})
+
+	it("hands distinct ports to concurrent processes", async () => {
+		const script = `import("./scripts/dev-ports.ts").then(async ({ allocPorts }) => {
+			console.log(JSON.stringify(Object.values(await allocPorts(["web", "mongo"], process.pid, ${JSON.stringify(root)}))))
+			process.stdin.resume()
+		})`
+		const children = Array.from({ length: 6 }, () => spawn(process.execPath, ["-e", script]))
+		try {
+			const ports = await Promise.all(
+				children.map(
+					(child) =>
+						new Promise<number[]>((resolve, reject) => {
+							child.stdout.once("data", (data) => resolve(JSON.parse(String(data))))
+							child.once("exit", (code) => reject(new Error(`allocator exited with ${code}`)))
+						}),
+				),
+			)
+			expect(new Set(ports.flat()).size).toBe(12)
+		} finally {
+			for (const child of children) child.kill()
+		}
+	})
+
 	it("wraps the scan from 7999 to 7000", async () => {
 		let wrapRoot = ""
 		for (let i = 0; scanStart(wrapRoot) !== 7999; i++) wrapRoot = `/wrap/${i}`
@@ -101,8 +146,15 @@ describe("stack state", () => {
 
 	it("round-trips a live stack and ignores a dead pid", () => {
 		writeStack({ web: 7001, mongo: 7002, pid: process.pid })
-		expect(readStack()).toEqual({ web: 7001, mongo: 7002, pid: process.pid })
+		expect(readStack()).toMatchObject({ web: 7001, mongo: 7002, pid: process.pid })
 		writeStack({ web: 7001, pid: deadPid() })
+		expect(readStack()).toBeUndefined()
+	})
+
+	it("ignores a live pid whose start time differs from the recorded one", () => {
+		writeStack({ web: 7001, pid: process.pid })
+		const file = path.join(tmp, ".tmp/dev-stack/stack.json")
+		fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), start: "1" }))
 		expect(readStack()).toBeUndefined()
 	})
 })

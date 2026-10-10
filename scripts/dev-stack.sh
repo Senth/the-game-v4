@@ -7,6 +7,10 @@
 #
 # Only this checkout's stack.json with a live pid counts as "up". A listening port
 # alone is never adopted, and `down` never stops anything it did not start.
+# A pid only counts when its /proc start time matches the one recorded with it,
+# so a reused pid is never trusted. A dead group leader with a live group is
+# still ours: Linux does not reuse a pid while its process group exists.
+# up and down hold a per-checkout flock; the launched stack closes that fd.
 #
 # Usage: scripts/dev-stack.sh up [--fresh] | down | status | ports
 
@@ -24,7 +28,35 @@ STACK="$STATE/stack.json"
 
 port_open() { timeout 1 bash -c "</dev/tcp/127.0.0.1/$1" 2>/dev/null; }
 
-live() { [ -f "$STACK" ] && kill -0 "$(jq -r .pid "$STACK")" 2>/dev/null; }
+proc_start() {
+	local stat
+	stat=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+	# shellcheck disable=SC2086
+	set -- ${stat##*) }
+	echo "${20}"
+}
+
+live() {
+	[ -f "$STACK" ] || return 1
+	local pid
+	pid=$(jq -r .pid "$STACK")
+	kill -0 "$pid" 2>/dev/null && [ "$(proc_start "$pid")" = "$(jq -r '.start // empty' "$STACK")" ]
+}
+
+launch_alive() {
+	[ -f "$STATE/dev.pid" ] || return 1
+	local pgid start now
+	read -r pgid start <"$STATE/dev.pid"
+	kill -0 -"$pgid" 2>/dev/null || return 1
+	now=$(proc_start "$pgid") || return 0
+	[ "$now" = "$start" ]
+}
+
+lock() {
+	mkdir -p "$STATE"
+	exec 9>"$STATE/lock"
+	flock 9
+}
 
 web_url() { echo "http://localhost:$(jq -r .web "$STACK")"; }
 
@@ -43,14 +75,17 @@ cmd_up() {
 	if live; then
 		echo "web: already up (ours)"
 	else
-		mkdir -p "$STATE"
-		rm -f "$STACK"
-		setsid pnpm dev </dev/null >"$STATE/dev.log" 2>&1 &
-		echo $! >"$STATE/dev.pid"
+		if launch_alive; then
+			echo "dev-stack: joining launch in progress (pgid $(cut -d' ' -f1 "$STATE/dev.pid"))"
+		else
+			rm -f "$STACK"
+			setsid pnpm dev </dev/null >"$STATE/dev.log" 2>&1 9>&- &
+			echo "$! $(proc_start $!)" >"$STATE/dev.pid"
+		fi
 		local timeout=${DEV_STACK_WEB_TIMEOUT:-180}
 		local deadline=$((SECONDS + timeout))
 		until live && curl -s -o /dev/null -m 10 "$(web_url)"; do
-			if [ "$SECONDS" -ge "$deadline" ] || ! kill -0 "$(cat "$STATE/dev.pid")" 2>/dev/null; then
+			if [ "$SECONDS" -ge "$deadline" ] || ! launch_alive; then
 				echo "dev-stack: web did not answer within ${timeout}s; last lines of $STATE/dev.log:" >&2
 				tail -n 20 "$STATE/dev.log" >&2
 				exit 1
@@ -72,18 +107,20 @@ cmd_down() {
 	local ports=""
 	if [ -f "$STACK" ]; then ports=$(jq -r '.web, .mongo // empty' "$STACK"); fi
 
-	if [ -f "$STATE/dev.pid" ]; then
+	if launch_alive; then
 		local pgid
-		pgid=$(cat "$STATE/dev.pid")
+		pgid=$(cut -d' ' -f1 "$STATE/dev.pid")
 		kill -TERM -"$pgid" 2>/dev/null || true
 		for _ in $(seq 10); do
 			kill -0 -"$pgid" 2>/dev/null || break
 			sleep 1
 		done
 		kill -KILL -"$pgid" 2>/dev/null || true
-		rm -f "$STATE/dev.pid"
 		echo "dev-stack: stopped"
+	elif [ -f "$STATE/dev.pid" ]; then
+		echo "dev-stack: launch in dev.pid is gone or no longer ours; nothing signalled"
 	fi
+	rm -f "$STATE/dev.pid"
 	rm -f "$STACK"
 
 	local busy=() port
@@ -124,9 +161,13 @@ cmd_ports() {
 case "${1:-}" in
 up)
 	shift
+	lock
 	cmd_up "$@"
 	;;
-down) cmd_down ;;
+down)
+	lock
+	cmd_down
+	;;
 status) cmd_status ;;
 ports) cmd_ports ;;
 *)

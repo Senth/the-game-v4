@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import fs from "node:fs"
 import net from "node:net"
 import os from "node:os"
@@ -7,8 +7,9 @@ import path from "node:path"
 
 const FIRST_PORT = 7000
 const PORT_COUNT = 1000
+const CLAIM_GRACE_MS = 10_000
 
-export type DevStack = { web: number; mongo?: number; pid: number }
+export type DevStack = { web: number; mongo?: number; pid: number; start?: string }
 
 function registryDir() {
 	return path.resolve(process.env.DEV_STACK_REGISTRY ?? path.join(os.homedir(), ".local/state/dev-ports"))
@@ -59,23 +60,64 @@ function pidAlive(pid: number) {
 	}
 }
 
+function procStart(pid: number) {
+	try {
+		return fs.readFileSync(`/proc/${pid}/stat`, "utf8").split(") ").pop()?.split(" ")[19]
+	} catch {
+		return undefined
+	}
+}
+
+function claimLive(dir: string) {
+	const pid = claimPid(dir)
+	if (pid > 0) return pidAlive(pid)
+	try {
+		return Date.now() - fs.statSync(dir).mtimeMs < CLAIM_GRACE_MS
+	} catch {
+		return false
+	}
+}
+
+function mkdirClaim(dir: string) {
+	try {
+		fs.mkdirSync(dir)
+		return true
+	} catch {
+		return false
+	}
+}
+
+// ponytail: a third allocator re-claiming during the restore rename strands the tomb; add a registry lock if that shows up
+function retire(dir: string, removable: (tomb: string) => boolean) {
+	const tomb = path.join(registryDir(), `.tomb-${path.basename(dir)}-${randomUUID()}`)
+	try {
+		fs.renameSync(dir, tomb)
+	} catch {
+		return false
+	}
+	if (removable(tomb)) {
+		fs.rmSync(tomb, { recursive: true, force: true })
+		return true
+	}
+	try {
+		fs.renameSync(tomb, dir)
+	} catch {
+		console.error(`dev-ports: could not restore claim ${dir} from ${tomb}`)
+	}
+	return false
+}
+
 async function claimPort(port: number, pid: number, root: string) {
 	if (!(await portFree(port))) return false
 	const dir = path.join(registryDir(), String(port))
+	if (!mkdirClaim(dir) && (claimLive(dir) || !retire(dir, (tomb) => !claimLive(tomb)) || !mkdirClaim(dir))) return false
 	try {
-		fs.mkdirSync(dir)
+		fs.writeFileSync(path.join(dir, "pid"), String(pid))
+		fs.writeFileSync(path.join(dir, "worktree"), root)
+		return true
 	} catch {
-		if (pidAlive(claimPid(dir))) return false
-		fs.rmSync(dir, { recursive: true, force: true })
-		try {
-			fs.mkdirSync(dir)
-		} catch {
-			return false
-		}
+		return false
 	}
-	fs.writeFileSync(path.join(dir, "pid"), String(pid))
-	fs.writeFileSync(path.join(dir, "worktree"), root)
-	return true
 }
 
 export async function allocPorts(names: string[], pid: number, root = worktreeRoot()) {
@@ -102,13 +144,13 @@ export function portArg(args: string[]) {
 export function releasePorts(ports: Record<string, number>, pid: number) {
 	for (const port of Object.values(ports)) {
 		const dir = path.join(registryDir(), String(port))
-		if (claimPid(dir) === pid) fs.rmSync(dir, { recursive: true, force: true })
+		if (claimPid(dir) === pid) retire(dir, (tomb) => claimPid(tomb) === pid)
 	}
 }
 
 export function writeStack(state: DevStack) {
 	fs.mkdirSync(path.dirname(stackFile()), { recursive: true })
-	fs.writeFileSync(stackFile(), JSON.stringify(state))
+	fs.writeFileSync(stackFile(), JSON.stringify({ ...state, start: procStart(state.pid) }))
 }
 
 export function readStack(): DevStack | undefined {
@@ -119,7 +161,7 @@ export function readStack(): DevStack | undefined {
 		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
 		throw error
 	}
-	return pidAlive(state.pid) ? state : undefined
+	return pidAlive(state.pid) && procStart(state.pid) === state.start ? state : undefined
 }
 
 export function clearStack(pid: number) {
