@@ -235,6 +235,7 @@ read first the ranking, second the time left; must not need scrolling with 10 te
 Use a fixed 1920×1080 stage, scaled to fit and letterboxed; phones and portrait screens keep the same stage.
 Rows show rank, name, rail, solved/total and points on one line; both columns retain rails.
 Use one column through 12 teams and two above 12, ranked top to bottom; clip rows beyond 24.
+Rows share the height left after title and footer, capped at 76 px; text sizes and padding stay fixed.
 Omit per-team pace blocks.
 Place season time bar at bottom; after season ends, replace it with "Final" alone.
 With no game running, center muted "No game running"; never show a blank screen.
