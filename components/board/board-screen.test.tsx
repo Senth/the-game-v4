@@ -195,7 +195,7 @@ describe("BoardScreen", () => {
 	})
 
 	it("refetches at end without an event", async () => {
-		const initial = { ...running, end: new Date(now.getTime() + 1000) }
+		const initial = { ...running, end: new Date(now.getTime() + 1000), nextStart: new Date(now.getTime() + 2000) }
 		const final: PublicBoard = { view: "final", title: running.title, rows: running.rows, nextStart: null }
 		vi.mocked(getBoard).mockResolvedValue(final)
 		mount(initial)
@@ -207,6 +207,28 @@ describe("BoardScreen", () => {
 		expect(render()).not.toContain("bg-time")
 		expect(render()).toContain(">Final<")
 	})
+
+	it.each([null, new Date(now.getTime() + 2000)])(
+		"switches to overlapping scheduled season without an event when current end is %s",
+		async (end) => {
+			const nextStart = new Date(now.getTime() + 1000)
+			const overlap = { ...fixture.season, _id: "overlap", title: "Next game", start: nextStart, end: null }
+			const seasons = [{ ...fixture.season, end }, overlap]
+			const teamsBySeason = { [fixture.season._id]: teams }
+			const initial = publicBoard(seasons, teamsBySeason, now)
+			const next = publicBoard(seasons, teamsBySeason, nextStart)
+			vi.mocked(getBoard).mockResolvedValue(next)
+			mount(initial)
+			expect(render(initial)).toContain("Cipher Night 2026")
+			await vi.advanceTimersByTimeAsync(999)
+			expect(getBoard).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1)
+			expect(getBoard).toHaveBeenCalledOnce()
+			expect(hooks.state).toEqual(next)
+			expect(render()).toContain("Next game")
+			expect(render()).not.toContain("Cipher Night 2026")
+		},
+	)
 
 	it.each(["final", "idle"] as const)("adapts %s nextStart to countdown clock", async (view) => {
 		const nextStart = new Date(now.getTime() + 1000)

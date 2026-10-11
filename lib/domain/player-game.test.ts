@@ -148,10 +148,28 @@ describe("publicBoard", () => {
 			start,
 			end,
 			rows: standingsRows(season, teams, "", false),
+			nextStart: null,
 		})
 		expect(publicBoard([{ ...secretSeason, end: null }], teamsBySeason, now)).toMatchObject({
 			view: "running",
 			end: null,
+		})
+	})
+
+	it("preserves earliest future start while a season runs without an end", () => {
+		const overlap = { ...upcoming, start: new Date(now.getTime() + 1000), end: null }
+		const seasons = [{ ...secretSeason, end: null }, upcoming, overlap]
+		expect(publicBoard(seasons, teamsBySeason, now)).toMatchObject({
+			view: "running",
+			title: secretSeason.title,
+			end: null,
+			nextStart: overlap.start,
+		})
+		expect(publicBoard(seasons, teamsBySeason, overlap.start)).toMatchObject({
+			view: "running",
+			title: overlap.title,
+			start: overlap.start,
+			nextStart: upcoming.start,
 		})
 	})
 

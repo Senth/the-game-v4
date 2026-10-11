@@ -10,12 +10,13 @@ import { BoardStage } from "./board-stage"
 import { BoardTime } from "./board-time"
 
 function boardClock(board: PublicBoard) {
+	const end = board.view === "running" ? board.end : null
 	return {
 		board,
-		...(board.view === "running"
-			? { lifecycleState: "running" as const, end: board.end }
-			: board.nextStart
-				? { lifecycleState: "countdown" as const, start: board.nextStart }
+		...(board.nextStart && (!end || board.nextStart < end)
+			? { lifecycleState: "countdown" as const, start: board.nextStart }
+			: board.view === "running"
+				? { lifecycleState: "running" as const, end }
 				: { lifecycleState: "waiting" as const }),
 	}
 }

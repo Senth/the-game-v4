@@ -51,7 +51,7 @@ export type PlayerStandings =
 	  }
 
 export type PublicBoard =
-	| { view: "running"; title: string; start: Date; end: Date | null; rows: StandingsRow[] }
+	| { view: "running"; title: string; start: Date; end: Date | null; rows: StandingsRow[]; nextStart: Date | null }
 	| { view: "final"; title: string; rows: StandingsRow[]; nextStart: Date | null }
 	| { view: "idle"; nextStart: Date | null }
 
@@ -60,7 +60,8 @@ export function publicBoard(seasons: Season[], teamsBySeason: Record<string, Tea
 	const season = running ?? final
 	if (!season) return { view: "idle", nextStart }
 	const rows = standingsRows(season, teamsBySeason[season._id] ?? [], "", false)
-	if (running?.start) return { view: "running", title: running.title, start: running.start, end: running.end, rows }
+	if (running?.start)
+		return { view: "running", title: running.title, start: running.start, end: running.end, rows, nextStart }
 	return { view: "final", title: season.title, rows, nextStart }
 }
 
