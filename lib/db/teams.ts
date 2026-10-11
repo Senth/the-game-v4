@@ -29,6 +29,10 @@ export async function listTeams(seasonId: string | null): Promise<Team[]> {
 	return (await collections()).teams.find({ seasonId }).toArray()
 }
 
+export async function countTeams(seasonId: string): Promise<number> {
+	return (await collections()).teams.countDocuments({ seasonId })
+}
+
 export async function listTeamsByName(name: string): Promise<Team[]> {
 	return (await collections()).teams.find({ name }).toArray()
 }

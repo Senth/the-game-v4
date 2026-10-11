@@ -3,7 +3,16 @@ import { describe, expect, it } from "vitest"
 import type { Team } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
 import { NotFoundError } from "./collections"
-import { createTeam, getTeam, listTeams, listTeamsByName, revealHint, setTeamField, solveCurrentQuest } from "./teams"
+import {
+	countTeams,
+	createTeam,
+	getTeam,
+	listTeams,
+	listTeamsByName,
+	revealHint,
+	setTeamField,
+	solveCurrentQuest,
+} from "./teams"
 
 useTestDb()
 
@@ -36,6 +45,17 @@ describe("teams", () => {
 		await createTeam(team("herons", "summer"))
 
 		expect((await listTeamsByName("Herons")).map((t) => t.seasonId).sort()).toEqual(["autumn", "spring"])
+	})
+
+	it("counts only teams assigned to the requested season", async () => {
+		await createTeam(team("Ninjas", "count-spring"))
+		await createTeam(team("Owls", "count-spring"))
+		await createTeam(team("Foxes", "count-autumn"))
+		await createTeam(team("Bears", null))
+
+		expect(await countTeams("count-spring")).toBe(2)
+		expect(await countTeams("count-autumn")).toBe(1)
+		expect(await countTeams("count-empty")).toBe(0)
 	})
 
 	it("sets one field", async () => {

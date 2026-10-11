@@ -174,7 +174,7 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress): PlayerQu
 	}
 }
 
-const hasEnded = (season: Pick<Season, "end">, now: Date) => season.end !== null && now >= season.end
+export const hasEnded = (season: Pick<Season, "end">, now: Date) => season.end !== null && now >= season.end
 
 export function boardSeasons<T extends Pick<Season, "start" | "end">>(
 	seasons: T[],
