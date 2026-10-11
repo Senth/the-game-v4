@@ -25,4 +25,21 @@ it("renders responsive header and menu slots with logout at the far right", () =
 	expect(html).toContain('class="ml-auto"')
 	expect(html).toContain('action="/logout" method="post"')
 	expect(html).toContain("min-w-0 flex-1")
+	expect(html).not.toContain("w-92")
+})
+
+it("keeps the preview beside the flexible middle pane only on desktop", () => {
+	const html = renderToStaticMarkup(
+		<AdminFrame
+			title="Season"
+			menu={<nav>Menu</nav>}
+			phoneHeader={<header>Phone</header>}
+			preview={<p>Preview slot</p>}
+		>
+			<p>Middle pane</p>
+		</AdminFrame>,
+	)
+	expect(html).toContain("hidden w-92 shrink-0")
+	expect(html).toContain("border-l border-z1 px-6 pt-6 lg:block")
+	expect(html.indexOf("Preview slot")).toBeGreaterThan(html.indexOf("Middle pane"))
 })

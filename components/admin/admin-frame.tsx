@@ -6,12 +6,14 @@ export function AdminFrame({
 	status,
 	menu,
 	phoneHeader,
+	preview,
 	children,
 }: {
 	title: ReactNode
 	status?: ReactNode
 	menu: ReactNode
 	phoneHeader: ReactNode
+	preview?: ReactNode
 	children: ReactNode
 }) {
 	return (
@@ -27,6 +29,11 @@ export function AdminFrame({
 			<div className="flex min-h-0 flex-1">
 				<aside className="hidden w-72 shrink-0 overflow-y-auto border-r border-z1 lg:block">{menu}</aside>
 				<main className="min-w-0 flex-1 lg:overflow-y-auto">{children}</main>
+				{preview && (
+					<aside className="hidden w-92 shrink-0 overflow-y-auto border-l border-z1 px-6 pt-6 lg:block">
+						{preview}
+					</aside>
+				)}
 			</div>
 		</div>
 	)
