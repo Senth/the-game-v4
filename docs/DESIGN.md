@@ -232,8 +232,13 @@ Use title, status and start time, with D1's desktop or M1's mobile shell.
 Surface brief: job is letting a room watch the race; no actions;
 read first the ranking, second the time left; must not need scrolling with 10 teams.
 
-Scale S1's all-teams list and season time bar for 1920×1080. Omit the per-team pace block.
-Body text is at least 28 px for viewing from 3 m. Show nothing when no season is running.
+Use a fixed 1920×1080 stage, scaled to fit and letterboxed; phones and portrait screens keep the same stage.
+Rows show rank, name, rail, solved/total and points on one line; both columns retain rails.
+Use one column through 12 teams and two above 12, ranked top to bottom; clip rows beyond 24.
+Omit per-team pace blocks.
+Place season time bar at bottom; after season ends, replace it with "Final" alone.
+With no game running, center muted "No game running"; never show a blank screen.
+Body text is at least 28 px for viewing from 3 m.
 
 ## Anti-references
 
