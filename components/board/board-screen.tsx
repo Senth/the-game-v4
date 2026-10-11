@@ -36,13 +36,23 @@ export function BoardScreen({
 	const now = useGameClock(boardClock(board), initialNow, fetchClock, setClock)
 	return (
 		<BoardStage>
-			{board.view === "running" && (
+			{board.view === "idle" ? (
+				<main className="flex h-full items-center justify-center">
+					<p className="font-cond text-4xl text-muted">No game running</p>
+				</main>
+			) : (
 				<main className="flex h-full flex-col px-20 pt-10 pb-10">
-					<div className="flex-1">
-						<h1 className="mb-4 font-cond text-[28px] text-muted uppercase tracking-wider">{board.title}</h1>
+					<div className="flex min-h-0 flex-1 flex-col">
+						<h1 className="mb-4 shrink-0 font-cond text-[28px] text-muted uppercase tracking-wider">{board.title}</h1>
 						<BoardList rows={board.rows} />
 					</div>
-					<BoardTime start={board.start} end={board.end} now={now} />
+					<div className="shrink-0">
+						{board.view === "running" ? (
+							<BoardTime start={board.start} end={board.end} now={now} />
+						) : (
+							<p className="font-cond text-5xl font-bold text-head">Final</p>
+						)}
+					</div>
 				</main>
 			)}
 		</BoardStage>

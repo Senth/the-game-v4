@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { getBoard } from "@/app/board/actions"
 import { type PublicBoard, publicBoard } from "@/lib/domain/player-game"
 import { buildFixture } from "@/scripts/fixture"
+import { BoardList } from "./board-list"
 import { BoardScreen } from "./board-screen"
 import { BoardStage } from "./board-stage"
 import { BoardTime } from "./board-time"
@@ -54,6 +55,14 @@ const running = publicBoard([fixture.season], { [fixture.season._id]: teams }, n
 	{ view: "running" }
 >
 const props = { initial: running, initialNow: now.getTime(), channels: ["board"] }
+const final: PublicBoard = { view: "final", title: running.title, rows: running.rows, nextStart: null }
+const rowsFor = (count: number) =>
+	Array.from({ length: count }, (_, index) => ({
+		...(running.rows[index % running.rows.length] as (typeof running.rows)[number]),
+		id: `row-${index + 1}`,
+		name: `Team ${index + 1}`,
+		rank: index + 1,
+	}))
 let cleanups: (() => void)[] = []
 let source = {
 	readyState: 1,
@@ -104,6 +113,42 @@ afterEach(() => {
 })
 
 describe("BoardScreen", () => {
+	it("renders final ranking and Final alone instead of time bar", () => {
+		const html = render(final)
+		expect(html).toContain('font-cond text-5xl font-bold text-head">Final</')
+		expect(html.match(/<li /g)).toHaveLength(10)
+		expect(html).toContain("Cipher Night 2026")
+		for (const forbidden of ["bg-time", "elapsed", "left", "<button", "<a ", "aria-current"])
+			expect(html).not.toContain(forbidden)
+	})
+
+	it("centers exact idle text, without title or list", () => {
+		const html = render({ view: "idle", nextStart: null })
+		expect(html).toContain('<main class="flex h-full items-center justify-center">')
+		expect(html).toContain('<p class="font-cond text-4xl text-muted">No game running</p>')
+		for (const forbidden of ["<ol", "<h1", "bg-time", "<button", "<a "]) expect(html).not.toContain(forbidden)
+	})
+
+	it.each([final, { view: "idle", nextStart: null } as PublicBoard])(
+		"switches live to $view without reload",
+		async (next) => {
+			vi.mocked(getBoard).mockResolvedValue(next)
+			mount()
+			source.onmessage?.()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(render()).toContain(next.view === "final" ? ">Final<" : ">No game running<")
+			expect(render()).not.toContain("bg-time")
+		},
+	)
+
+	it("reserves title and footer while giving list only remaining height", () => {
+		const html = render({ ...running, rows: rowsFor(12) })
+		expect(html).toContain('class="flex min-h-0 flex-1 flex-col"')
+		expect(html).toContain('class="mb-4 shrink-0 font-cond text-[28px]')
+		expect(html).toContain('class="shrink-0"')
+		expect(html).toContain("repeat(12, minmax(0, 76px))")
+	})
+
 	it("renders ten one-line rows, quiet title and time bar without actions, tint or small text", () => {
 		const html = render()
 		expect(html).toContain("Cipher Night 2026")
@@ -160,6 +205,7 @@ describe("BoardScreen", () => {
 		expect(getBoard).toHaveBeenCalledOnce()
 		expect(hooks.state).toEqual(final)
 		expect(render()).not.toContain("bg-time")
+		expect(render()).toContain(">Final<")
 	})
 
 	it.each(["final", "idle"] as const)("adapts %s nextStart to countdown clock", async (view) => {
@@ -168,9 +214,49 @@ describe("BoardScreen", () => {
 			view === "idle" ? { view, nextStart } : { view, nextStart, rows: running.rows, title: running.title }
 		vi.mocked(getBoard).mockResolvedValue(running)
 		mount(initial)
+		expect(render(initial)).toContain(view === "idle" ? ">No game running<" : ">Final<")
 		await vi.advanceTimersByTimeAsync(1000)
 		expect(getBoard).toHaveBeenCalledOnce()
 		expect(hooks.state).toEqual(running)
+		expect(render()).toContain("bg-time")
+		expect(render()).not.toContain(view === "idle" ? ">No game running<" : ">Final<")
+	})
+})
+
+describe("BoardList", () => {
+	it.each([
+		[12, [12]],
+		[13, [7, 6]],
+		[14, [7, 7]],
+		[23, [12, 11]],
+		[24, [12, 12]],
+		[25, [12, 12]],
+	] as const)("splits %i teams top-to-bottom and clips beyond 24", (count, lengths) => {
+		const rows = rowsFor(count)
+		const before = structuredClone(rows)
+		const html = renderToStaticMarkup(<BoardList rows={rows} />)
+		const columns = html.match(/<ol\b.*?<\/ol>/g) ?? []
+		expect(columns.map((column) => column.match(/<li /g)?.length ?? 0)).toEqual(lengths)
+		const firstRanks = Array.from(columns[0]?.matchAll(/text-3xl text-muted">(\d+)<\/span>/g) ?? [], (match) =>
+			Number(match[1]),
+		)
+		expect(firstRanks).toEqual(Array.from({ length: lengths[0] }, (_, index) => index + 1))
+		if (columns.length === 2) {
+			expect(html).toContain("grid-cols-2 gap-x-16")
+			for (const column of columns) {
+				expect(column).toContain(`repeat(${lengths[0]}, minmax(0, 76px))`)
+				expect(column).toContain("h-4")
+			}
+		}
+		expect(html).not.toContain(">Team 25<")
+		expect(rows).toEqual(before)
+	})
+
+	it("truncates long names in narrower shrinkable two-column children", () => {
+		const name = "VeryLongTeamName".repeat(10)
+		const html = renderToStaticMarkup(<BoardList rows={rowsFor(14).map((row) => ({ ...row, name }))} />)
+		expect(html).toContain('class="w-[15rem] min-w-0 truncate text-4xl text-ink"')
+		expect(html).toContain(name)
 	})
 })
 
