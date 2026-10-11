@@ -4,9 +4,11 @@ import {
 	buildQuestOrder,
 	lifecycleState,
 	matchesAnswer,
+	ordinal,
 	pace,
 	paceFromCounts,
 	paceLabel,
+	pacePercentLabel,
 	pickLoginTeam,
 	playerView,
 	rail,
@@ -14,6 +16,7 @@ import {
 	registrationConflict,
 	registrationSeason,
 	scoreForSolve,
+	standingsRows,
 	standingsStrip,
 } from "./game"
 import type { Arc, Quest, Season, TeamQuestProgress } from "./schemas"
@@ -280,6 +283,35 @@ describe("paceLabel", () => {
 	})
 })
 
+describe("pacePercentLabel", () => {
+	it.each([
+		[0.4, "1% behind"],
+		[18, "18% behind"],
+		[0, "On pace"],
+		[-0.6, "On pace"],
+		[-12.7, "12% ahead"],
+	])("labels %i percent as %s", (behindPercent, label) => {
+		expect(pacePercentLabel(behindPercent)).toBe(label)
+	})
+})
+
+describe("ordinal", () => {
+	it.each([
+		[1, "1st"],
+		[2, "2nd"],
+		[3, "3rd"],
+		[4, "4th"],
+		[11, "11th"],
+		[12, "12th"],
+		[13, "13th"],
+		[21, "21st"],
+		[22, "22nd"],
+		[101, "101st"],
+	])("formats %i as %s", (value, formatted) => {
+		expect(ordinal(value)).toBe(formatted)
+	})
+})
+
 describe("rankTeams and standingsStrip", () => {
 	const at = (minute: number) => new Date(Date.UTC(2026, 2, 14, 18, minute))
 	const team = (name: string, score: number, solvedMinutes: number[] = []) => ({
@@ -386,6 +418,47 @@ describe("rankTeams and standingsStrip", () => {
 				entry.kind === "gap" ? ["kind"] : ["id", "kind", "name", "rank", "score", "you"],
 			)
 		}
+	})
+
+	it("builds ranked rows with team quest counts and only the current team's running rail", () => {
+		const teams = [
+			{ ...team("Top", 100, [5]), questOrder: ["q1", "q2", "q3"], questIndex: 1 },
+			{ ...team("Early", 80, [10]), questOrder: ["q1", "q2"], questIndex: 1 },
+			{ ...team("Mine", 80, [20]), questOrder: ["q1", "q2", "q3", "q4"], questIndex: 1 },
+			{ ...team("Last", 60), questOrder: ["q1"], questIndex: 0 },
+		]
+		const { frozen, original } = frozenCopy({ season: season([arc("a1", ["q1", "q2", "q3", "q4"])]), teams })
+		const rows = standingsRows(frozen.season, frozen.teams, "mine", true)
+
+		expect(rows.map(({ rank, name }) => [rank, name])).toEqual([
+			[1, "Top"],
+			[2, "Early"],
+			[2, "Mine"],
+			[4, "Last"],
+		])
+		expect(rows.map(({ solved, total }) => [solved, total])).toEqual([
+			[1, 3],
+			[1, 2],
+			[1, 4],
+			[0, 1],
+		])
+		expect(rows[2]?.rail[0]?.segments).toEqual([
+			{ questId: "q1", state: "solved" },
+			{ questId: "q2", state: "current" },
+			{ questId: "q3", state: "todo" },
+			{ questId: "q4", state: "todo" },
+		])
+		for (const [index, row] of rows.entries()) {
+			if (index !== 2)
+				expect(row.rail.flatMap(({ segments }) => segments).every(({ state }) => state !== "current")).toBe(true)
+			expect(Object.keys(row).sort()).toEqual(["id", "name", "rail", "rank", "score", "solved", "total", "you"])
+		}
+		expect(rows[2]?.you).toBe(true)
+		expect(rows[0]?.you).toBe(false)
+		expect(frozen).toEqual(original)
+
+		const finalRows = standingsRows(frozen.season, frozen.teams, "mine", false)
+		expect(finalRows[2]?.rail.flatMap(({ segments }) => segments).every(({ state }) => state !== "current")).toBe(true)
 	})
 })
 
