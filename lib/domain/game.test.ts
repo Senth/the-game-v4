@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	applyStructuralEdit,
+	boardSeasons,
 	buildQuestOrder,
 	lifecycleState,
 	matchesAnswer,
@@ -561,6 +562,38 @@ describe("lifecycleState", () => {
 	it("keeps a team that completed before the end completed, during play and after end", () => {
 		expect(lifecycleState({ start, end }, done, new Date(end.getTime() - 60_000))).toBe("completed")
 		expect(lifecycleState({ start, end }, done, end)).toBe("completed")
+	})
+})
+
+describe("boardSeasons", () => {
+	const at = (minute: number) => new Date(Date.UTC(2026, 2, 14, 18, minute))
+	const older = { _id: "older", start: at(-60), end: at(-10) }
+	const latestEnd = { _id: "latest-end", start: at(-90), end: at(0) }
+	const running = { _id: "running", start: at(-5), end: at(30) }
+	const latestStart = { _id: "latest-start", start: at(0), end: null }
+	const upcoming = { _id: "upcoming", start: at(10), end: at(40) }
+	const later = { _id: "later", start: at(20), end: at(50) }
+	const draft = { _id: "draft", start: null, end: null }
+
+	it("picks latest running start, including exact start and null end, without changing inputs", () => {
+		const { frozen, original } = frozenCopy([running, older, latestStart, latestEnd, later, upcoming, draft])
+		expect(boardSeasons(frozen, at(0))).toEqual({ running: latestStart, final: latestEnd, nextStart: at(10) })
+		expect(frozen).toEqual(original)
+	})
+
+	it("runs until exactly end, then selects final by latest end rather than latest start", () => {
+		expect(boardSeasons([older, latestEnd], at(-1))).toEqual({ running: latestEnd, final: older, nextStart: null })
+		expect(boardSeasons([older, latestEnd, upcoming], at(0))).toEqual({
+			running: null,
+			final: latestEnd,
+			nextStart: upcoming.start,
+		})
+	})
+
+	it("has no running or final season when nothing started, with earliest future start or null", () => {
+		expect(boardSeasons([later, draft, upcoming], at(0))).toEqual({ running: null, final: null, nextStart: at(10) })
+		expect(boardSeasons([draft], at(0))).toEqual({ running: null, final: null, nextStart: null })
+		expect(boardSeasons([], at(0))).toEqual({ running: null, final: null, nextStart: null })
 	})
 })
 

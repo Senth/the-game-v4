@@ -176,6 +176,24 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress): PlayerQu
 
 const hasEnded = (season: Pick<Season, "end">, now: Date) => season.end !== null && now >= season.end
 
+export function boardSeasons<T extends Pick<Season, "start" | "end">>(
+	seasons: T[],
+	now: Date,
+): { running: T | null; final: T | null; nextStart: Date | null } {
+	let running: T | null = null
+	let final: T | null = null
+	let nextStart: Date | null = null
+	for (const season of seasons) {
+		if (season.start && season.start > now && (!nextStart || season.start < nextStart)) nextStart = season.start
+		if (hasEnded(season, now)) {
+			if (!final?.end || (season.end && season.end > final.end)) final = season
+		} else if (season.start && season.start <= now && (!running?.start || season.start > running.start)) {
+			running = season
+		}
+	}
+	return { running, final, nextStart }
+}
+
 export type LifecycleState = "waiting" | "countdown" | "running" | "completed" | "ended"
 
 export function lifecycleState(

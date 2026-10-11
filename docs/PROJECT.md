@@ -92,7 +92,8 @@ Sessions last 30 days. Production requires `SESSION_SECRET`.
 `proxy.ts` denies by default.
 Public paths are `/login`, `/logout`, `/register`, `/board`, `/api/events`, `/assets/`, `/_next/`, `/join/` and the icons.
 `/api/events` authorizes its requested channels against the session itself.
-Guard every server action except the public login and register actions with `requireAdmin` or `requireTeam`.
+Guard all server actions except public login, register and public `getBoard`.
+Use `requireAdmin` or `requireTeam` for guarded actions.
 The single login form tries admin then team in one request and returns one generic error on failure.
 Team login keeps the teams whose name and password match.
 It picks the one in the registration-open season, else the latest season whose start has passed,
@@ -193,7 +194,10 @@ Always include #1. If you are #1, including tied for #1, show only you.
 Otherwise show #1, the team immediately ahead of you, and you, without duplicates.
 Insert `···` between #1 and the team ahead only when other teams sit between them.
 Rank is small and muted, name regular, points bold in heading color; tint your team.
-The whole strip is the button to `/standings`. `/board` is public for a TV and shows only a running season.
+The whole strip is the button to `/standings`.
+If a season is running, use latest start; otherwise use latest ended season's final ranking or nothing.
+Keep final ranking until another season starts; countdown seasons do not replace it.
+Board rows show solved and todo only. Scope public TV board to `/board`; add no admin link.
 `/standings` shows S1 while running, final standings when completed or ended; waiting and countdown redirect to `/`.
 Teams completed during a running season get final view with "You solved every quest."; the all-team list stays live.
 Other teams' rails show solved and todo only; only your row shows current, and only while running.

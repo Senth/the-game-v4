@@ -1,11 +1,17 @@
 import { access, rm } from "node:fs/promises"
 import path from "node:path"
-import { afterAll, describe, expect, it } from "vitest"
-import { verifyPassword } from "@/lib/auth/password"
+import bcrypt from "bcryptjs"
+import { afterAll, describe, expect, it, vi } from "vitest"
+import { hashPassword, verifyPassword } from "@/lib/auth/password"
 import { getDb } from "@/lib/db/client"
 import { useTestDb } from "@/test/db"
 import { backwardsLogAsset } from "./fixture"
 import { assertSeedTarget, isEmpty, seed, seedUri } from "./seed"
+
+vi.mock("@/lib/auth/password", async (importOriginal) => {
+	const original = await importOriginal<typeof import("@/lib/auth/password")>()
+	return { ...original, hashPassword: vi.fn((password: string) => bcrypt.hash(password, 4)) }
+})
 
 useTestDb()
 
@@ -22,8 +28,10 @@ describe("seed", () => {
 		expect(await isEmpty(db)).toBe(true)
 		await seed(db, new Date())
 		expect(await counts()).toEqual([1, 10, 1])
+		expect(hashPassword).toHaveBeenCalledTimes(11)
 		await seed(db, new Date())
 		expect(await counts()).toEqual([1, 10, 1])
+		expect(hashPassword).toHaveBeenCalledTimes(22)
 		expect(await isEmpty(db)).toBe(false)
 
 		const ninjas = await db.collection("teams").findOne({ name: "Ninjas" })

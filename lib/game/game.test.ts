@@ -1,15 +1,16 @@
 import { beforeAll, describe, expect, it, vi } from "vitest"
 import * as actions from "@/app/actions"
 import { createSeason, setSeasonField } from "@/lib/db/seasons"
-import { createTeam, getTeam, setTeamField, solveCurrentQuest } from "@/lib/db/teams"
+import { createTeam, getTeam, listTeams, setTeamField, solveCurrentQuest } from "@/lib/db/teams"
 import type { PlayerGame } from "@/lib/domain/player-game"
+import { publicBoard } from "@/lib/domain/player-game"
 import type { Team } from "@/lib/domain/schemas"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { buildFixture } from "@/scripts/fixture"
 import { useTestDb } from "@/test/db"
 import { secretAnswer, withSecrets } from "@/test/secrets"
-import { loadGame, loadStandings, revealHint, submitAnswer } from "./game"
+import { loadBoard, loadGame, loadStandings, revealHint, submitAnswer } from "./game"
 
 const session = vi.hoisted(() => ({ teamId: "" }))
 vi.mock("@/lib/auth/guards", async () => {
@@ -19,7 +20,7 @@ vi.mock("@/lib/auth/guards", async () => {
 
 vi.mock("@/lib/db/teams", async (importOriginal) => {
 	const original = await importOriginal<typeof import("@/lib/db/teams")>()
-	return { ...original, solveCurrentQuest: vi.fn(original.solveCurrentQuest) }
+	return { ...original, listTeams: vi.fn(original.listTeams), solveCurrentQuest: vi.fn(original.solveCurrentQuest) }
 })
 
 useTestDb()
@@ -115,6 +116,58 @@ describe("loadStandings", () => {
 		expect(json).not.toContain("secret-")
 		for (const field of ["passwordHash", "progress", "hints", "answers", "internalTitle", "adminNotes"])
 			expect(json).not.toContain(field)
+	})
+})
+
+describe("loadBoard", () => {
+	const boardSeason = {
+		...season,
+		_id: "board-season",
+		start: new Date(now.getTime() - 1),
+		end: new Date((season.end as Date).getTime() + 1),
+	}
+	const upcoming = { ...season, _id: "board-upcoming", start: new Date((boardSeason.end as Date).getTime() + 60_000) }
+	const team = { ...standingsTeam, _id: "board-team", seasonId: boardSeason._id }
+
+	beforeAll(async () => {
+		await createSeason(boardSeason)
+		await createSeason(upcoming)
+		await createTeam(team)
+	})
+
+	it.each(["running", "final"] as const)(
+		"reads teams only for chosen %s season and returns publicBoard",
+		async (view) => {
+			const at = view === "running" ? now : (boardSeason.end as Date)
+			const read = vi.mocked(listTeams).mockClear()
+			const board = await loadBoard(at)
+			expect(board.view).toBe(view)
+			expect(board).toEqual(
+				publicBoard([season, standingsSeason, boardSeason, upcoming], { [boardSeason._id]: [team] }, at),
+			)
+			expect(read).toHaveBeenCalledExactlyOnceWith(boardSeason._id)
+			const json = JSON.stringify(board)
+			for (const field of [
+				"secret-",
+				"passwordHash",
+				"progress",
+				"hints",
+				"answers",
+				"internalTitle",
+				"adminNotes",
+				"current",
+			])
+				expect(json).not.toContain(field)
+		},
+	)
+
+	it("does not read teams when idle", async () => {
+		const read = vi.mocked(listTeams).mockClear()
+		expect(await loadBoard(new Date((season.start as Date).getTime() - 1))).toEqual({
+			view: "idle",
+			nextStart: season.start,
+		})
+		expect(read).not.toHaveBeenCalled()
 	})
 })
 
