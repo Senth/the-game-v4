@@ -50,19 +50,28 @@ describe("lifecycleView", () => {
 		})
 	})
 
-	it.each([120, 0, -5])("shows completed copy and %ip without rank", (score) => {
+	it.each([120, 0, -5])("shows completed copy and %ip with place", (score) => {
 		expect(lifecycleView({ lifecycleState: "completed", score, rank: 1, teamCount: 10 }, now)).toEqual({
 			sentence: "You solved every quest.",
-			value: { kind: "score", text: `${score}p` },
+			value: { kind: "score", text: `${score}p`, place: "1st", teamCount: 10 },
 			helper: null,
 		})
 	})
 
-	it.each([64, 0, -5])("shows ended copy and %ip without rank", (score) => {
+	it.each([64, 0, -5])("shows ended copy and %ip with place", (score) => {
 		expect(lifecycleView({ lifecycleState: "ended", score, rank: 7, teamCount: 10 }, now)).toEqual({
 			sentence: "Time's up.",
-			value: { kind: "score", text: `${score}p` },
+			value: { kind: "score", text: `${score}p`, place: "7th", teamCount: 10 },
 			helper: null,
+		})
+	})
+
+	it.each(["completed", "ended"] as const)("shows shared second place without a tie label for %s", (lifecycleState) => {
+		expect(lifecycleView({ lifecycleState, score: 100, rank: 2, teamCount: 10 }, now).value).toEqual({
+			kind: "score",
+			text: "100p",
+			place: "2nd",
+			teamCount: 10,
 		})
 	})
 
