@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest"
 import * as actions from "@/app/actions"
 import { createSeason, setSeasonField } from "@/lib/db/seasons"
-import { createTeam, getTeam, solveCurrentQuest } from "@/lib/db/teams"
+import { createTeam, getTeam, setTeamField, solveCurrentQuest } from "@/lib/db/teams"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import type { Team } from "@/lib/domain/schemas"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
@@ -80,9 +80,14 @@ describe("loadGame", () => {
 
 	it.each(["completed", "ended"] as const)("loads shared rank and season team count when %s", async (state) => {
 		const team = { ...standingsTeam, completed: state === "completed" }
-		const game = await loadGame(team, season.end as Date)
-		expect(game).toEqual({ lifecycleState: state, score: team.score, rank: 7, teamCount: 10 })
-		expect(JSON.stringify(game)).not.toContain("secret-")
+		await setTeamField(team._id, "completed", team.completed)
+		try {
+			const game = await loadGame(team, season.end as Date)
+			expect(game).toEqual({ lifecycleState: state, score: team.score, rank: 7, teamCount: 10 })
+			expect(JSON.stringify(game)).not.toContain("secret-")
+		} finally {
+			await setTeamField(team._id, "completed", false)
+		}
 	})
 })
 
@@ -111,6 +116,45 @@ describe("loadStandings", () => {
 		for (const field of ["passwordHash", "progress", "hints", "answers", "internalTitle", "adminNotes"])
 			expect(json).not.toContain(field)
 	})
+})
+
+describe("loader snapshots", () => {
+	it.each(["running", "ended", "completed"] as const)(
+		"uses the team from the standings read after a teammate solve when %s",
+		async (state) => {
+			const team = await freshTeam(
+				state === "completed" ? { questOrder: ninjas.questOrder.slice(0, ninjas.questIndex + 1) } : {},
+			)
+			const authenticated = (await getTeam(team._id)) as Team
+			expect(
+				await solveCurrentQuest(
+					team._id,
+					{ questIndex: team.questIndex, questId: current, orderLength: team.questOrder.length, hintCount: 1 },
+					now,
+					15,
+				),
+			).toBe(true)
+			const at = state === "ended" ? (season.end as Date) : now
+			const game = await loadGame(authenticated, at)
+			expect(game).toMatchObject({ lifecycleState: state, score: team.score + 15 })
+			if (game.lifecycleState === "running") {
+				expect(game).toMatchObject({ solved: 6, total: 12, quest: { id: next } })
+			} else {
+				expect(game).toMatchObject({ rank: 6 })
+			}
+			const standings = await loadStandings(authenticated, at)
+			expect(standings.lifecycleState).toBe(state)
+			if (
+				standings.lifecycleState !== "running" &&
+				standings.lifecycleState !== "completed" &&
+				standings.lifecycleState !== "ended"
+			)
+				throw new Error(standings.lifecycleState)
+			const expected = { score: team.score + 15, solved: 6, total: team.questOrder.length }
+			expect(standings.you).toMatchObject(expected)
+			expect(standings.rows.find((row) => row.id === team._id)).toMatchObject({ ...expected, rank: 6 })
+		},
+	)
 })
 
 describe("submitAnswer", () => {
