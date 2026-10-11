@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { buildFixture } from "@/scripts/fixture"
 import { withSecrets } from "@/test/secrets"
-import { playerGame, playerStandings } from "./player-game"
+import { standingsRows } from "./game"
+import { playerGame, playerStandings, publicBoard } from "./player-game"
 
 const now = new Date("2026-10-09T18:00:00Z")
 const fixture = buildFixture(now)
@@ -126,6 +127,83 @@ describe("playerGame", () => {
 		const tied = teams.map((other) => (other._id === "team-lagom" ? { ...other, score: team.score } : other))
 		expect(playerGame(season, team, tied, end)).toMatchObject({ lifecycleState: state, rank: 6, teamCount: 10 })
 	})
+})
+
+describe("publicBoard", () => {
+	const final = {
+		...secretSeason,
+		_id: "final",
+		title: "Previous game",
+		start: new Date(start.getTime() - 1),
+		end: now,
+	}
+	const upcoming = { ...secretSeason, _id: "upcoming", start: new Date(end.getTime() + 1) }
+	const teamsBySeason = { [season._id]: teams, [final._id]: [ninjas] }
+
+	it("shows running instead of final, selecting latest running start and only its teams", () => {
+		const olderRunning = { ...secretSeason, _id: "older", start: final.start }
+		expect(publicBoard([final, secretSeason, olderRunning], teamsBySeason, now)).toEqual({
+			view: "running",
+			title: season.title,
+			start,
+			end,
+			rows: standingsRows(season, teams, "", false),
+		})
+		expect(publicBoard([{ ...secretSeason, end: null }], teamsBySeason, now)).toMatchObject({
+			view: "running",
+			end: null,
+		})
+	})
+
+	it("keeps latest final during countdown, with earliest future start or null", () => {
+		const olderFinal = { ...final, _id: "older-final", end: new Date(now.getTime() - 1) }
+		const later = { ...upcoming, _id: "later", start: new Date(upcoming.start.getTime() + 1) }
+		expect(publicBoard([olderFinal, later, final, upcoming], teamsBySeason, now)).toEqual({
+			view: "final",
+			title: final.title,
+			rows: standingsRows(final, [ninjas], "", false),
+			nextStart: upcoming.start,
+		})
+		expect(publicBoard([final], teamsBySeason, now)).toMatchObject({ view: "final", nextStart: null })
+	})
+
+	it("returns idle when nothing started and empty rows for a season without teams", () => {
+		expect(publicBoard([upcoming, { ...secretSeason, start: null, end: null }], teamsBySeason, now)).toEqual({
+			view: "idle",
+			nextStart: upcoming.start,
+		})
+		expect(publicBoard([], teamsBySeason, now)).toEqual({ view: "idle", nextStart: null })
+		expect(publicBoard([secretSeason], {}, now)).toMatchObject({ view: "running", rows: [] })
+	})
+
+	it.each(["running", "final", "idle"] as const)(
+		"keeps %s JSON public, without team tint or current segments, and inputs unchanged",
+		(view) => {
+			const seasons = view === "running" ? [secretSeason] : view === "final" ? [final, upcoming] : [upcoming]
+			const before = structuredClone({ seasons, teamsBySeason, now })
+			const board = publicBoard(seasons, teamsBySeason, now)
+			expect(board.view).toBe(view)
+			const json = JSON.stringify(board)
+			for (const field of [
+				"secret-",
+				"passwordHash",
+				"progress",
+				"hints",
+				"answers",
+				"internalTitle",
+				"adminNotes",
+				"current",
+			])
+				expect(json).not.toContain(field)
+			for (const team of teams)
+				for (const entry of team.progress) for (const hint of entry.hintsRevealed) expect(json).not.toContain(hint.text)
+			if (board.view !== "idle") {
+				expect(board.rows.every((row) => row.you === false)).toBe(true)
+				expect(board.rows.length).toBeGreaterThan(0)
+			}
+			expect({ seasons, teamsBySeason, now }).toEqual(before)
+		},
+	)
 })
 
 describe("playerStandings", () => {

@@ -1,4 +1,5 @@
 import {
+	boardSeasons,
 	currentQuest,
 	lifecycleState,
 	type PaceBand,
@@ -48,6 +49,20 @@ export type PlayerStandings =
 			you: { name: string; score: number; solved: number; total: number; rank: number; teamCount: number }
 			rows: StandingsRow[]
 	  }
+
+export type PublicBoard =
+	| { view: "running"; title: string; start: Date; end: Date | null; rows: StandingsRow[] }
+	| { view: "final"; title: string; rows: StandingsRow[]; nextStart: Date | null }
+	| { view: "idle"; nextStart: Date | null }
+
+export function publicBoard(seasons: Season[], teamsBySeason: Record<string, Team[]>, now: Date): PublicBoard {
+	const { running, final, nextStart } = boardSeasons(seasons, now)
+	const season = running ?? final
+	if (!season) return { view: "idle", nextStart }
+	const rows = standingsRows(season, teamsBySeason[season._id] ?? [], "", false)
+	if (running?.start) return { view: "running", title: running.title, start: running.start, end: running.end, rows }
+	return { view: "final", title: season.title, rows, nextStart }
+}
 
 export function playerGame(
 	season: Pick<Season, "start" | "end" | "arcs"> | null | undefined,

@@ -1,6 +1,7 @@
-import { getSeason } from "@/lib/db/seasons"
+import { getSeason, listSeasons } from "@/lib/db/seasons"
 import { getTeam, listTeams, revealHint as revealTeamHint, solveCurrentQuest } from "@/lib/db/teams"
 import {
+	boardSeasons,
 	currentQuest,
 	isRevealed,
 	lifecycleState,
@@ -8,7 +9,14 @@ import {
 	maxAnswerLength,
 	scoreForSolve,
 } from "@/lib/domain/game"
-import { type PlayerGame, type PlayerStandings, playerGame, playerStandings } from "@/lib/domain/player-game"
+import {
+	type PlayerGame,
+	type PlayerStandings,
+	type PublicBoard,
+	playerGame,
+	playerStandings,
+	publicBoard,
+} from "@/lib/domain/player-game"
 import type { Team } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
 
@@ -31,6 +39,14 @@ export async function loadStandings(team: Team, now = new Date()): Promise<Playe
 	if (!team.seasonId) return playerStandings(null, team, [], now)
 	const [season, teams] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
 	return playerStandings(season, teams.find((candidate) => candidate._id === team._id) ?? team, teams, now)
+}
+
+export async function loadBoard(now = new Date()): Promise<PublicBoard> {
+	const seasons = await listSeasons()
+	const { running, final } = boardSeasons(seasons, now)
+	const season = running ?? final
+	const teamsBySeason = season ? { [season._id]: await listTeams(season._id) } : {}
+	return publicBoard(seasons, teamsBySeason, now)
 }
 
 function publishTeamChange(teamId: string, seasonId: string) {
