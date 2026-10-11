@@ -29,10 +29,21 @@ const other = { ...season, _id: "other", title: "Other hunt" }
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	vi.mocked(requireAdmin).mockReset().mockResolvedValue({ _id: "admin", name: "admin", passwordHash: "hash" })
 	vi.mocked(getSeason).mockResolvedValue(season)
 	vi.mocked(listSeasons).mockResolvedValue([other, season])
 	vi.mocked(countTeams).mockResolvedValue(10)
 	vi.mocked(useSelectedLayoutSegment).mockReturnValue(null)
+})
+
+it.each([
+	["SeasonPage", SeasonPage],
+	["TeamsPage", TeamsPage],
+	["SettingsPage", SettingsPage],
+] as const)("rejects %s when its page guard denies access", async (_name, Page) => {
+	vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
+	await expect(Promise.resolve().then(() => Page())).rejects.toThrow("Unauthorized")
+	expect(requireAdmin).toHaveBeenCalledOnce()
 })
 
 it("requires admin access before reading season or team data", async () => {
@@ -57,7 +68,7 @@ it("returns the Next.js 404 interrupt for an unknown season", async () => {
 
 it("renders both frames with this season expanded, real team count, quiet preview and empty quests", async () => {
 	const html = renderToStaticMarkup(
-		await SeasonLayout({ children: <SeasonPage />, params: Promise.resolve({ seasonId: season._id }) }),
+		await SeasonLayout({ children: await SeasonPage(), params: Promise.resolve({ seasonId: season._id }) }),
 	)
 	expect(getSeason).toHaveBeenCalledWith(season._id)
 	expect(countTeams).toHaveBeenCalledWith(season._id)
@@ -80,7 +91,7 @@ it("renders both frames with this season expanded, real team count, quiet previe
 	expect(html).toContain("w-72")
 	expect(html).toContain("w-92")
 	expect(html).toContain("min-w-0 flex-1")
-	expect(renderToStaticMarkup(<SeasonPage />)).toContain("hidden h-full")
+	expect(renderToStaticMarkup(await SeasonPage())).toContain("hidden h-full")
 })
 
 it.each([
@@ -89,9 +100,9 @@ it.each([
 ] as const)("keeps %s heading-only inside the shared shell", async (segment, Page, heading) => {
 	vi.mocked(useSelectedLayoutSegment).mockReturnValue(segment)
 	const html = renderToStaticMarkup(
-		await SeasonLayout({ children: <Page />, params: Promise.resolve({ seasonId: season._id }) }),
+		await SeasonLayout({ children: await Page(), params: Promise.resolve({ seasonId: season._id }) }),
 	)
-	expect(renderToStaticMarkup(<Page />)).toMatch(new RegExp(`^<h2[^>]*>${heading}</h2>$`))
+	expect(renderToStaticMarkup(await Page())).toMatch(new RegExp(`^<h2[^>]*>${heading}</h2>$`))
 	const activeLinks = html.match(/<a\b[^>]*aria-current="page"[^>]*>/g) ?? []
 	expect(activeLinks.some((link) => link.includes(`href="/admin/seasons/${season._id}/${segment}"`))).toBe(true)
 	expect(html).toContain("Player preview")
