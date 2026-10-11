@@ -1,17 +1,17 @@
 "use client"
 
-import { type ReactNode, useCallback, useEffect, useRef, useState, useTransition } from "react"
+import { type ReactNode, useCallback, useState, useTransition } from "react"
 import { getGame, revealHint, submitAnswer } from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { useLiveState } from "@/lib/events/use-live-state"
 import { AnswerDock, type AnswerFeedback } from "./answer-dock"
-import { endRefreshDelay } from "./end-refresh"
 import { GameHeader } from "./game-header"
 import { gameTransitions } from "./game-transitions"
 import { Intel } from "./intel"
 import { LifecycleScreen } from "./lifecycle-screen"
 import { QuestContent } from "./quest-content"
+import { useGameClock } from "./use-game-clock"
 
 export function GameScreen({
 	initial,
@@ -26,12 +26,11 @@ export function GameScreen({
 }) {
 	const [game, setGame] = useLiveState(getGame, channels, initial)
 	const [previous, setPrevious] = useState(initial)
-	const [now, setNow] = useState(() => new Date(initialNow))
+	const now = useGameClock(game, initialNow, getGame, setGame)
 	const [answer, setAnswer] = useState("")
 	const [feedback, setFeedback] = useState<(AnswerFeedback & { questId: string }) | null>(null)
 	const [decrypting, setDecrypting] = useState(() => new Set<string>())
 	const [pending, startTransition] = useTransition()
-	const clockStartedAt = useRef(0)
 
 	if (previous !== game) {
 		const changes = gameTransitions(previous, game)
@@ -48,56 +47,7 @@ export function GameScreen({
 		}
 	}
 
-	useEffect(() => {
-		clockStartedAt.current = performance.now()
-		const timer = setInterval(() => setNow(new Date(initialNow + performance.now() - clockStartedAt.current)), 1000)
-		return () => clearInterval(timer)
-	}, [initialNow])
 	const end = game.lifecycleState === "running" ? (game.end?.getTime() ?? null) : null
-	const refreshAt = game.lifecycleState === "countdown" ? game.start.getTime() : end
-	useEffect(() => {
-		if (refreshAt === null) return
-		let cancelled = false
-		let attempt = 0
-		let timer: ReturnType<typeof setTimeout>
-		const schedule = () => {
-			const currentNow = initialNow + performance.now() - clockStartedAt.current
-			timer = setTimeout(
-				() => {
-					const boundaryNow = initialNow + performance.now() - clockStartedAt.current
-					if (boundaryNow < refreshAt) {
-						schedule()
-						return
-					}
-					setNow(new Date(boundaryNow))
-					startTransition(async () => {
-						try {
-							const next = await getGame()
-							if (cancelled) return
-							setGame(next)
-							const nextRefreshAt =
-								next.lifecycleState === "countdown"
-									? next.start.getTime()
-									: next.lifecycleState === "running"
-										? next.end?.getTime()
-										: null
-							if (next.lifecycleState !== game.lifecycleState || nextRefreshAt !== refreshAt) return
-						} catch {}
-						if (!cancelled) {
-							attempt++
-							schedule()
-						}
-					})
-				},
-				Math.min(endRefreshDelay(refreshAt, currentNow, attempt), 2_147_483_647),
-			)
-		}
-		schedule()
-		return () => {
-			cancelled = true
-			clearTimeout(timer)
-		}
-	}, [refreshAt, game.lifecycleState, initialNow, setGame])
 
 	const finishScramble = useCallback((hintId: string) => {
 		setDecrypting((current) => {

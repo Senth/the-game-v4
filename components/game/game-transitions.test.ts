@@ -95,8 +95,8 @@ describe("gameTransitions", () => {
 	})
 
 	it.each<PlayerGame>([
-		{ lifecycleState: "ended", score: 64 },
-		{ lifecycleState: "completed", score: 64 },
+		{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 },
+		{ lifecycleState: "completed", score: 64, rank: 7, teamCount: 10 },
 		{ ...running, quest: null },
 	])("clears the input when running quest disappears: $lifecycleState", (next) => {
 		expect(gameTransitions(running, next).questChanged).toBe(true)

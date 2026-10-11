@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { type ReactNode, useEffect, useState } from "react"
 import { LogOutButton } from "@/components/log-out-button"
 import type { PlayerGame } from "@/lib/domain/player-game"
@@ -37,6 +38,19 @@ export function LifecycleScreen({
 						<p className="mt-3 min-h-18 font-cond text-7xl font-bold text-ink tabular-nums text-balance">{text}</p>
 					)}
 					{view.helper && <p className="mt-3 font-cond text-sm text-muted">{view.helper}</p>}
+					{value?.kind === "score" && (
+						<>
+							<p className="mt-3 font-cond text-3xl font-bold text-head">
+								{value.place} <span className="text-lg font-medium text-muted">of {value.teamCount}</span>
+							</p>
+							<Link
+								href="/standings"
+								className="mt-3 inline-flex h-11 items-center px-3 font-cond text-link hover:underline active:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+							>
+								Standings ›
+							</Link>
+						</>
+					)}
 				</div>
 				{qr && (game.lifecycleState === "waiting" || game.lifecycleState === "countdown") && (
 					<div className="mt-12">{qr}</div>

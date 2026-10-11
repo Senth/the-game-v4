@@ -105,6 +105,9 @@ Use separate time and quests bars. Put the time tick on the quests bar and a tex
 The time bar uses `time`; the quests bar uses the team's pace color.
 Rows show rank, name, solved/total, points and authored-order rail. Your row is tinted.
 Ten teams fit without horizontal scrolling at 390 px; updates arrive live.
+Final view puts team label and sentence first, points at right, then place and solved/total, as `7th of 10 · 5 / 12 quests`.
+Completed during a running season uses final view with "You solved every quest."; the all-team list stays live.
+`‹ Quest` returns to quest while running; completed and ended use `‹ Back`.
 
 ## D1: desktop admin
 
@@ -214,6 +217,8 @@ Surface brief: job is knowing what happens next; no primary action;
 read first the state sentence, second the countdown or score; must not look like an error page.
 
 Waiting, countdown, completed and ended use one state sentence with the relevant time or score.
+Completed and ended put shared ordinal such as `7th of 10` below score, then a `Standings ›` link.
+Ties use shared place such as `2nd of 10`, without a `Tied` label.
 
 ### Admin seasons list
 

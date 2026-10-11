@@ -1,3 +1,4 @@
+import { ordinal } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { formatTimeLeft } from "./clock"
 
@@ -10,7 +11,7 @@ type LifecycleView = {
 				band: "under-24-hours" | "under-7-days" | "7-days-or-more"
 				text: string | null
 		  }
-		| { kind: "score"; text: string }
+		| { kind: "score"; text: string; place: string; teamCount: number }
 		| null
 	helper: string | null
 }
@@ -35,8 +36,11 @@ export function lifecycleView(game: Exclude<PlayerGame, { lifecycleState: "runni
 			}
 		}
 		case "completed":
-			return { sentence: "You solved every quest.", value: { kind: "score", text: `${game.score}p` }, helper: null }
 		case "ended":
-			return { sentence: "Time's up.", value: { kind: "score", text: `${game.score}p` }, helper: null }
+			return {
+				sentence: game.lifecycleState === "completed" ? "You solved every quest." : "Time's up.",
+				value: { kind: "score", text: `${game.score}p`, place: ordinal(game.rank), teamCount: game.teamCount },
+				helper: null,
+			}
 	}
 }

@@ -181,6 +181,8 @@ N = round(timeFraction * total) - solved
 
 Header text is "N behind" for positive N, "N ahead" for negative N using its absolute value,
 or "On pace" for zero. Color comes from the percentage band, not rounded N.
+Percentage labels round positive behind percentages up and absolute ahead percentages down.
+Values rounded to zero read "On pace".
 Outside running play, use the lifecycle state instead of dividing by a missing duration or an empty quest count.
 
 ### Standings strip
@@ -192,6 +194,9 @@ Otherwise show #1, the team immediately ahead of you, and you, without duplicate
 Insert `···` between #1 and the team ahead only when other teams sit between them.
 Rank is small and muted, name regular, points bold in heading color; tint your team.
 The whole strip is the button to `/standings`. `/board` is public for a TV and shows only a running season.
+`/standings` shows S1 while running, final standings when completed or ended; waiting and countdown redirect to `/`.
+Teams completed during a running season get final view with "You solved every quest."; the all-team list stays live.
+Other teams' rails show solved and todo only; only your row shows current, and only while running.
 
 ### Authoring and live edits
 

@@ -1,13 +1,39 @@
+import type { EffectCallback } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { getGame } from "@/app/actions"
 import Home, { viewport } from "@/app/page"
 import { TeamQr } from "@/components/team-qr"
 import { requireTeam } from "@/lib/auth/guards"
-import { playerGame } from "@/lib/domain/player-game"
+import { type PlayerGame, playerGame } from "@/lib/domain/player-game"
 import { buildFixture } from "@/scripts/fixture"
 import { withSecrets } from "@/test/secrets"
 import { GameScreen } from "./game-screen"
+
+const hooks = vi.hoisted(() => ({ live: false, effects: [] as EffectCallback[], state: null as PlayerGame | null }))
+
+vi.mock("react", async (importOriginal) => {
+	const react = await importOriginal<typeof import("react")>()
+	return {
+		...react,
+		useEffect: (effect: EffectCallback, dependencies: unknown[]) => {
+			react.useEffect(effect, dependencies)
+			if (hooks.live) hooks.effects.push(effect)
+		},
+		useEffectEvent: (callback: unknown) => callback,
+		useState: (initial: unknown) => {
+			const [value, setter] = react.useState(initial)
+			if (hooks.live && value && typeof value === "object" && "lifecycleState" in value)
+				return [
+					hooks.state ?? value,
+					(next: PlayerGame) => {
+						hooks.state = next
+					},
+				]
+			return [value, setter]
+		},
+	}
+})
 
 vi.mock("@/app/actions", () => ({ getGame: vi.fn(), submitAnswer: vi.fn(), revealHint: vi.fn() }))
 vi.mock("@/lib/auth/guards", () => ({ requireTeam: vi.fn() }))
@@ -26,6 +52,10 @@ const props = {
 afterEach(() => {
 	vi.useRealTimers()
 	vi.clearAllMocks()
+	hooks.live = false
+	hooks.state = null
+	hooks.effects.length = 0
+	vi.unstubAllGlobals()
 })
 
 describe("GameScreen", () => {
@@ -55,11 +85,61 @@ describe("GameScreen", () => {
 	})
 
 	it("replaces running UI with the lifecycle screen and logout", () => {
-		const html = renderToStaticMarkup(<GameScreen {...props} initial={{ lifecycleState: "completed", score: 99 }} />)
+		const html = renderToStaticMarkup(
+			<GameScreen {...props} initial={{ lifecycleState: "completed", score: 99, rank: 3, teamCount: 10 }} />,
+		)
 		expect(html).toContain("You solved every quest.")
 		expect(html).toContain("99p")
 		expect(html).toContain("Log out")
 		expect(html).not.toContain("<input")
+	})
+
+	it("updates completed place after another team's solve through the existing season subscription", async () => {
+		hooks.live = true
+		const completedTeam = { ...team, completed: true }
+		const initial = playerGame(fixture.season, completedTeam, fixture.teams, now)
+		const next = playerGame(
+			fixture.season,
+			completedTeam,
+			fixture.teams.map((candidate) =>
+				candidate._id === "team-kodknackarna" ? { ...candidate, score: 65 } : candidate,
+			),
+			now,
+		)
+		expect(initial).toMatchObject({ lifecycleState: "completed", rank: 7 })
+		expect(next).toMatchObject({ lifecycleState: "completed", rank: 8 })
+		vi.mocked(getGame).mockResolvedValue(next)
+		const source = {
+			readyState: 1,
+			onopen: null,
+			onmessage: null as (() => void) | null,
+			onerror: null,
+			close: vi.fn(),
+		}
+		vi.stubGlobal(
+			"EventSource",
+			vi.fn(function EventSourceMock() {
+				return source
+			}),
+		)
+		vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: false }))
+		const render = () => renderToStaticMarkup(<GameScreen {...props} initial={initial} />)
+		expect(render()).toContain("7th")
+		const cleanups = hooks.effects.map((effect) => effect()).filter((cleanup): cleanup is () => void => !!cleanup)
+		try {
+			expect(EventSource).toHaveBeenCalledWith(
+				`/api/events?channel=season%3A${fixture.season._id}&channel=team%3A${team._id}`,
+			)
+			source.onmessage?.()
+			await vi.waitFor(() => expect(hooks.state).toEqual(next))
+			const html = render()
+			expect(html).toContain("8th")
+			expect(html).not.toContain("7th")
+			expect(html).toContain("64p")
+			expect(html).toContain('href="/standings"')
+		} finally {
+			for (const cleanup of cleanups) cleanup()
+		}
 	})
 
 	it.each([
@@ -71,13 +151,14 @@ describe("GameScreen", () => {
 		expect(html).toContain("/join/token")
 	})
 
-	it.each([game, { lifecycleState: "completed", score: 120 }, { lifecycleState: "ended", score: 64 }] as const)(
-		"omits join links from $lifecycleState markup even with a QR slot",
-		(initial) => {
-			const html = renderToStaticMarkup(<GameScreen {...props} initial={initial} qr={<div>/join/token</div>} />)
-			expect(html).not.toContain("/join/")
-		},
-	)
+	it.each([
+		game,
+		{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 },
+		{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 },
+	] as const)("omits join links from $lifecycleState markup even with a QR slot", (initial) => {
+		const html = renderToStaticMarkup(<GameScreen {...props} initial={initial} qr={<div>/join/token</div>} />)
+		expect(html).not.toContain("/join/")
+	})
 })
 
 describe("player home route", () => {
@@ -127,8 +208,8 @@ describe("player home route", () => {
 	})
 
 	it.each([
-		{ lifecycleState: "completed", score: 120 },
-		{ lifecycleState: "ended", score: 64 },
+		{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 },
+		{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 },
 	] as const)("does not create a QR slot for $lifecycleState server responses", async (initial) => {
 		vi.mocked(requireTeam).mockResolvedValue({ ...team, passwordHash: "x" })
 		vi.mocked(getGame).mockResolvedValue(initial)

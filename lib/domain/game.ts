@@ -86,6 +86,19 @@ export function paceLabel(n: number): string {
 	return "On pace"
 }
 
+export function pacePercentLabel(behindPercent: number): string {
+	if (behindPercent > 0) return `${Math.ceil(behindPercent)}% behind`
+	const aheadPercent = Math.floor(-behindPercent)
+	return aheadPercent > 0 ? `${aheadPercent}% ahead` : "On pace"
+}
+
+const ordinalPluralRules = new Intl.PluralRules("en", { type: "ordinal" })
+
+export function ordinal(n: number): string {
+	const suffix = ordinalPluralRules.select(n)
+	return `${n}${suffix === "one" ? "st" : suffix === "two" ? "nd" : suffix === "few" ? "rd" : "th"}`
+}
+
 type RankableTeam = Pick<Team, "_id" | "name" | "score" | "progress">
 
 function lastSolve(team: RankableTeam): number {
@@ -246,6 +259,43 @@ export function rail(
 			state: solved.has(id) ? "solved" : id === current ? "current" : "todo",
 		})),
 	}))
+}
+
+export type StandingsRow = {
+	rank: number
+	id: string
+	name: string
+	score: number
+	solved: number
+	total: number
+	rail: RailArc[]
+	you: boolean
+}
+
+export function standingsRows(
+	season: Pick<Season, "arcs">,
+	teams: Pick<Team, "_id" | "name" | "score" | "progress" | "questOrder" | "questIndex">[],
+	youId: string,
+	showCurrent: boolean,
+): StandingsRow[] {
+	return rankTeams(teams).map((team) => {
+		const you = team._id === youId
+		return {
+			rank: team.rank,
+			id: team._id,
+			name: team.name,
+			score: team.score,
+			...questCounts(team),
+			rail: rail(season, team).map(({ arcId, segments }) => ({
+				arcId,
+				segments: segments.map(({ questId, state }) => ({
+					questId,
+					state: state === "current" && (!you || !showCurrent) ? "todo" : state,
+				})),
+			})),
+			you,
+		}
+	})
 }
 
 export type StructuralEdit = { kind: "addQuest"; questId: string } | { kind: "deleteQuest"; questId: string }

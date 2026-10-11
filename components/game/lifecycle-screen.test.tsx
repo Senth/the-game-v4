@@ -36,8 +36,8 @@ describe("LifecycleScreen", () => {
 		[{ lifecycleState: "waiting" }, "The game hasn&#x27;t been scheduled yet.", null, true],
 		[{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000) }, "The game starts in", "4:32", true],
 		[{ lifecycleState: "countdown", start: now }, "The game is starting…", null, true],
-		[{ lifecycleState: "completed", score: 120 }, "You solved every quest.", "120p", false],
-		[{ lifecycleState: "ended", score: 64 }, "Time&#x27;s up.", "64p", false],
+		[{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 }, "You solved every quest.", "120p", false],
+		[{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 }, "Time&#x27;s up.", "64p", false],
 	])("renders $0.lifecycleState with sentence first, value second and bottom logout", (game, sentence, value, qr) => {
 		const html = renderToStaticMarkup(<LifecycleScreen game={game} now={now} qr={<div>Test QR slot</div>} />)
 		expect(html).toContain(sentence)
@@ -53,9 +53,32 @@ describe("LifecycleScreen", () => {
 			expect(html).toContain("font-cond text-7xl font-bold text-ink tabular-nums")
 		}
 		expect(html.includes("Test QR slot")).toBe(qr)
+		expect(html.includes('href="/standings"')).toBe(!qr)
 		if (qr) expect(html.indexOf(sentence)).toBeLessThan(html.indexOf("Test QR slot"))
 		if (game.lifecycleState === "waiting") expect(html).toContain("This page updates by itself.")
 	})
+
+	it.each(["completed", "ended"] as const)(
+		"renders %s score, place and quiet 44 px standings link in order",
+		(lifecycleState) => {
+			for (const [rank, place] of [
+				[1, "1st"],
+				[2, "2nd"],
+				[7, "7th"],
+			] as const) {
+				const html = renderToStaticMarkup(
+					<LifecycleScreen game={{ lifecycleState, score: 64, rank, teamCount: 10 }} now={now} />,
+				)
+				expect(html).toContain(
+					`font-cond text-3xl font-bold text-head">${place} <span class="text-lg font-medium text-muted">of 10</span>`,
+				)
+				expect(html.indexOf("64p")).toBeLessThan(html.indexOf(place))
+				expect(html.indexOf(place)).toBeLessThan(html.indexOf("Standings ›"))
+				expect(html).toMatch(/<a[^>]*h-11[^>]*text-link[^>]*href="\/standings"[^>]*>Standings ›<\/a>/)
+				expect(html).not.toContain("Tied")
+			}
+		},
+	)
 
 	it.each([day, 7 * day])("reserves a blank date slot at %i ms until mount, then uses phone locale", (distance) => {
 		const start = new Date(now.getTime() + distance)

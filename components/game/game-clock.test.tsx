@@ -43,7 +43,7 @@ const running: PlayerGame = {
 	strip: [],
 	quest: null,
 }
-const ended: PlayerGame = { lifecycleState: "ended", score: 42 }
+const ended: PlayerGame = { lifecycleState: "ended", score: 42, rank: 7, teamCount: 10 }
 let cleanups: (() => void)[] = []
 
 function mount(initial = running) {
