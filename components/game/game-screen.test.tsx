@@ -55,7 +55,9 @@ describe("GameScreen", () => {
 	})
 
 	it("replaces running UI with the lifecycle screen and logout", () => {
-		const html = renderToStaticMarkup(<GameScreen {...props} initial={{ lifecycleState: "completed", score: 99 }} />)
+		const html = renderToStaticMarkup(
+			<GameScreen {...props} initial={{ lifecycleState: "completed", score: 99, rank: 3, teamCount: 10 }} />,
+		)
 		expect(html).toContain("You solved every quest.")
 		expect(html).toContain("99p")
 		expect(html).toContain("Log out")
@@ -71,13 +73,14 @@ describe("GameScreen", () => {
 		expect(html).toContain("/join/token")
 	})
 
-	it.each([game, { lifecycleState: "completed", score: 120 }, { lifecycleState: "ended", score: 64 }] as const)(
-		"omits join links from $lifecycleState markup even with a QR slot",
-		(initial) => {
-			const html = renderToStaticMarkup(<GameScreen {...props} initial={initial} qr={<div>/join/token</div>} />)
-			expect(html).not.toContain("/join/")
-		},
-	)
+	it.each([
+		game,
+		{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 },
+		{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 },
+	] as const)("omits join links from $lifecycleState markup even with a QR slot", (initial) => {
+		const html = renderToStaticMarkup(<GameScreen {...props} initial={initial} qr={<div>/join/token</div>} />)
+		expect(html).not.toContain("/join/")
+	})
 })
 
 describe("player home route", () => {
@@ -127,8 +130,8 @@ describe("player home route", () => {
 	})
 
 	it.each([
-		{ lifecycleState: "completed", score: 120 },
-		{ lifecycleState: "ended", score: 64 },
+		{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 },
+		{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 },
 	] as const)("does not create a QR slot for $lifecycleState server responses", async (initial) => {
 		vi.mocked(requireTeam).mockResolvedValue({ ...team, passwordHash: "x" })
 		vi.mocked(getGame).mockResolvedValue(initial)

@@ -8,7 +8,7 @@ import {
 	maxAnswerLength,
 	scoreForSolve,
 } from "@/lib/domain/game"
-import { type PlayerGame, playerGame } from "@/lib/domain/player-game"
+import { type PlayerGame, type PlayerStandings, playerGame, playerStandings } from "@/lib/domain/player-game"
 import type { Team } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
 
@@ -25,6 +25,12 @@ export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame
 	if (!team.seasonId) return playerGame(null, team, [], now)
 	const [season, teams] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
 	return playerGame(season, team, teams, now)
+}
+
+export async function loadStandings(team: Team, now = new Date()): Promise<PlayerStandings> {
+	if (!team.seasonId) return playerStandings(null, team, [], now)
+	const [season, teams] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
+	return playerStandings(season, team, teams, now)
 }
 
 function publishTeamChange(teamId: string, seasonId: string) {

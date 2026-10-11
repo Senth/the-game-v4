@@ -51,7 +51,7 @@ describe("lifecycleView", () => {
 	})
 
 	it.each([120, 0, -5])("shows completed copy and %ip without rank", (score) => {
-		expect(lifecycleView({ lifecycleState: "completed", score }, now)).toEqual({
+		expect(lifecycleView({ lifecycleState: "completed", score, rank: 1, teamCount: 10 }, now)).toEqual({
 			sentence: "You solved every quest.",
 			value: { kind: "score", text: `${score}p` },
 			helper: null,
@@ -59,7 +59,7 @@ describe("lifecycleView", () => {
 	})
 
 	it.each([64, 0, -5])("shows ended copy and %ip without rank", (score) => {
-		expect(lifecycleView({ lifecycleState: "ended", score }, now)).toEqual({
+		expect(lifecycleView({ lifecycleState: "ended", score, rank: 7, teamCount: 10 }, now)).toEqual({
 			sentence: "Time's up.",
 			value: { kind: "score", text: `${score}p` },
 			helper: null,

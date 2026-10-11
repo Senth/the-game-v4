@@ -36,8 +36,8 @@ describe("LifecycleScreen", () => {
 		[{ lifecycleState: "waiting" }, "The game hasn&#x27;t been scheduled yet.", null, true],
 		[{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000) }, "The game starts in", "4:32", true],
 		[{ lifecycleState: "countdown", start: now }, "The game is starting…", null, true],
-		[{ lifecycleState: "completed", score: 120 }, "You solved every quest.", "120p", false],
-		[{ lifecycleState: "ended", score: 64 }, "Time&#x27;s up.", "64p", false],
+		[{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 }, "You solved every quest.", "120p", false],
+		[{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 }, "Time&#x27;s up.", "64p", false],
 	])("renders $0.lifecycleState with sentence first, value second and bottom logout", (game, sentence, value, qr) => {
 		const html = renderToStaticMarkup(<LifecycleScreen game={game} now={now} qr={<div>Test QR slot</div>} />)
 		expect(html).toContain(sentence)

@@ -9,7 +9,7 @@ import { createLiveConnection } from "@/lib/events/live-connection"
 import { buildFixture } from "@/scripts/fixture"
 import { useTestDb } from "@/test/db"
 import { secretAnswer, withSecrets } from "@/test/secrets"
-import { loadGame, revealHint, submitAnswer } from "./game"
+import { loadGame, loadStandings, revealHint, submitAnswer } from "./game"
 
 const session = vi.hoisted(() => ({ teamId: "" }))
 vi.mock("@/lib/auth/guards", async () => {
@@ -31,6 +31,14 @@ const ninjas = fixture.teams.find((team) => team._id === "team-ninjas") as (type
 const current = "backwards-log"
 const next = ninjas.questOrder[ninjas.questIndex + 1] as string
 const hint = (n: number) => `${current}-h${n}`
+const standingsSeason = { ...season, _id: "standings-season" }
+const standingsTeams = fixture.teams.map((team) => ({
+	...team,
+	_id: `standings-${team._id}`,
+	seasonId: standingsSeason._id,
+	passwordHash: "secret-passwordHash",
+}))
+const standingsTeam = standingsTeams.find((team) => team.name === ninjas.name) as Team
 
 let created = 0
 async function freshTeam(overrides: Partial<Team> = {}): Promise<Team> {
@@ -49,6 +57,8 @@ function recordEvents(teamId: string) {
 beforeAll(async () => {
 	await createSeason(season)
 	for (const team of fixture.teams) if (team._id !== ninjas._id) await createTeam({ ...team, passwordHash: "x" })
+	await createSeason(standingsSeason)
+	for (const team of standingsTeams) await createTeam(team)
 })
 
 describe("loadGame", () => {
@@ -66,6 +76,40 @@ describe("loadGame", () => {
 		expect(game).toMatchObject({ lifecycleState: "running", quest: { id: current } })
 		expect(JSON.stringify(game)).not.toContain("secret-")
 		expect(JSON.stringify(game)).not.toContain("/join/")
+	})
+
+	it.each(["completed", "ended"] as const)("loads shared rank and season team count when %s", async (state) => {
+		const team = { ...standingsTeam, completed: state === "completed" }
+		const game = await loadGame(team, season.end as Date)
+		expect(game).toEqual({ lifecycleState: state, score: team.score, rank: 7, teamCount: 10 })
+		expect(JSON.stringify(game)).not.toContain("secret-")
+	})
+})
+
+describe("loadStandings", () => {
+	it("returns waiting for a seasonless team or missing season", async () => {
+		for (const seasonId of [null, "missing-season"]) {
+			expect(await loadStandings({ ...standingsTeam, seasonId }, now)).toEqual({ lifecycleState: "waiting" })
+		}
+	})
+
+	it.each(["running", "ended"] as const)("loads only the season's teams without secrets when %s", async (state) => {
+		const standings = await loadStandings(standingsTeam, state === "running" ? now : (season.end as Date))
+		expect(standings.lifecycleState).toBe(state)
+		if (standings.lifecycleState !== "running" && standings.lifecycleState !== "ended")
+			throw new Error(standings.lifecycleState)
+		expect(standings.rows).toHaveLength(10)
+		expect(standings.rows.map((row) => row.id).toSorted()).toEqual(standingsTeams.map((team) => team._id).toSorted())
+		expect(standings.you).toMatchObject({ name: ninjas.name, score: ninjas.score, solved: 5, total: 12 })
+		const currents = standings.rows
+			.flatMap((row) => row.rail.flatMap((arc) => arc.segments))
+			.filter((segment) => segment.state === "current")
+		expect(currents).toEqual(state === "running" ? [{ questId: current, state: "current" }] : [])
+		if (standings.lifecycleState === "ended") expect(standings.you).toMatchObject({ rank: 7, teamCount: 10 })
+		const json = JSON.stringify(standings)
+		expect(json).not.toContain("secret-")
+		for (const field of ["passwordHash", "progress", "hints", "answers", "internalTitle", "adminNotes"])
+			expect(json).not.toContain(field)
 	})
 })
 

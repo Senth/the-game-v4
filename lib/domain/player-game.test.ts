@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { buildFixture } from "@/scripts/fixture"
 import { withSecrets } from "@/test/secrets"
-import { playerGame } from "./player-game"
+import { playerGame, playerStandings } from "./player-game"
 
 const now = new Date("2026-10-09T18:00:00Z")
-const { season, teams } = buildFixture(now)
+const fixture = buildFixture(now)
+const season = fixture.season
+const teams = fixture.teams.map((team) => ({ ...team, passwordHash: "secret-passwordHash" }))
 const ninjas = teams.find((team) => team._id === "team-ninjas") as (typeof teams)[number]
 const start = season.start as Date
 const end = season.end as Date
@@ -80,17 +82,29 @@ describe("playerGame", () => {
 		})
 	})
 
-	it("returns only the score when completed, including after end", () => {
+	it("returns score and place when completed, including after end", () => {
 		const team = { ...ninjas, completed: true }
-		expect(playerGame(season, team, teams, now)).toEqual({ lifecycleState: "completed", score: ninjas.score })
+		expect(playerGame(season, team, teams, now)).toEqual({
+			lifecycleState: "completed",
+			score: ninjas.score,
+			rank: 7,
+			teamCount: 10,
+		})
 		expect(playerGame(season, team, teams, new Date(end.getTime() + 1))).toEqual({
 			lifecycleState: "completed",
 			score: ninjas.score,
+			rank: 7,
+			teamCount: 10,
 		})
 	})
 
-	it("returns only the score when ended", () => {
-		expect(playerGame(season, ninjas, teams, end)).toEqual({ lifecycleState: "ended", score: ninjas.score })
+	it("returns score and place when ended", () => {
+		expect(playerGame(season, ninjas, teams, end)).toEqual({
+			lifecycleState: "ended",
+			score: ninjas.score,
+			rank: 7,
+			teamCount: 10,
+		})
 	})
 
 	it.each(Object.entries(cases))("keeps secrets out of %s JSON and leaves inputs unchanged", (state, args) => {
@@ -99,10 +113,122 @@ describe("playerGame", () => {
 		const game = playerGame(caseSeason, team, teams, at)
 		expect(game.lifecycleState).toBe(state)
 		expect(JSON.stringify(game)).not.toContain("secret-")
+		expect(JSON.stringify(game)).not.toContain("passwordHash")
 		expect({ caseSeason, team, teams }).toEqual(before)
 	})
 
 	it("shows revealed snapshot text while running", () => {
 		expect(JSON.stringify(playerGame(secretSeason, ninjas, teams, now))).toContain("Start from the bottom.")
 	})
+
+	it.each(["completed", "ended"] as const)("uses shared rank and counts every team when %s", (state) => {
+		const team = { ...ninjas, completed: state === "completed" }
+		const tied = teams.map((other) => (other._id === "team-lagom" ? { ...other, score: team.score } : other))
+		expect(playerGame(season, team, tied, end)).toMatchObject({ lifecycleState: state, rank: 6, teamCount: 10 })
+	})
+})
+
+describe("playerStandings", () => {
+	it("returns only waiting for a null, missing or unscheduled season", () => {
+		for (const waiting of [null, undefined, { ...season, start: null, end: null }]) {
+			expect(playerStandings(waiting, ninjas, teams, now)).toEqual({ lifecycleState: "waiting" })
+		}
+	})
+
+	it("returns only the state during countdown", () => {
+		expect(playerStandings(season, ninjas, teams, new Date(start.getTime() - 1))).toEqual({
+			lifecycleState: "countdown",
+		})
+	})
+
+	it("returns counts, timing and all rows with only your current quest while running", () => {
+		const standings = playerStandings(season, ninjas, teams, now)
+		if (standings.lifecycleState !== "running") throw new Error(standings.lifecycleState)
+		expect(standings.you).toEqual({ name: ninjas.name, score: ninjas.score, solved: 5, total: 12 })
+		expect(standings.start).toEqual(start)
+		expect(standings.end).toEqual(end)
+		expect(standings.rows).toHaveLength(10)
+		expect(standings.rows.map((row) => row.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+		for (const row of standings.rows) {
+			const current = row.rail.flatMap((arc) => arc.segments).filter((segment) => segment.state === "current")
+			expect(current).toEqual(row.you ? [{ questId: "backwards-log", state: "current" }] : [])
+		}
+	})
+
+	it.each(["completed", "ended"] as const)(
+		"returns final place and rows without any current quest when %s",
+		(state) => {
+			const team = { ...ninjas, completed: state === "completed" }
+			const standings = playerStandings(season, team, teams, end)
+			expect(standings).toMatchObject({
+				lifecycleState: state,
+				you: { name: ninjas.name, score: ninjas.score, solved: 5, total: 12, rank: 7, teamCount: 10 },
+			})
+			if (standings.lifecycleState !== "completed" && standings.lifecycleState !== "ended")
+				throw new Error(standings.lifecycleState)
+			expect(standings.rows).toHaveLength(10)
+			expect(JSON.stringify(standings)).not.toContain("current")
+			expect(standings).not.toHaveProperty("start")
+			expect(standings).not.toHaveProperty("end")
+		},
+	)
+
+	it("keeps rows live for a completed team while the season runs", () => {
+		const team = { ...ninjas, completed: true }
+		const updated = teams.map((other) => (other._id === "team-losenord123" ? { ...other, score: 200 } : other))
+		const standings = playerStandings(season, team, updated, now)
+		if (standings.lifecycleState !== "completed") throw new Error(standings.lifecycleState)
+		expect(standings.rows[0]).toMatchObject({ id: "team-losenord123", score: 200, rank: 1 })
+		expect(standings.you).toMatchObject({ rank: 8, teamCount: 10 })
+		expect(JSON.stringify(standings)).not.toContain("current")
+	})
+
+	it("uses shared rank, counts every team and preserves each team's own quest counts", () => {
+		const tied = teams.map((other) =>
+			other._id === "team-lagom" ? { ...other, score: ninjas.score, questOrder: other.questOrder.slice(0, 6) } : other,
+		)
+		const standings = playerStandings(season, ninjas, tied, end)
+		if (standings.lifecycleState !== "ended") throw new Error(standings.lifecycleState)
+		expect(standings.you).toMatchObject({ rank: 6, teamCount: 10, solved: 5, total: 12 })
+		expect(standings.rows.find((row) => row.id === "team-lagom")).toMatchObject({ rank: 6, solved: 6, total: 6 })
+	})
+
+	it("keeps null end and empty order counts while running", () => {
+		expect(
+			playerStandings({ ...season, end: null }, { ...ninjas, questOrder: [], progress: [] }, teams, now),
+		).toMatchObject({
+			lifecycleState: "running",
+			end: null,
+			you: { solved: 0, total: 0 },
+		})
+	})
+
+	it.each(Object.entries(cases))(
+		"keeps secrets and all hint text out of %s JSON without mutating inputs",
+		(state, args) => {
+			const [caseSeason, team, at] = args
+			const before = structuredClone({ caseSeason, team, teams })
+			const standings = playerStandings(caseSeason, team, teams, at)
+			const json = JSON.stringify(standings)
+			expect(standings.lifecycleState).toBe(state)
+			expect(json).not.toContain("secret-")
+			for (const field of [
+				"passwordHash",
+				"progress",
+				"hintsRevealed",
+				"internalTitle",
+				"adminNotes",
+				"answers",
+				"hints",
+			]) {
+				expect(json).not.toContain(field)
+			}
+			for (const other of teams)
+				for (const entry of other.progress)
+					for (const hint of entry.hintsRevealed) {
+						expect(json).not.toContain(hint.text)
+					}
+			expect({ caseSeason, team, teams }).toEqual(before)
+		},
+	)
 })
