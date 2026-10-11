@@ -6,7 +6,7 @@ const segmentColors = {
 	todo: "bg-z2/60",
 }
 
-export function ArcRail({ rail }: { rail: RailArc[] }) {
+export function ArcRail({ rail, size = "default" }: { rail: RailArc[]; size?: "default" | "small" }) {
 	return (
 		<div className="flex gap-2.5">
 			{rail
@@ -19,7 +19,7 @@ export function ArcRail({ rail }: { rail: RailArc[] }) {
 								role="img"
 								aria-label={segment.state === "todo" ? "Unsolved quest" : `${segment.state} quest`}
 								aria-current={segment.state === "current" ? "step" : undefined}
-								className={`h-2 flex-1 rounded-sm ${segmentColors[segment.state]}`}
+								className={`${size === "small" ? "h-1.5" : "h-2"} flex-1 rounded-sm ${segmentColors[segment.state]}`}
 							/>
 						))}
 					</div>
