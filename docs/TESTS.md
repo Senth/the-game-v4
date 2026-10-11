@@ -35,9 +35,12 @@ Keep detailed lifecycle, hold cancellation, autosave and ordering cases in unit 
 ## Development fixture
 
 `pnpm seed` drops the database and reloads "Cipher Night 2026".
-It targets `MONGODB_URI`, else a running dev database on port 27018, else it boots one for the run.
+It targets `MONGODB_URI`, else the MongoDB port in this checkout's live `.tmp/dev-stack/stack.json`,
+else a temporary mongod on a freshly allocated port with dbPath `.tmp/mongo`.
 It refuses `NODE_ENV=production` and hosts other than `localhost` or `127.0.0.1` unless passed `--force`.
-When `MONGODB_URI` is unset, `pnpm dev` boots `mongodb-memory-server` on port 27018 with dbPath `.tmp/mongo`.
+`pnpm dev` allocates its web and MongoDB ports from 7000-7999 in the registry shared with other checkouts.
+When `MONGODB_URI` is unset, it boots `mongodb-memory-server` on its MongoDB port with dbPath `.tmp/mongo`.
+Dev login cookies ignore the port, so two worktrees in one browser log each other out.
 It seeds only an empty database, then starts `next dev`.
 Seed accounts are `admin / admin` and `Ninjas / ninjas`. Other teams use their lowercased name as password.
 Never deploy those passwords. The seed copies the Backwards log image to `ASSETS_DIR`, default `.tmp/assets`.

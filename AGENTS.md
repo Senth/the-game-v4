@@ -13,7 +13,8 @@ MongoDB access lives in `lib/db/`, zod schemas in `lib/domain/`, and dev boot an
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm dev` | Boot local MongoDB, seed if empty, then run Next.js development server |
+| `pnpm dev` | Allocate this checkout's ports, boot local MongoDB, seed if empty, then run Next.js development server |
+| `scripts/dev-stack.sh up \| down \| status \| ports` | Run `pnpm dev` in the background, stop it, list its ports, or print its web port |
 | `pnpm seed` | Load the development fixture documented in `docs/TESTS.md` |
 | `pnpm admin:create <name>` | Create an admin in the `MONGODB_URI` database; reads the password from a prompt or stdin |
 | `pnpm lint --write` | Run markdownlint, then Biome, and apply supported Biome fixes |
@@ -26,7 +27,9 @@ Run configured gates in order.
 
 Agents never run Docker on fenrir. Its `docker` command invokes `sudo docker` and needs a password.
 Development and tests use `mongodb-memory-server`; production images build in CI and the human runs compose.
-When `MONGODB_URI` is unset, `pnpm dev` persists the local database under `.tmp/mongo`.
+`pnpm dev` takes its web and MongoDB ports from 7000-7999, records them in `.tmp/dev-stack/stack.json`
+and releases them on exit. When `MONGODB_URI` is unset, it persists the local database under `.tmp/mongo`.
+When the dispatcher finishes every step, run `[dev] stop` from `.ai/config.toml`.
 Production requires `SESSION_SECRET` of at least 32 characters. Development falls back to a fixed secret.
 Keep temporary artifacts under `.tmp/`. Do not use live databases or services in tests.
 

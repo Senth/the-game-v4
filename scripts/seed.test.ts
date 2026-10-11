@@ -5,7 +5,7 @@ import { verifyPassword } from "@/lib/auth/password"
 import { getDb } from "@/lib/db/client"
 import { useTestDb } from "@/test/db"
 import { backwardsLogAsset } from "./fixture"
-import { assertSeedTarget, isEmpty, seed } from "./seed"
+import { assertSeedTarget, isEmpty, seed, seedUri } from "./seed"
 
 useTestDb()
 
@@ -34,13 +34,28 @@ describe("seed", () => {
 
 describe("assertSeedTarget", () => {
 	it("accepts local hosts", () => {
-		expect(() => assertSeedTarget("mongodb://127.0.0.1:27018/the-game", "development", false)).not.toThrow()
+		expect(() => assertSeedTarget("mongodb://127.0.0.1:7123/the-game", "development", false)).not.toThrow()
 		expect(() => assertSeedTarget("mongodb://localhost/the-game", undefined, false)).not.toThrow()
 	})
 
 	it("rejects a remote host and production unless forced", () => {
 		expect(() => assertSeedTarget("mongodb://mongo:27017/x", undefined, false)).toThrow(/non-local/)
-		expect(() => assertSeedTarget("mongodb://127.0.0.1:27018/x", "production", false)).toThrow(/production/)
+		expect(() => assertSeedTarget("mongodb://127.0.0.1:7123/x", "production", false)).toThrow(/production/)
 		expect(() => assertSeedTarget("mongodb://mongo:27017/x", "production", true)).not.toThrow()
+	})
+})
+
+describe("seedUri", () => {
+	it("prefers MONGODB_URI", () => {
+		expect(seedUri("mongodb://127.0.0.1:7500/x", { web: 7001, mongo: 7002, pid: 1 })).toBe("mongodb://127.0.0.1:7500/x")
+	})
+
+	it("falls back to the live stack's mongo port", () => {
+		expect(seedUri(undefined, { web: 7001, mongo: 7002, pid: 1 })).toBe("mongodb://127.0.0.1:7002/the-game")
+	})
+
+	it("asks for a temporary mongod when no stack mongo is running", () => {
+		expect(seedUri(undefined, undefined)).toBeUndefined()
+		expect(seedUri(undefined, { web: 7001, pid: 1 })).toBeUndefined()
 	})
 })

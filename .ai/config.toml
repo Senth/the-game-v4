@@ -7,12 +7,17 @@ visible_paths = ["app/**", "components/**", "styles/**", "public/**"]
 browser = true
 
 [dev]
-start = "pnpm dev"
-url = "http://localhost:3000"
+start = "scripts/dev-stack.sh up"
+url = "http://localhost:$(scripts/dev-stack.sh ports)"
+stop = "scripts/dev-stack.sh down"
 auth = "log in as admin / admin for /admin, or Ninjas / ninjas for the game"
 
-# When MONGODB_URI is unset, dev boots mongodb-memory-server on port 27018 with
-# a persisted dbPath under .tmp/mongo, seeds if empty, then starts next dev.
+# Every checkout, main included, allocates its own web and MongoDB ports in
+# 7000-7999 at boot, claimed in the machine-wide registry ~/.local/state/dev-ports
+# shared with home-backlog. The ports land in .tmp/dev-stack/stack.json; `url`
+# reads the web port back from it. When MONGODB_URI is unset, dev boots
+# mongodb-memory-server with this checkout's own dbPath .tmp/mongo and seeds it
+# only when empty. `up --fresh` reseeds once the stack is ready.
 # The fixture is Cipher Night 2026: Lighthouse has 4 quests, Old Town 5 and
 # Finale 3. Ten teams match the accepted mocks. Ninjas is mid-game with
 # solved quests and revealed-hint history, so the game and live admin views
