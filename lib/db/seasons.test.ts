@@ -162,6 +162,31 @@ describe("seasons", () => {
 		])
 	})
 
+	it("deduplicates concurrent and repeated hint adds by id without overwriting edits", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "hints" } as const
+		const op = { op: "add", hint: { id: "new-hint", text: "Second", points: 10 } } as const
+		expect(
+			await Promise.all([patchSeasonList(season._id, target, op), patchSeasonList(season._id, target, op)]),
+		).toEqual(["new-hint", "new-hint"])
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.hints).toEqual([
+			{ id: "q1-h1", text: "First", points: 5 },
+			op.hint,
+		])
+		await setSeasonField(season._id, { ...target, hintId: op.hint.id, field: "text" }, "Edited")
+		expect(await patchSeasonList(season._id, target, op)).toBe("new-hint")
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.hints).toEqual([
+			{ id: "q1-h1", text: "First", points: 5 },
+			{ ...op.hint, text: "Edited" },
+		])
+		expect(await patchSeasonList(season._id, { ...target, questId: "q2" }, op)).toBe("new-hint")
+		expect((await getSeason(season._id))?.arcs[0]?.quests[1]?.hints).toEqual([
+			{ id: "q2-h1", text: "First", points: 5 },
+			op.hint,
+		])
+		await expect(patchSeasonList(season._id, { ...target, arcId: "a2" }, op)).rejects.toThrow(NotFoundError)
+	})
+
 	it("keeps concurrent hint adds with distinct generated ids", async () => {
 		const season = await createSeason(seasonInput())
 		const target = { arcId: "a1", questId: "q1", field: "hints" } as const

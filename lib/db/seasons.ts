@@ -113,6 +113,7 @@ export async function patchSeasonList(
 		if (parsed.op === "add") {
 			const hint = Hint.parse({ ...parsed.hint, id: parsed.hint.id ?? crypto.randomUUID() })
 			hintId = hint.id
+			arrayFilters[1] = { "q.id": target.questId, "q.hints.id": { $ne: hint.id } }
 			update = { $push: { [path]: hint } }
 		} else {
 			update = { $pull: { [path]: { id: parsed.hintId } } }
