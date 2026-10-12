@@ -1,0 +1,61 @@
+import { renderToStaticMarkup } from "react-dom/server"
+import { beforeEach, expect, it, vi } from "vitest"
+import { useAutosaveField } from "./autosave-provider"
+import { AutosaveTextField } from "./autosave-text-field"
+
+vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn() }))
+vi.mock("react", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react")>()),
+	useId: () => "title",
+}))
+
+const target = { field: "title" } as const
+const field = {
+	value: "Cipher Night 2026",
+	onChange: vi.fn(),
+	onFocus: vi.fn(),
+	onBlur: vi.fn(async () => {}),
+	failed: false,
+}
+
+beforeEach(() => {
+	vi.clearAllMocks()
+	vi.mocked(useAutosaveField).mockReturnValue(field)
+})
+
+it("renders the server title with its label and no failure flag or Save button", () => {
+	const html = renderToStaticMarkup(<AutosaveTextField label="Title" target={target} serverValue="Cipher Night 2026" />)
+	expect(useAutosaveField).toHaveBeenCalledWith(target, "Cipher Night 2026")
+	const id = html.match(/<input id="([^"]+)"/)?.[1]
+	expect(id).toBeDefined()
+	expect(html).toContain(`for="${id}"`)
+	expect(html).toContain(">Title</label>")
+	expect(html).toContain('value="Cipher Night 2026"')
+	expect(html).toContain("border-z2")
+	expect(html).not.toContain("border-warn")
+	expect(html).not.toContain("Not saved")
+	expect(html).not.toContain("<button")
+})
+
+it("marks failed edits with a warn border and an accessible Not saved line", () => {
+	vi.mocked(useAutosaveField).mockReturnValue({ ...field, value: "Local title", failed: true })
+	const html = renderToStaticMarkup(<AutosaveTextField label="Title" target={target} serverValue="Old title" />)
+	const id = html.match(/<input id="([^"]+)"/)?.[1]
+	expect(html).toContain('value="Local title"')
+	expect(html).toContain("border-warn")
+	expect(html).not.toContain("border-z2")
+	expect(html).toContain('aria-invalid="true"')
+	expect(html).toContain(`aria-describedby="${id}-error"`)
+	expect(html).toContain(`id="${id}-error" role="alert" class="mt-1.5 font-cond text-xs text-warn">Not saved`)
+})
+
+it("passes title edits, focus and blur to the autosave hook", async () => {
+	const element = AutosaveTextField({ label: "Title", target, serverValue: "Cipher Night 2026" })
+	const input = element.props.children[1]
+	input.props.onChange({ target: { value: "New title" } })
+	input.props.onFocus()
+	await input.props.onBlur()
+	expect(field.onChange).toHaveBeenCalledWith("New title")
+	expect(field.onFocus).toHaveBeenCalledOnce()
+	expect(field.onBlur).toHaveBeenCalledOnce()
+})

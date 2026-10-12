@@ -21,11 +21,13 @@ vi.mock("@/app/admin/actions", () => ({ createSeasonAction: vi.fn() }))
 vi.mock("next/navigation", async (importOriginal) => ({
 	...(await importOriginal<typeof import("next/navigation")>()),
 	useSelectedLayoutSegment: vi.fn(),
+	useRouter: () => ({ refresh: vi.fn() }),
 }))
 
 const fixture = buildFixture(new Date("2026-10-11T17:00:00Z"))
 const season = { ...fixture.season, start: null, end: null }
 const other = { ...season, _id: "other", title: "Other hunt" }
+const settingsProps = { params: Promise.resolve({ seasonId: season._id }), searchParams: Promise.resolve({}) }
 
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -42,8 +44,9 @@ it.each([
 	["SettingsPage", SettingsPage],
 ] as const)("rejects %s when its page guard denies access", async (_name, Page) => {
 	vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
-	await expect(Promise.resolve().then(() => Page())).rejects.toThrow("Unauthorized")
+	await expect(Promise.resolve().then(() => Page(settingsProps))).rejects.toThrow("Unauthorized")
 	expect(requireAdmin).toHaveBeenCalledOnce()
+	expect(getSeason).not.toHaveBeenCalled()
 })
 
 it("requires admin access before reading season or team data", async () => {
@@ -88,6 +91,9 @@ it("renders both frames with this season expanded, real team count, quiet previe
 	expect(html).toContain("Open a quest or team to preview it.")
 	expect(html).toContain('action="/logout" method="post"')
 	expect(html).not.toMatch(/<iframe|<input|Backwards log/)
+	expect(html).not.toContain("Saved")
+	expect(html).not.toContain("border-warn")
+	expect(html).toContain("border-b px-1 font-cond border-z1")
 	expect(html).toContain("w-72")
 	expect(html).toContain("w-92")
 	expect(html).toContain("min-w-0 flex-1")
@@ -97,16 +103,26 @@ it("renders both frames with this season expanded, real team count, quiet previe
 it.each([
 	["teams", TeamsPage, "Teams"],
 	["settings", SettingsPage, "Season settings"],
-] as const)("keeps %s heading-only inside the shared shell", async (segment, Page, heading) => {
+] as const)("renders %s inside the shared shell", async (segment, Page, heading) => {
 	vi.mocked(useSelectedLayoutSegment).mockReturnValue(segment)
 	const html = renderToStaticMarkup(
-		await SeasonLayout({ children: await Page(), params: Promise.resolve({ seasonId: season._id }) }),
+		await SeasonLayout({ children: await Page(settingsProps), params: Promise.resolve({ seasonId: season._id }) }),
 	)
-	expect(renderToStaticMarkup(await Page())).toMatch(new RegExp(`^<h2[^>]*>${heading}</h2>$`))
+	expect(html).toMatch(new RegExp(`<h2[^>]*>${heading}</h2>`))
+	if (segment === "settings") {
+		expect(html).toContain('class="space-y-5 px-4 py-5 lg:px-8 lg:py-6"')
+		expect(html).toContain(">Title</label>")
+		expect(html).toContain(`value="${season.title}"`)
+	} else expect(renderToStaticMarkup(await TeamsPage())).toMatch(/^<h2[^>]*>Teams<\/h2>$/)
 	const activeLinks = html.match(/<a\b[^>]*aria-current="page"[^>]*>/g) ?? []
 	expect(activeLinks.some((link) => link.includes(`href="/admin/seasons/${season._id}/${segment}"`))).toBe(true)
 	expect(html).toContain("Player preview")
 	expect(html).not.toContain("Pick a quest in the tree.")
+})
+
+it("returns the Next.js 404 interrupt when Settings loads an unknown season", async () => {
+	vi.mocked(getSeason).mockResolvedValue(null)
+	await expect(SettingsPage(settingsProps)).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
 })
 
 it.each(["", "/teams", "/settings"])(

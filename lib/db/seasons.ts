@@ -1,4 +1,4 @@
-import type { Filter } from "mongodb"
+import type { Filter, UpdateFilter } from "mongodb"
 import { z } from "zod"
 import { registrationConflict } from "@/lib/domain/game"
 import { Arc, Hint, HintInput, Quest, Season, type SeasonInput, withHintIds } from "@/lib/domain/schemas"
@@ -89,6 +89,39 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 		{ arrayFilters },
 	)
 	if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
+}
+
+const AnswerPatch = z.object({ op: z.enum(["add", "remove"]), value: Quest.shape.answers.element })
+const HintPatch = z.discriminatedUnion("op", [
+	z.object({ op: z.literal("add"), hint: HintInput }),
+	z.object({ op: z.literal("remove"), hintId: Hint.shape.id }),
+])
+
+export async function patchSeasonList(
+	seasonId: string,
+	target: { arcId: string; questId: string; field: "answers" | "hints" },
+	op: z.infer<typeof AnswerPatch> | z.infer<typeof HintPatch>,
+): Promise<string | undefined> {
+	const { path, filter, arrayFilters } = locate(target)
+	let update: UpdateFilter<Season>
+	let hintId: string | undefined
+	if (target.field === "answers") {
+		const parsed = AnswerPatch.parse(op)
+		update = parsed.op === "add" ? { $addToSet: { [path]: parsed.value } } : { $pull: { [path]: parsed.value } }
+	} else {
+		const parsed = HintPatch.parse(op)
+		if (parsed.op === "add") {
+			const hint = Hint.parse({ ...parsed.hint, id: parsed.hint.id ?? crypto.randomUUID() })
+			hintId = hint.id
+			arrayFilters[1] = { "q.id": target.questId, "q.hints.id": { $ne: hint.id } }
+			update = { $push: { [path]: hint } }
+		} else {
+			update = { $pull: { [path]: { id: parsed.hintId } } }
+		}
+	}
+	const result = await (await collections()).seasons.updateOne({ ...filter, _id: seasonId }, update, { arrayFilters })
+	if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
+	return hintId
 }
 
 export class RegistrationConflictError extends Error {

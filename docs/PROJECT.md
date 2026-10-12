@@ -206,9 +206,17 @@ Other teams' rails show solved and todo only; only your row shows current, and o
 
 ### Authoring and live edits
 
-Autosave each field on blur or after 500 ms idle using server actions that `$set` one validated path.
-Show "Saved", "Saving…" or "Not saved, retry". Edits to different fields from different tabs must not overwrite
-one another. Retry retains unsaved local values. Preview renders real game components from the current edit.
+Every season field except `registrationOpen` autosaves on blur or after 500 ms idle.
+A server action `$set`s one validated path.
+The `registrationOpen` field keeps its own action.
+Lists never save whole. `answers` and `hints` change by adding or removing one item.
+Arc and quest add and remove belong to I-15 and I-24.
+A save publishes `season:<id>` and `board`. Open admin pages reload server data on `season:<id>`.
+A field accepts a value from another tab only when it is unfocused and has no unsaved edit.
+Otherwise, its local value stays and its next save wins.
+Show "Saved", "Saving…" or "Not saved, retry". Failed saves keep the local value.
+Retry, another edit to that field, or the browser coming back online resends it.
+Preview renders real game components from the current edit.
 
 Text, answers, hints and points apply immediately during play, except revealed-hint snapshots remain unchanged.
 Structural edits require confirmation that names how many teams are affected:
