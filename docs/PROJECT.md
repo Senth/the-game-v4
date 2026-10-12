@@ -42,6 +42,8 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `registrationOpen` | `boolean` | New teams join this season; a stored season without it counts as closed |
 | `arcs` | `Arc[]` | Arcs in authored order |
 
+A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
+
 ### Nested types
 
 | Type | Fields |

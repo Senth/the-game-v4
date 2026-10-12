@@ -125,6 +125,7 @@ Use the season tree on the left, form in the middle, phone preview on the right.
 Season title and live controls are in the top bar. Selecting a team replaces the middle form with team history
 and shows that team's current quest in the right preview. Shared mobile views provide the middle-pane content.
 Use H1/H2 hint interaction instead of D1's always-open hint inputs.
+The seasons menu replaces D1's "Seasons /" breadcrumb.
 
 ## M1: mobile admin quests
 
@@ -225,7 +226,16 @@ Ties use shared place such as `2nd of 10`, without a `Tied` label.
 Surface brief: job is getting into the season you want; primary action "New season";
 read first the running or next season, second the past ones; must not look like an analytics dashboard.
 
-Use title, status and start time, with D1's desktop or M1's mobile shell.
+Desktop at 1024 px and up uses layout F: seasons are roots of the left menu.
+The open season expands in place under its row.
+Phone uses layout A: a list at `/admin`, then M1's header, live pill and tabs inside a season.
+Group current seasons first: live, then upcoming by soonest start, then unscheduled by title.
+Past seasons follow, newest start first, quieted with `muted`.
+Phone rows show "Live · 47:27 left", "Upcoming" or "Not started"; desktop menu rows show a short day or month.
+Past rows show only their date.
+The live pill is the only colored element in the list.
+Desktop puts "+ New season" at the top of the menu; phone puts a "New season" button in the header.
+Show no counts, charts, stat tiles or cards.
 
 ### Public TV board
 
