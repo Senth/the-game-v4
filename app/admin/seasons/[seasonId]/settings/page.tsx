@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { AutosaveTextField } from "@/components/admin/autosave-text-field"
+import { SeasonSettings } from "@/components/admin/season-settings"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 
@@ -9,9 +9,17 @@ export default async function SettingsPage({ params }: PageProps<"/admin/seasons
 	const season = await getSeason(seasonId)
 	if (!season) notFound()
 	return (
-		<div className="space-y-5 px-4 py-5 lg:px-8 lg:py-6">
-			<h2 className="font-head text-2xl text-head">Season settings</h2>
-			<AutosaveTextField label="Title" target={{ field: "title" }} serverValue={season.title} />
-		</div>
+		<SeasonSettings
+			season={{
+				_id: season._id,
+				title: season.title,
+				start: season.start,
+				end: season.end,
+				lengthMinutes: season.lengthMinutes,
+				shuffleArcs: season.shuffleArcs,
+				registrationOpen: season.registrationOpen,
+			}}
+			now={Date.now()}
+		/>
 	)
 }
