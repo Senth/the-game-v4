@@ -242,6 +242,23 @@ The live pill is the only colored element in the list.
 Desktop puts "+ New season" at the top of the menu; phone puts a "New season" button in the header.
 Show no counts, charts, stat tiles or cards.
 
+### Season settings and live strip
+
+Live strip surface brief: job is running a season and changing its end time.
+Primary action is "Start now" before play, "End game" while live.
+Read first live-state pill, second time controls, third Settings below.
+Must not look like analytics: no counts, charts or stat tiles.
+On phone, live strip sits below header with full-width controls, as M1.
+On desktop, it sits in top bar right of Saved, as D1.
+Keep −5 / +5 as outlines. End game uses `pace-3` and confirms in a native `<dialog>`.
+
+Settings surface brief: job is setting up a season before play and checking it during play.
+Primary action is editing a field.
+Read first season title, second start and length, third shuffle and registration.
+Must not look like a CMS form with a Save bar or preferences dashboard.
+Stack fields in M2's field style; booleans are switches. Quiet locked fields once live.
+Show errors as `warn` lines at the field.
+
 ### Public TV board
 
 Surface brief: job is letting a room watch the race; no actions;
