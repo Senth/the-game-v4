@@ -6,10 +6,12 @@ import {
 	createSeason,
 	getSeason,
 	listSeasons,
+	patchSeasonList,
 	RegistrationConflictError,
 	setRegistrationOpen,
 	setSeasonField,
 } from "./seasons"
+import { createTeam, getTeam, revealHint } from "./teams"
 
 useTestDb()
 
@@ -126,6 +128,120 @@ describe("seasons", () => {
 			["q2", null],
 			["q1", 50],
 		])
+	})
+
+	it("keeps concurrent answer adds and deduplicates repeated values", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "answers" } as const
+		await Promise.all([
+			patchSeasonList(season._id, target, { op: "add", value: "lamp" }),
+			patchSeasonList(season._id, target, { op: "add", value: "beacon" }),
+		])
+		await patchSeasonList(season._id, target, { op: "add", value: "lamp" })
+		const expected = structuredClone(season)
+		const stored = await getSeason(season._id)
+		const answers = stored?.arcs[0]?.quests[0]?.answers
+		expect(answers?.toSorted()).toEqual(["beacon", "lamp"])
+		const q = expected.arcs[0]?.quests[0]
+		if (!q || !answers) throw new Error("fixture")
+		q.answers = answers
+		expect(stored).toEqual(expected)
+	})
+
+	it("keeps a hint add alongside another hint's concurrent text edit", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "hints" } as const
+		const [id] = await Promise.all([
+			patchSeasonList(season._id, target, { op: "add", hint: { id: "new-hint", text: "Second", points: 10 } }),
+			setSeasonField(season._id, { ...target, hintId: "q1-h1", field: "text" }, "Edited"),
+		])
+		expect(id).toBe("new-hint")
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.hints).toEqual([
+			{ id: "q1-h1", text: "Edited", points: 5 },
+			{ id, text: "Second", points: 10 },
+		])
+	})
+
+	it("keeps concurrent hint adds with distinct generated ids", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "hints" } as const
+		const ids = await Promise.all([
+			patchSeasonList(season._id, target, { op: "add", hint: { text: "Second", points: 10 } }),
+			patchSeasonList(season._id, target, { op: "add", hint: { text: "Third", points: 15 } }),
+		])
+		expect(ids).toEqual([expect.any(String), expect.any(String)])
+		expect(new Set(ids).size).toBe(2)
+		const hints = (await getSeason(season._id))?.arcs[0]?.quests[0]?.hints
+		expect(hints).toHaveLength(3)
+		expect(hints).toEqual(
+			expect.arrayContaining([
+				{ id: "q1-h1", text: "First", points: 5 },
+				{ id: ids[0], text: "Second", points: 10 },
+				{ id: ids[1], text: "Third", points: 15 },
+			]),
+		)
+	})
+
+	it("removes answers by value and hints by id, with missing items a no-op", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1" }
+		await setSeasonField(season._id, { ...target, field: "answers" }, ["lamp", "beacon"])
+		await patchSeasonList(season._id, { ...target, field: "answers" }, { op: "remove", value: "lamp" })
+		await patchSeasonList(season._id, { ...target, field: "hints" }, { op: "remove", hintId: "q1-h1" })
+		const stored = await getSeason(season._id)
+		expect(stored?.arcs[0]?.quests[0]).toMatchObject({ answers: ["beacon"], hints: [] })
+		await patchSeasonList(season._id, { ...target, field: "answers" }, { op: "remove", value: "missing" })
+		await patchSeasonList(season._id, { ...target, field: "hints" }, { op: "remove", hintId: "missing" })
+		expect(await getSeason(season._id)).toEqual(stored)
+	})
+
+	it("leaves revealed-hint snapshots untouched by hint list patches", async () => {
+		const season = await createSeason(seasonInput())
+		const team = await createTeam({
+			name: crypto.randomUUID(),
+			passwordHash: "$2b$10$hash",
+			seasonId: season._id,
+			questOrder: ["q1"],
+			questIndex: 0,
+			score: 0,
+			completed: false,
+			progress: [],
+		})
+		await revealHint(
+			team._id,
+			{ questIndex: 0, questId: "q1" },
+			{
+				hintId: "q1-h1",
+				text: "First",
+				points: 5,
+				revealedAt: new Date(),
+			},
+		)
+		const before = await getTeam(team._id)
+		const target = { arcId: "a1", questId: "q1", field: "hints" } as const
+		await patchSeasonList(season._id, target, { op: "remove", hintId: "q1-h1" })
+		await patchSeasonList(season._id, target, { op: "add", hint: { id: "q1-h1", text: "Replacement", points: 20 } })
+		expect(await getTeam(team._id)).toEqual(before)
+	})
+
+	it("rejects list patches for unknown season, arc or quest and invalid payloads without writing", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "answers" } as const
+		await expect(patchSeasonList("missing", target, { op: "add", value: "lamp" })).rejects.toThrow(NotFoundError)
+		await expect(
+			patchSeasonList(season._id, { ...target, arcId: "missing" }, { op: "remove", value: "lamp" }),
+		).rejects.toThrow(NotFoundError)
+		await expect(
+			patchSeasonList(season._id, { ...target, questId: "missing" }, { op: "add", value: "lamp" }),
+		).rejects.toThrow(NotFoundError)
+		await expect(
+			patchSeasonList(season._id, { ...target, arcId: "a2" }, { op: "remove", value: "lamp" }),
+		).rejects.toThrow(NotFoundError)
+		const invalidAnswer = { op: "add", value: 42 } as unknown as Parameters<typeof patchSeasonList>[2]
+		const invalidHint = { op: "add", hint: { points: 5 } } as unknown as Parameters<typeof patchSeasonList>[2]
+		await expect(patchSeasonList(season._id, target, invalidAnswer)).rejects.toThrow()
+		await expect(patchSeasonList(season._id, { ...target, field: "hints" }, invalidHint)).rejects.toThrow()
+		expect(await getSeason(season._id)).toEqual(season)
 	})
 
 	it("opens registration on one counting season and rejects a second, naming the first", async () => {
