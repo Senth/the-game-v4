@@ -101,6 +101,7 @@ function autosaveId(seasonId: string, kind: "field" | "list", target: Record<str
 type FieldDraft<T> = {
 	value: T
 	serverValue: T
+	latestServerValue: T
 	state: AutosaveState
 	notify?: () => void
 	saver: ReturnType<typeof createFieldSaver<T>>
@@ -117,9 +118,14 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 		const draft: FieldDraft<T> = {
 			value: serverValue,
 			serverValue,
+			latestServerValue: serverValue,
 			state: "saved",
 			saver: createFieldSaver<T>({
-				save: (value) => saveSeasonField(seasonId, target, value),
+				async save(value) {
+					const result = await saveSeasonField(seasonId, target, value)
+					if (result.ok) draft.serverValue = draft.latestServerValue
+					return result
+				},
 				onState(next) {
 					draft.state = next
 					draft.notify?.()
@@ -148,6 +154,7 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 	}, [id, drafts, draft, update, remove, saver])
 
 	useEffect(() => {
+		draft.latestServerValue = serverValue
 		if (!focused && state === "saved" && draft.state === "saved" && !Object.is(serverValue, draft.serverValue)) {
 			draft.serverValue = serverValue
 			draft.value = serverValue
@@ -252,12 +259,12 @@ export function useAutosaveList(target: ListTarget, serverItems: ListItem[]): Li
 
 	useEffect(() => {
 		const serialized = JSON.stringify(serverItems)
-		if (state === "saved" && draft.state === "saved" && serialized !== draft.serverItems) {
+		if (serialized !== draft.serverItems) {
 			draft.serverItems = serialized
 			draft.items = serverItems
-			setItems(serverItems)
+			setItems(saver.applyQueued(serverItems, applyList))
 		}
-	}, [serverItems, draft, state])
+	}, [serverItems, saver, draft])
 
 	function enqueue(op: ListOp) {
 		saver.enqueue(op)

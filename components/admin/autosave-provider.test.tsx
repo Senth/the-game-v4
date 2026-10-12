@@ -87,8 +87,8 @@ beforeEach(() => {
 	hooks.context = null
 	vi.stubGlobal("window", new EventTarget())
 	vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: false }))
-	vi.mocked(saveSeasonField).mockResolvedValue({ ok: true })
-	vi.mocked(patchSeasonList).mockResolvedValue({ ok: true })
+	vi.mocked(saveSeasonField).mockReset().mockResolvedValue({ ok: true })
+	vi.mocked(patchSeasonList).mockReset().mockResolvedValue({ ok: true })
 })
 
 afterEach(() => {
@@ -285,6 +285,48 @@ it("adopts deferred remote field values when an unfocused field becomes saved", 
 	expect(field("Remote").value).toBe("Remote")
 })
 
+it.each(["pending blur", "idle save", "failed retry"])(
+	"keeps local field writes over remote refreshes during %s",
+	async (flow) => {
+		const owner = provider()
+		const state = scope()
+		const target = { field: "title" } as const
+		const field = (value: string) => render(state, () => useAutosaveField(target, value))
+		if (flow !== "idle save") field("First").onFocus()
+		field("First").onChange("Local")
+		if (flow === "failed retry") {
+			vi.mocked(saveSeasonField).mockResolvedValueOnce({ ok: false })
+			await field("First").onBlur()
+			expect(field("First").failed).toBe(true)
+		}
+		let finish: ((result: { ok: boolean }) => void) | undefined
+		vi.mocked(saveSeasonField).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve
+				}),
+		)
+		field("Remote")
+		expect(field("Remote").value).toBe("Local")
+		if (flow === "failed retry") owner.context.retryAll()
+		else if (flow === "idle save") await vi.advanceTimersByTimeAsync(500)
+		else void field("Remote").onBlur()
+		field("Latest remote")
+		expect(field("Latest remote").value).toBe("Local")
+		finish?.({ ok: true })
+		await vi.advanceTimersByTimeAsync(0)
+		field("Latest remote")
+		expect(field("Latest remote").value).toBe("Local")
+		expect(provider(owner.state).context.status).toBe("saved")
+		field("Latest remote").onChange("Local")
+		await field("Latest remote").onBlur()
+		expect(saveSeasonField).toHaveBeenCalledTimes(flow === "failed retry" ? 2 : 1)
+		expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", target, "Local")
+		field("After save")
+		expect(field("After save").value).toBe("After save")
+	},
+)
+
 it("reattaches a field during an unmount flush without starting a second saver", async () => {
 	const owner = provider()
 	let state = scope()
@@ -384,6 +426,50 @@ it("keeps successful list patches alongside a failed operation when remounted wi
 	list()
 	expect(list().items).toEqual(["lamp"])
 	expect(list().failed).toBe(true)
+})
+
+it.each([
+	["add", "saving"],
+	["remove", "saving"],
+	["add", "failed retry"],
+	["remove", "failed retry"],
+] as const)("rebases remote list refreshes through local %s during %s", async (operation, flow) => {
+	const owner = provider()
+	const state = scope()
+	const target = { arcId: "arc", questId: "quest", field: "answers" } as const
+	const list = (items: string[]) => render(state, () => useAutosaveList(target, items))
+	if (flow === "failed retry") vi.mocked(patchSeasonList).mockResolvedValueOnce({ ok: false })
+	let finish: ((result: { ok: boolean }) => void) | undefined
+	vi.mocked(patchSeasonList).mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+	)
+	if (operation === "add") list(["old"]).add("local")
+	else list(["old"]).remove("old")
+	if (flow === "failed retry") {
+		await vi.advanceTimersByTimeAsync(0)
+		expect(list(["old"]).failed).toBe(true)
+	}
+	const remote = ["old", "remote"]
+	const expected = operation === "add" ? ["old", "remote", "local"] : ["remote"]
+	list(remote)
+	expect(list(remote).items).toEqual(expected)
+	if (flow === "failed retry") owner.context.retryAll()
+	finish?.({ ok: true })
+	await vi.advanceTimersByTimeAsync(0)
+	list(remote)
+	expect(list([...remote]).items).toEqual(expected)
+	expect(list(remote).failed).toBe(false)
+	expect(provider(owner.state).context.status).toBe("saved")
+	expect(patchSeasonList).toHaveBeenCalledTimes(flow === "failed retry" ? 2 : 1)
+	expect(patchSeasonList).toHaveBeenLastCalledWith("season-1", target, {
+		op: operation,
+		value: operation === "add" ? "local" : "old",
+	})
+	list(["after"])
+	expect(list(["after"]).items).toEqual(["after"])
 })
 
 it("keeps optimistic list edits on failure and sends one-item answer patches in order", async () => {
