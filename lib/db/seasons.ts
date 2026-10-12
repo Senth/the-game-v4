@@ -1,6 +1,7 @@
 import type { Filter, UpdateFilter } from "mongodb"
 import { z } from "zod"
-import { registrationConflict } from "@/lib/domain/game"
+import { overlappingSeason, scheduleWindow, seasonStatus } from "@/lib/domain/admin-seasons"
+import { hasEnded, registrationConflict } from "@/lib/domain/game"
 import { Arc, Hint, HintInput, Quest, Season, type SeasonInput, withHintIds } from "@/lib/domain/schemas"
 import { collections, NotFoundError } from "./collections"
 
@@ -30,6 +31,68 @@ export async function getSeason(id: string): Promise<Season | null> {
 
 export async function listSeasons(): Promise<Season[]> {
 	return (await collections()).seasons.find().toArray()
+}
+
+const SeasonWindow = Season.pick({ start: true, end: true })
+type SeasonWindow = z.infer<typeof SeasonWindow>
+
+export class StaleWindowError extends Error {
+	name = "StaleWindowError"
+}
+
+export class SeasonOverlapError extends Error {
+	name = "SeasonOverlapError"
+
+	constructor(public readonly season: Season) {
+		super(`Overlaps "${season.title}", ${season.start?.toISOString()}–${season.end?.toISOString() ?? "no end"}.`)
+	}
+}
+
+function checkSeasonWindow(seasons: Season[], season: Season, next: SeasonWindow, now: Date): void {
+	const blocker = overlappingSeason(seasons, season._id, next)
+	if (blocker) throw new SeasonOverlapError(blocker)
+	if (season.registrationOpen && !hasEnded(next, now)) {
+		refuseOtherOpen(
+			seasons.map((s) => (s._id === season._id ? { ...s, ...next } : s)),
+			season._id,
+			now,
+		)
+	}
+}
+
+export async function setSeasonWindow(
+	seasonId: string,
+	expected: SeasonWindow,
+	next: SeasonWindow,
+	now: Date,
+): Promise<void> {
+	const current = SeasonWindow.parse(expected)
+	const parsed = SeasonWindow.parse(next)
+	const seasons = await listSeasons()
+	const season = seasons.find((s) => s._id === seasonId)
+	if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
+	if (season.start?.getTime() !== current.start?.getTime() || season.end?.getTime() !== current.end?.getTime()) {
+		throw new StaleWindowError(`Season ${seasonId} window changed`)
+	}
+	checkSeasonWindow(seasons, season, parsed, now)
+	const result = await (await collections()).seasons.updateOne({ _id: seasonId, ...current }, { $set: parsed })
+	if (result.matchedCount === 0) throw new StaleWindowError(`Season ${seasonId} window changed`)
+}
+
+export async function setSeasonLength(seasonId: string, minutes: number, now: Date): Promise<void> {
+	const lengthMinutes = Season.shape.lengthMinutes.parse(minutes)
+	const seasons = await listSeasons()
+	const season = seasons.find((s) => s._id === seasonId)
+	if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
+	const status = seasonStatus(season, now)
+	if (status === "live" || status === "ended") throw new Error("Set at start. Use −5 / +5 min while live.")
+	const next = scheduleWindow(season.start, lengthMinutes)
+	if (season.start) checkSeasonWindow(seasons, season, next, now)
+	const result = await (await collections()).seasons.updateOne(
+		{ _id: seasonId, start: season.start, end: season.end, lengthMinutes: season.lengthMinutes },
+		{ $set: season.start ? { lengthMinutes, ...next } : { lengthMinutes } },
+	)
+	if (result.matchedCount === 0) throw new StaleWindowError(`Season ${seasonId} window changed`)
 }
 
 function locate(target: SeasonFieldTarget): {

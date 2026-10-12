@@ -1,5 +1,6 @@
 import { z } from "zod"
-import { RevealedHint, Team, TeamQuestProgress } from "@/lib/domain/schemas"
+import { buildQuestOrder } from "@/lib/domain/game"
+import { RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
 import { collections, NotFoundError } from "./collections"
 
 type TeamField = Exclude<keyof Team, "_id">
@@ -27,6 +28,25 @@ export async function getTeam(id: string): Promise<Team | null> {
 
 export async function listTeams(seasonId: string | null): Promise<Team[]> {
 	return (await collections()).teams.find({ seasonId }).toArray()
+}
+
+export async function fillQuestOrders(
+	season: Season,
+	teams: readonly Team[],
+	random: () => number = Math.random,
+): Promise<boolean> {
+	if (!season.arcs.some((arc) => arc.quests.length > 0)) return false
+	const operations = teams
+		.filter((team) => team.seasonId === season._id && team.questOrder.length === 0 && team.progress.length === 0)
+		.map((team) => ({
+			updateOne: {
+				filter: { _id: team._id, seasonId: season._id, questOrder: { $size: 0 }, progress: { $size: 0 } },
+				update: { $set: { questOrder: buildQuestOrder(season, random) } },
+			},
+		}))
+	if (operations.length === 0) return false
+	const result = await (await collections()).teams.bulkWrite(operations, { ordered: false })
+	return result.matchedCount > 0
 }
 
 export async function countTeams(seasonId: string): Promise<number> {

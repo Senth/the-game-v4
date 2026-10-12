@@ -1,11 +1,12 @@
 import { MongoServerError } from "mongodb"
 import { describe, expect, it } from "vitest"
-import type { Team } from "@/lib/domain/schemas"
+import type { Season, Team } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
 import { NotFoundError } from "./collections"
 import {
 	countTeams,
 	createTeam,
+	fillQuestOrders,
 	getTeam,
 	listTeams,
 	listTeamsByName,
@@ -138,5 +139,84 @@ describe("teams", () => {
 
 			expect(await getTeam(_id)).toMatchObject({ score: 80, questIndex: 2, completed: true })
 		})
+	})
+})
+
+describe("fillQuestOrders", () => {
+	function season(): Season {
+		return {
+			_id: crypto.randomUUID(),
+			title: "Order fill",
+			start: new Date("2026-10-24T17:00:00Z"),
+			end: new Date("2026-10-24T18:00:00Z"),
+			lengthMinutes: 60,
+			registrationOpen: false,
+			shuffleArcs: true,
+			arcs: ["a1", "a2"].map((id) => ({
+				id,
+				title: id,
+				shuffleQuests: true,
+				quests: [1, 2].map((index) => ({
+					id: `${id}-q${index}`,
+					displayTitle: "Quest",
+					internalTitle: "",
+					content: "",
+					assetPath: null,
+					answers: [],
+					points: null,
+					adminNotes: "",
+					hints: [],
+				})),
+			})),
+		}
+	}
+
+	it("fills each team once under ten concurrent calls and every caller reads the same orders", async () => {
+		const input = season()
+		const teams = await Promise.all(["Ninjas", "Owls", "Foxes"].map((name) => createTeam(team(name, input._id))))
+		const before = structuredClone({ input, teams })
+		const results = await Promise.all(
+			Array.from({ length: 10 }, async (_, index) => {
+				await fillQuestOrders(input, teams, () => (index % 2 === 0 ? 0 : 0.999))
+				return listTeams(input._id)
+			}),
+		)
+		const stored = await listTeams(input._id)
+		for (const result of results) expect(result).toEqual(stored)
+		for (const original of teams) {
+			const filled = stored.find((value) => value._id === original._id)
+			expect(filled?.questOrder.toSorted()).toEqual(["a1-q1", "a1-q2", "a2-q1", "a2-q2"])
+			expect(filled).toEqual({ ...original, questOrder: filled?.questOrder })
+		}
+		expect(await fillQuestOrders(input, teams)).toBe(false)
+		expect({ input, teams }).toEqual(before)
+	})
+
+	it("reports exactly one winning caller for one team", async () => {
+		const input = season()
+		const teams = [await createTeam(team("Ninjas", input._id))]
+		const results = await Promise.all(Array.from({ length: 10 }, () => fillQuestOrders(input, teams)))
+		expect(results.filter(Boolean)).toHaveLength(1)
+	})
+
+	it("leaves existing orders, progress and other seasons untouched even with stale team input", async () => {
+		const input = season()
+		const ordered = await createTeam(team("Ordered", input._id))
+		const progressed = await createTeam(team("Progressed", input._id))
+		const other = await createTeam(team("Other", null))
+		await setTeamField(ordered._id, "questOrder", ["existing"])
+		await setTeamField(progressed._id, "progress", [{ questId: "old", hintsRevealed: [], pointsEarned: 10 }])
+		const before = await Promise.all([getTeam(ordered._id), getTeam(progressed._id), getTeam(other._id)])
+		expect(await fillQuestOrders(input, [ordered, progressed, other])).toBe(false)
+		expect(await fillQuestOrders(input, [{ ...other, seasonId: input._id }])).toBe(false)
+		expect(await Promise.all([getTeam(ordered._id), getTeam(progressed._id), getTeam(other._id)])).toEqual(before)
+	})
+
+	it("writes nothing for an empty season or an empty team list", async () => {
+		const input = { ...season(), arcs: [] }
+		const ninjas = await createTeam(team("Ninjas", input._id))
+		expect(await fillQuestOrders(input, [ninjas])).toBe(false)
+		expect(await fillQuestOrders(season(), [])).toBe(false)
+		expect(await getTeam(ninjas._id)).toEqual(ninjas)
 	})
 })
