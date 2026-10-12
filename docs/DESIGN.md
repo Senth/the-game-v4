@@ -65,6 +65,11 @@ Code fences use Shiki; the authoring textarea can use the platform monospace fon
 - Keyboard reordering uses Alt+↑/↓ for the focused row and Alt+Shift+↑/↓ for a quest's neighboring arc.
 - Honor `prefers-reduced-motion`. A hint still requires its full hold, but its fill does not animate.
 - Autosave state belongs in the header, not a Save bar. Use the exact states defined in PROJECT.md.
+  Show it only on pages with an autosave field. Place it at the phone header's right edge.
+  On desktop, place it in the top bar, left of live controls.
+  Render "Saved" and "Saving…" as `font-cond text-xs text-muted`.
+  On failure, turn the header's bottom rule `warn`; give the failed field a `warn` border and a "Not saved" line.
+  Use a "Not saved, retry" button with a 44 px target.
 - Mark internal titles and admin notes "admin only". Keep them out of real player previews.
 
 ## Component ownership
