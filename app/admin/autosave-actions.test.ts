@@ -1,0 +1,173 @@
+import { redirect } from "next/navigation"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { requireAdmin } from "@/lib/auth/guards"
+import type { SeasonFieldTarget } from "@/lib/db/seasons"
+import * as seasons from "@/lib/db/seasons"
+import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
+import { useTestDb } from "@/test/db"
+import { patchSeasonList, saveSeasonField } from "./autosave-actions"
+
+vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
+vi.mock("@/lib/events/bus", async (original) => ({
+	...(await original<typeof import("@/lib/events/bus")>()),
+	publish: vi.fn(),
+}))
+
+useTestDb()
+
+beforeEach(() => {
+	vi.restoreAllMocks()
+	vi.mocked(requireAdmin).mockReset().mockResolvedValue({ _id: "admin", name: "admin", passwordHash: "hash" })
+	vi.mocked(publish).mockClear()
+})
+
+async function setup() {
+	return seasons.createSeason({
+		title: "Cipher Night",
+		lengthMinutes: 60,
+		start: null,
+		end: null,
+		shuffleArcs: false,
+		arcs: [
+			{
+				id: "a1",
+				title: "Lighthouse",
+				shuffleQuests: false,
+				quests: [
+					{
+						id: "q1",
+						displayTitle: "Beacon",
+						internalTitle: "beacon",
+						content: "Decode",
+						assetPath: null,
+						answers: ["lamp"],
+						points: 50,
+						adminNotes: "",
+						hints: [{ id: "h1", text: "First", points: 5 }],
+					},
+				],
+			},
+		],
+	})
+}
+
+const quest = { arcId: "a1", questId: "q1" }
+
+describe("autosave actions", () => {
+	it.each(["save", "patch"])("checks guard before reading arguments for %s and preserves redirect", async (action) => {
+		const season = await setup()
+		vi.mocked(requireAdmin).mockImplementationOnce(async () => redirect("/login"))
+		const target = {
+			...quest,
+			get field(): "answers" {
+				return "answers"
+			},
+		}
+		const read = vi.spyOn(target, "field", "get")
+		await expect(
+			action === "save"
+				? saveSeasonField(season._id, target, ["new"])
+				: patchSeasonList(season._id, target, { op: "add", value: "new" }),
+		).rejects.toMatchObject({ digest: expect.stringContaining("NEXT_REDIRECT") })
+		expect(read).not.toHaveBeenCalled()
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each<SeasonFieldTarget>([
+		{ field: "arcs" },
+		{ arcId: "a1", field: "quests" },
+		{ ...quest, field: "answers" },
+		{ ...quest, field: "hints" },
+		{ field: "registrationOpen" },
+	])("rejects list or registration field %j without writing or publishing", async (target) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, target, [])).toEqual({ ok: false })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each([42, "", "  ", "x".repeat(61)])("rejects invalid season title %j", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field: "title" }, value)).toEqual({ ok: false })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("rejects invalid field values, unknown ids and invalid hint patches without writing or publishing", async () => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { ...quest, field: "points" }, "ten")).toEqual({ ok: false })
+		expect(await saveSeasonField("missing", { field: "title" }, "New")).toEqual({ ok: false })
+		expect(
+			await patchSeasonList(
+				season._id,
+				{ ...quest, questId: "missing", field: "answers" },
+				{ op: "add", value: "new" },
+			),
+		).toEqual({ ok: false })
+		const invalid = { op: "add", hint: { points: 5 } } as unknown as Parameters<typeof patchSeasonList>[2]
+		expect(await patchSeasonList(season._id, { ...quest, field: "hints" }, invalid)).toEqual({ ok: false })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("keeps both parallel quest displayTitle and content saves", async () => {
+		const season = await setup()
+		expect(
+			await Promise.all([
+				saveSeasonField(season._id, { ...quest, field: "displayTitle" }, "New title"),
+				saveSeasonField(season._id, { ...quest, field: "content" }, "New content"),
+			]),
+		).toEqual([{ ok: true }, { ok: true }])
+		expect((await seasons.getSeason(season._id))?.arcs[0]?.quests[0]).toMatchObject({
+			displayTitle: "New title",
+			content: "New content",
+		})
+	})
+
+	it("trims season title and publishes both channels once after save and patch", async () => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field: "title" }, "  New title  ")).toEqual({ ok: true })
+		expect((await seasons.getSeason(season._id))?.title).toBe("New title")
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+		vi.mocked(publish).mockClear()
+		expect(await patchSeasonList(season._id, { ...quest, field: "answers" }, { op: "add", value: "beacon" })).toEqual({
+			ok: true,
+		})
+		expect((await seasons.getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["lamp", "beacon"])
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+	})
+
+	it("returns false on registration conflict without publishing", async () => {
+		const season = await setup()
+		const open = await seasons.createSeason({
+			title: "Open",
+			lengthMinutes: 60,
+			start: null,
+			end: null,
+			shuffleArcs: false,
+			arcs: [],
+		})
+		const now = new Date()
+		await seasons.setSeasonField(season._id, { field: "end" }, new Date(now.getTime() - 1000))
+		await seasons.setRegistrationOpen(season._id, true, new Date(now.getTime() - 2000))
+		await seasons.setRegistrationOpen(open._id, true)
+		const before = await seasons.getSeason(season._id)
+		expect(await saveSeasonField(season._id, { field: "end" }, null)).toEqual({ ok: false })
+		expect(await seasons.getSeason(season._id)).toEqual(before)
+		expect(publish).not.toHaveBeenCalled()
+		await seasons.setRegistrationOpen(open._id, false)
+	})
+
+	it.each(["save", "patch"])("rethrows unexpected database errors from %s without publishing", async (action) => {
+		const error = new Error("Database unavailable")
+		if (action === "save") vi.spyOn(seasons, "setSeasonField").mockRejectedValueOnce(error)
+		else vi.spyOn(seasons, "patchSeasonList").mockRejectedValueOnce(error)
+		await expect(
+			action === "save"
+				? saveSeasonField("season", { field: "title" }, "New title")
+				: patchSeasonList("season", { ...quest, field: "answers" }, { op: "add", value: "new" }),
+		).rejects.toBe(error)
+		expect(publish).not.toHaveBeenCalled()
+	})
+})
