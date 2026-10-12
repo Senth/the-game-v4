@@ -71,7 +71,7 @@ it("handles a live season with no end and one already at its end", () => {
 it("counts down upcoming using server time and flips to Live then Ended without reloading", async () => {
 	const props = { start: new Date(now + 2000), end: new Date(now + 4000), now }
 	const html = renderToStaticMarkup(<SeasonStatus {...props} />)
-	expect(html).toContain('Upcoming · in <span class="text-head">0:02</span>')
+	expect(html).toContain('Upcoming · in\u00a0<span class="text-head">0:02</span>')
 	cleanup = hooks.effects[0]?.()
 	await vi.advanceTimersByTimeAsync(1000)
 	expect(renderToStaticMarkup(<SeasonStatus {...props} />)).toContain("0:01")

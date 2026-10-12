@@ -124,7 +124,7 @@ it("passes season timing and real team count to live controls on every season pa
 	)
 	expect(html.split("−5 min")).toHaveLength(3)
 	expect(html.split("+5 min")).toHaveLength(3)
-	expect(html.split("All 10 teams see their final score.")).toHaveLength(3)
+	expect(html).not.toContain("<dialog")
 	expect(html.indexOf("−5 min")).toBeLessThan(html.indexOf("Log out"))
 	expect(html.lastIndexOf("+5 min")).toBeLessThan(html.indexOf('aria-label="Season sections"'))
 })

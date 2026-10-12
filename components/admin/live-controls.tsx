@@ -1,6 +1,7 @@
 "use client"
 
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import type { ActionResult } from "@/app/admin/action-result"
 import { endSeason, shiftSeasonEnd, startSeasonNow } from "@/app/admin/live-actions"
 import { buttonClass } from "@/components/auth-form"
@@ -10,7 +11,7 @@ import { useSeasonClock } from "./use-season-clock"
 const primaryClass = buttonClass.replace("h-12 w-full", "h-11").replace("text-lg font-bold", "text-sm font-medium")
 const outlineClass =
 	"h-11 rounded-md border px-3 font-cond text-sm text-ink hover:bg-z2/50 active:bg-z2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
-const stripSize = "relative lg:h-9 lg:after:absolute lg:after:inset-x-0 lg:after:-inset-y-1"
+const stripSize = "relative lg:h-9 lg:after:absolute lg:after:inset-x-0 lg:after:-inset-y-1.5"
 
 export function LiveControls({
 	seasonId,
@@ -31,10 +32,17 @@ export function LiveControls({
 	const status = seasonStatus({ start, end }, new Date(currentNow))
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [confirming, setConfirming] = useState(false)
 	const dialog = useRef<HTMLDialogElement>(null)
 	const cancel = useRef<HTMLButtonElement>(null)
 	const titleId = useId()
 	const bodyId = useId()
+	useEffect(() => {
+		if (confirming) {
+			dialog.current?.showModal()
+			cancel.current?.focus()
+		}
+	}, [confirming])
 
 	async function run(action: () => Promise<ActionResult>) {
 		if (pending) return
@@ -87,10 +95,7 @@ export function LiveControls({
 								type="button"
 								className={`${outlineClass} ${stripSize} border-pace-3`}
 								disabled={pending}
-								onClick={() => {
-									dialog.current?.showModal()
-									cancel.current?.focus()
-								}}
+								onClick={() => setConfirming(true)}
 							>
 								End game
 							</button>
@@ -106,41 +111,46 @@ export function LiveControls({
 					{error}
 				</p>
 			)}
-			<dialog
-				ref={dialog}
-				aria-labelledby={titleId}
-				aria-describedby={bodyId}
-				className="m-auto w-full max-w-sm rounded-md bg-z1 p-5 text-ink backdrop:bg-z0/60"
-			>
-				<h2 id={titleId} className="font-head text-lg text-head">
-					End the game now?
-				</h2>
-				<p id={bodyId} className="mt-2 text-sm">
-					All {teamCount} {teamCount === 1 ? "team sees its" : "teams see their"} final score. You can add 5 minutes
-					afterwards.
-				</p>
-				<div className="mt-5 grid grid-cols-2 gap-2">
-					<button
-						ref={cancel}
-						type="button"
-						className={`${outlineClass} border-z2`}
-						onClick={() => dialog.current?.close()}
+			{confirming &&
+				createPortal(
+					<dialog
+						ref={dialog}
+						aria-labelledby={titleId}
+						aria-describedby={bodyId}
+						className="m-auto w-[calc(100%-var(--spacing)*12)] max-w-sm rounded-md bg-z1 p-5 text-ink backdrop:bg-z0/60"
+						onClose={() => setConfirming(false)}
 					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						className={primaryClass.replaceAll("accent", "pace-3")}
-						disabled={pending || status !== "live"}
-						onClick={() => {
-							dialog.current?.close()
-							void run(() => endSeason(seasonId))
-						}}
-					>
-						End game
-					</button>
-				</div>
-			</dialog>
+						<h2 id={titleId} className="font-head text-lg text-head">
+							End the game now?
+						</h2>
+						<p id={bodyId} className="mt-2 font-body text-sm">
+							All {teamCount} {teamCount === 1 ? "team sees its" : "teams see their"} final score. You can add 5 minutes
+							afterwards.
+						</p>
+						<div className="mt-5 grid grid-cols-2 gap-2">
+							<button
+								ref={cancel}
+								type="button"
+								className={`${outlineClass} border-z2`}
+								onClick={() => dialog.current?.close()}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className={primaryClass.replaceAll("accent", "pace-3")}
+								disabled={pending || status !== "live"}
+								onClick={() => {
+									dialog.current?.close()
+									void run(() => endSeason(seasonId))
+								}}
+							>
+								End game
+							</button>
+						</div>
+					</dialog>,
+					document.body,
+				)}
 		</div>
 	)
 }

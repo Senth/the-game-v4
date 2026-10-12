@@ -16,7 +16,7 @@ export function SeasonStatus({ start, end, now }: { start: Date | null; end: Dat
 						Upcoming
 						{start && start.getTime() - currentNow < 86_400_000 && (
 							<>
-								{" · in "}
+								{" · in\u00a0"}
 								<span className="text-head">{formatTimeLeft(start.getTime() - currentNow)}</span>
 							</>
 						)}
