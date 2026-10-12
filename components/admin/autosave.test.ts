@@ -18,6 +18,20 @@ afterEach(() => {
 })
 
 describe("createFieldSaver", () => {
+	it("tracks an adopted server value without sending it", async () => {
+		const save = vi.fn(async (_value: string) => ({ ok: true }))
+		const saver = createFieldSaver({ save, onState: vi.fn() })
+		saver.sync("Initial")
+		saver.edit("Initial")
+		await saver.blur()
+		expect(save).not.toHaveBeenCalled()
+		saver.edit("Changed")
+		await saver.flush()
+		saver.sync("Remote")
+		saver.edit("Changed")
+		await saver.flush()
+		expect(save.mock.calls).toEqual([["Changed"], ["Changed"]])
+	})
 	it("saves once 500 ms after typing for one second at 200 ms intervals", async () => {
 		const save = vi.fn(async (_value: string) => ({ ok: true }))
 		const onState = vi.fn()

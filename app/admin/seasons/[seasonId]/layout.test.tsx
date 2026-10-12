@@ -21,6 +21,7 @@ vi.mock("@/app/admin/actions", () => ({ createSeasonAction: vi.fn() }))
 vi.mock("next/navigation", async (importOriginal) => ({
 	...(await importOriginal<typeof import("next/navigation")>()),
 	useSelectedLayoutSegment: vi.fn(),
+	useRouter: () => ({ refresh: vi.fn() }),
 }))
 
 const fixture = buildFixture(new Date("2026-10-11T17:00:00Z"))
@@ -88,6 +89,9 @@ it("renders both frames with this season expanded, real team count, quiet previe
 	expect(html).toContain("Open a quest or team to preview it.")
 	expect(html).toContain('action="/logout" method="post"')
 	expect(html).not.toMatch(/<iframe|<input|Backwards log/)
+	expect(html).not.toContain("Saved")
+	expect(html).not.toContain("border-warn")
+	expect(html).toContain("border-b px-1 font-cond border-z1")
 	expect(html).toContain("w-72")
 	expect(html).toContain("w-92")
 	expect(html).toContain("min-w-0 flex-1")

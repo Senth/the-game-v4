@@ -70,6 +70,11 @@ export function createFieldSaver<T>({
 	}
 
 	return {
+		sync(next: T) {
+			if (state !== "saved" || inFlight) return
+			value = savedValue = next
+			hasValue = hasSavedValue = true
+		},
 		edit(next: T) {
 			value = next
 			hasValue = true
