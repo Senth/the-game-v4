@@ -71,6 +71,19 @@ describe("withHintIds", () => {
 })
 
 describe("Season", () => {
+	it.each([0, -1, 1.5, 1441, Number.NaN, Number.POSITIVE_INFINITY, "60", null])(
+		"rejects invalid lengthMinutes %j",
+		(lengthMinutes) => {
+			const stored = { _id: "s1", title: "Old", lengthMinutes, start: null, end: null, shuffleArcs: false, arcs: [] }
+			expect(Season.safeParse(stored).success).toBe(false)
+		},
+	)
+
+	it.each([1, 60, 1440])("accepts whole-minute lengthMinutes %i", (lengthMinutes) => {
+		const stored = { _id: "s1", title: "Old", lengthMinutes, start: null, end: null, shuffleArcs: false, arcs: [] }
+		expect(Season.parse(stored).lengthMinutes).toBe(lengthMinutes)
+	})
+
 	it("reads a stored season without registrationOpen as closed", () => {
 		const stored = { _id: "s1", title: "Old", lengthMinutes: 60, start: null, end: null, shuffleArcs: false, arcs: [] }
 		expect(Season.parse(stored).registrationOpen).toBe(false)

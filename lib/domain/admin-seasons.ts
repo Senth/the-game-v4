@@ -13,6 +13,61 @@ export function seasonStatus(
 	return hasEnded(season, now) ? "ended" : "live"
 }
 
+export function scheduleWindow(start: Date | null, lengthMinutes: number): Pick<Season, "start" | "end"> {
+	return { start, end: start ? new Date(start.getTime() + lengthMinutes * 60_000) : null }
+}
+
+export function startNowWindow(season: Pick<Season, "lengthMinutes">, now: Date): Pick<Season, "start" | "end"> {
+	return scheduleWindow(new Date(now.getTime() + 20_000), season.lengthMinutes)
+}
+
+export function shiftEndWindow(
+	season: Pick<Season, "start" | "end">,
+	deltaMinutes: -5 | 5,
+	now: Date,
+): Pick<Season, "start" | "end"> | null {
+	const status = seasonStatus(season, now)
+	if (status === "ended" && deltaMinutes === 5) {
+		return { start: season.start, end: new Date(now.getTime() + 300_000) }
+	}
+	if (status !== "live" || !season.end) return null
+	if (deltaMinutes === -5 && season.end.getTime() - now.getTime() <= 300_000) return null
+	return { start: season.start, end: new Date(season.end.getTime() + deltaMinutes * 60_000) }
+}
+
+export function overlappingSeason<T extends Pick<Season, "_id" | "start" | "end">>(
+	seasons: readonly T[],
+	seasonId: string,
+	window: Pick<Season, "start" | "end">,
+): T | null {
+	if (!window.start) return null
+	const start = window.start.getTime()
+	const end = window.end?.getTime() ?? Number.POSITIVE_INFINITY
+	if (end <= start) return null
+	return (
+		seasons.find(
+			(season) =>
+				season._id !== seasonId &&
+				season.start !== null &&
+				(season.end === null || season.end > season.start) &&
+				season.start.getTime() < end &&
+				start < (season.end?.getTime() ?? Number.POSITIVE_INFINITY),
+		) ?? null
+	)
+}
+
+export function liveControls(
+	season: Pick<Season, "start" | "end" | "arcs">,
+	now: Date,
+): { state: "start" | "live" | "ended"; canShrink: boolean; hasQuests: boolean } {
+	const status = seasonStatus(season, now)
+	return {
+		state: status === "unscheduled" || status === "upcoming" ? "start" : status,
+		canShrink: status === "live" && season.end !== null && season.end.getTime() - now.getTime() > 300_000,
+		hasQuests: season.arcs.some((arc) => arc.quests.length > 0),
+	}
+}
+
 export function groupSeasons<T extends Pick<Season, "title" | "start" | "end">>(
 	seasons: readonly T[],
 	now: Date,
