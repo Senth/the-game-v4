@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { Collection } from "mongodb"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { scheduleWindow, startNowWindow } from "@/lib/domain/admin-seasons"
 import type { Quest, SeasonInput } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
 import { collections, NotFoundError } from "./collections"
@@ -362,6 +364,34 @@ describe("season window writes", () => {
 		const rejected = results.find((result) => result.status === "rejected")
 		expect(rejected?.status === "rejected" && rejected.reason).toBeInstanceOf(StaleWindowError)
 		expect(await getSeason(season._id)).toEqual({ ...season, ...next })
+	})
+
+	it.each(["start now", "schedule"])("rejects stale length when deriving %s before the window read", async (action) => {
+		const season = await createSeason({ ...seasonInput(), lengthMinutes: 60 })
+		const next = action === "start now" ? startNowWindow(season, now) : scheduleWindow(at(10), season.lengthMinutes)
+		await setSeasonLength(season._id, 120, now)
+
+		await expect(setSeasonWindow(season._id, season, next, now)).rejects.toThrow(StaleWindowError)
+		expect(await getSeason(season._id)).toEqual({ ...season, lengthMinutes: 120 })
+	})
+
+	it.each(["start now", "schedule"])("rejects concurrent length edits before the %s window write", async (action) => {
+		const season = await createSeason({ ...seasonInput(), lengthMinutes: 60 })
+		const next = action === "start now" ? startNowWindow(season, now) : scheduleWindow(at(10), season.lengthMinutes)
+		const updateOne = Collection.prototype.updateOne
+		const write = vi.spyOn(Collection.prototype, "updateOne").mockImplementationOnce(async function (
+			this: Collection,
+			...args
+		) {
+			await setSeasonLength(season._id, 120, now)
+			return updateOne.apply(this, args)
+		})
+		try {
+			await expect(setSeasonWindow(season._id, season, next, now)).rejects.toThrow(StaleWindowError)
+			expect(await getSeason(season._id)).toEqual({ ...season, lengthMinutes: 120 })
+		} finally {
+			write.mockRestore()
+		}
 	})
 
 	it.each(["start", "end"] as const)("rejects a stale expected %s without changing either date", async (field) => {

@@ -62,16 +62,20 @@ function checkSeasonWindow(seasons: Season[], season: Season, next: SeasonWindow
 
 export async function setSeasonWindow(
 	seasonId: string,
-	expected: SeasonWindow,
+	expected: SeasonWindow & Partial<Pick<Season, "lengthMinutes">>,
 	next: SeasonWindow,
 	now: Date,
 ): Promise<void> {
-	const current = SeasonWindow.parse(expected)
+	const current = SeasonWindow.extend({ lengthMinutes: Season.shape.lengthMinutes.optional() }).parse(expected)
 	const parsed = SeasonWindow.parse(next)
 	const seasons = await listSeasons()
 	const season = seasons.find((s) => s._id === seasonId)
 	if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
-	if (season.start?.getTime() !== current.start?.getTime() || season.end?.getTime() !== current.end?.getTime()) {
+	if (
+		season.start?.getTime() !== current.start?.getTime() ||
+		season.end?.getTime() !== current.end?.getTime() ||
+		(current.lengthMinutes !== undefined && season.lengthMinutes !== current.lengthMinutes)
+	) {
 		throw new StaleWindowError(`Season ${seasonId} window changed`)
 	}
 	checkSeasonWindow(seasons, season, parsed, now)
