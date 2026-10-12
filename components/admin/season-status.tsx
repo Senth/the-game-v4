@@ -1,35 +1,31 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { formatTimeLeft } from "@/components/game/clock"
-import type { seasonStatus } from "@/lib/domain/admin-seasons"
+import { seasonStatus } from "@/lib/domain/admin-seasons"
+import { useSeasonClock } from "./use-season-clock"
 
-export function SeasonStatus({
-	status,
-	end,
-	now,
-}: {
-	status: ReturnType<typeof seasonStatus>
-	end: Date | null
-	now: number
-}) {
-	const [currentNow, setNow] = useState(now)
+export function SeasonStatus({ start, end, now }: { start: Date | null; end: Date | null; now: number }) {
+	const currentNow = useSeasonClock(now, start, end)
+	const status = seasonStatus({ start, end }, new Date(currentNow))
 	const endTime = end?.getTime() ?? null
-	useEffect(() => {
-		if (status !== "live" || endTime === null || endTime <= now) return
-		const startedAt = performance.now()
-		const timer = setInterval(() => {
-			const nextNow = now + performance.now() - startedAt
-			setNow(nextNow)
-			if (nextNow >= endTime) clearInterval(timer)
-		}, 1000)
-		return () => clearInterval(timer)
-	}, [status, endTime, now])
-	const live = status === "live" && (endTime === null || currentNow < endTime)
-	if (!live) {
+	if (status !== "live") {
 		return (
 			<span className="inline-flex h-6 shrink-0 items-center rounded bg-z2 px-2 font-cond text-xs text-ink">
-				{status === "upcoming" ? "Upcoming" : status === "unscheduled" ? "Not started" : "Ended"}
+				{status === "upcoming" ? (
+					<>
+						Upcoming
+						{start && start.getTime() - currentNow < 86_400_000 && (
+							<>
+								{" · in\u00a0"}
+								<span className="text-head">{formatTimeLeft(start.getTime() - currentNow)}</span>
+							</>
+						)}
+					</>
+				) : status === "unscheduled" ? (
+					"Not started"
+				) : (
+					"Ended"
+				)}
 			</span>
 		)
 	}

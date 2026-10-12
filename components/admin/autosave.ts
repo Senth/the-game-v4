@@ -5,11 +5,12 @@ export function createFieldSaver<T>({
 	onState,
 	delayMs = 500,
 }: {
-	save: (value: T) => Promise<{ ok: boolean }>
+	save: (value: T) => Promise<{ ok: boolean; error?: string }>
 	onState: (state: AutosaveState) => void
 	delayMs?: number
 }) {
 	let state: AutosaveState = "saved"
+	let error: string | undefined
 	let timer: ReturnType<typeof setTimeout> | undefined
 	let value: T
 	let hasValue = false
@@ -36,8 +37,12 @@ export function createFieldSaver<T>({
 	async function send(sentValue: T) {
 		let ok = false
 		try {
-			ok = (await save(sentValue)).ok
-		} catch {}
+			const result = await save(sentValue)
+			ok = result.ok
+			error = ok ? undefined : result.error
+		} catch {
+			error = undefined
+		}
 		inFlight = false
 		if (!ok) {
 			clearTimer()
@@ -60,6 +65,7 @@ export function createFieldSaver<T>({
 		clearTimer()
 		if (inFlight) return running
 		if (!hasValue || unchanged()) {
+			error = undefined
 			setState("saved")
 			return
 		}
@@ -70,6 +76,9 @@ export function createFieldSaver<T>({
 	}
 
 	return {
+		get error() {
+			return error
+		},
 		sync(next: T) {
 			if (state !== "saved" || inFlight) return
 			value = savedValue = next
@@ -80,6 +89,7 @@ export function createFieldSaver<T>({
 			hasValue = true
 			clearTimer()
 			if (!inFlight && unchanged()) {
+				error = undefined
 				setState("saved")
 				return
 			}

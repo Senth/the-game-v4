@@ -1,10 +1,12 @@
-import { beforeAll, describe, expect, it, vi } from "vitest"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import * as actions from "@/app/actions"
-import { createSeason, setSeasonField } from "@/lib/db/seasons"
-import { createTeam, getTeam, listTeams, setTeamField, solveCurrentQuest } from "@/lib/db/teams"
+import { registerTeam } from "@/lib/auth/register"
+import { collections } from "@/lib/db/collections"
+import { createSeason, setRegistrationOpen, setSeasonField } from "@/lib/db/seasons"
+import { createTeam, fillQuestOrders, getTeam, listTeams, setTeamField, solveCurrentQuest } from "@/lib/db/teams"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { publicBoard } from "@/lib/domain/player-game"
-import type { Team } from "@/lib/domain/schemas"
+import type { Season, Team } from "@/lib/domain/schemas"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { buildFixture } from "@/scripts/fixture"
@@ -20,7 +22,12 @@ vi.mock("@/lib/auth/guards", async () => {
 
 vi.mock("@/lib/db/teams", async (importOriginal) => {
 	const original = await importOriginal<typeof import("@/lib/db/teams")>()
-	return { ...original, listTeams: vi.fn(original.listTeams), solveCurrentQuest: vi.fn(original.solveCurrentQuest) }
+	return {
+		...original,
+		fillQuestOrders: vi.fn(original.fillQuestOrders),
+		listTeams: vi.fn(original.listTeams),
+		solveCurrentQuest: vi.fn(original.solveCurrentQuest),
+	}
 })
 
 useTestDb()
@@ -47,9 +54,9 @@ async function freshTeam(overrides: Partial<Team> = {}): Promise<Team> {
 	return createTeam({ ...ninjas, _id: `ninjas-${created}`, name: `Ninjas ${created}`, passwordHash: "x", ...overrides })
 }
 
-function recordEvents(teamId: string) {
+function recordEvents(teamId: string, seasonId = season._id) {
 	const events: string[] = []
-	const unsubscribe = subscribe([teamChannel(teamId), seasonChannel(season._id), boardChannel], ({ channel }) =>
+	const unsubscribe = subscribe([teamChannel(teamId), seasonChannel(seasonId), boardChannel], ({ channel }) =>
 		events.push(channel),
 	)
 	return { events, unsubscribe }
@@ -464,5 +471,130 @@ describe("hint history through the actions", () => {
 			completed: true,
 			progress: [{ questId: target.questId, hintsRevealed: snapshots, pointsEarned: 35 }],
 		})
+	})
+})
+
+describe("lazy quest orders", () => {
+	const loaders = [
+		{ name: "loadGame", load: loadGame },
+		{ name: "loadStandings", load: loadStandings },
+		{ name: "loadBoard", load: (_team: Team, at: Date) => loadBoard(at) },
+	]
+
+	beforeEach(async () => {
+		const { seasons, teams } = await collections()
+		await seasons.deleteMany({})
+		await teams.deleteMany({})
+		vi.mocked(fillQuestOrders).mockClear()
+		vi.mocked(listTeams).mockClear()
+	})
+
+	async function pendingTeam(overrides: Partial<Season> = {}) {
+		const pending = await createSeason({
+			...season,
+			_id: crypto.randomUUID(),
+			start: now,
+			end: new Date(now.getTime() + 3_600_000),
+			shuffleArcs: true,
+			...overrides,
+		})
+		const team = await freshTeam({
+			seasonId: pending._id,
+			questOrder: [],
+			progress: [],
+			questIndex: 0,
+			score: 0,
+			completed: false,
+		})
+		return { pending, team }
+	}
+
+	it("fills a team registered before start on its first load at start", async () => {
+		const { pending } = await pendingTeam()
+		const beforeStart = new Date(now.getTime() - 1)
+		await setRegistrationOpen(pending._id, true, beforeStart)
+		const registered = await registerTeam("Early birds", "password", beforeStart)
+		if (!registered.ok) throw new Error(registered.error)
+		expect(registered.team.questOrder).toEqual([])
+		expect(await loadGame(registered.team, beforeStart)).toEqual({ lifecycleState: "countdown", start: now })
+		expect(vi.mocked(fillQuestOrders)).not.toHaveBeenCalled()
+		const game = await loadGame(registered.team, now)
+		const stored = await getTeam(registered.team._id)
+		expect(stored?.questOrder).toHaveLength(12)
+		expect(game).toMatchObject({ lifecycleState: "running", total: 12, quest: { id: stored?.questOrder[0] } })
+		expect(JSON.stringify(game)).not.toContain("secret-")
+	})
+
+	it.each(loaders)("$name fills, re-reads and publishes once, then skips fill on refetch", async ({ name, load }) => {
+		const { pending, team } = await pendingTeam()
+		const { events, unsubscribe } = recordEvents(team._id, pending._id)
+		const first = await load(team, now)
+		const firstReads = vi.mocked(listTeams).mock.calls.length
+		vi.mocked(listTeams).mockClear()
+		const second = await load(team, now)
+		unsubscribe()
+		const stored = await getTeam(team._id)
+		expect(stored?.questOrder).toHaveLength(12)
+		expect(first).toMatchObject(
+			name === "loadGame"
+				? { total: 12, quest: { id: stored?.questOrder[0] } }
+				: name === "loadStandings"
+					? { you: { total: 12 }, rows: [{ total: 12 }] }
+					: { rows: [{ total: 12 }] },
+		)
+		expect(second).toEqual(first)
+		expect(firstReads).toBe(2)
+		expect(vi.mocked(listTeams)).toHaveBeenCalledExactlyOnceWith(pending._id)
+		expect(vi.mocked(fillQuestOrders)).toHaveBeenCalledOnce()
+		expect(events).toEqual([seasonChannel(pending._id), boardChannel])
+		expect(JSON.stringify(first)).not.toContain("secret-")
+	})
+
+	it("parallel teammate loads return the same persisted current quest and publish only for the winning fill", async () => {
+		const { pending, team } = await pendingTeam()
+		const { events, unsubscribe } = recordEvents(team._id, pending._id)
+		const games = await Promise.all(Array.from({ length: 10 }, () => loadGame(team, now)))
+		unsubscribe()
+		const stored = await getTeam(team._id)
+		expect(stored?.questOrder).toHaveLength(12)
+		for (const game of games) {
+			expect(game).toEqual(games[0])
+			expect(game).toMatchObject({ lifecycleState: "running", quest: { id: stored?.questOrder[0] } })
+		}
+		const writes = await Promise.all(vi.mocked(fillQuestOrders).mock.results.map((result) => result.value))
+		expect(writes.filter(Boolean)).toHaveLength(1)
+		expect(events).toEqual([seasonChannel(pending._id), boardChannel])
+	})
+
+	it.each(loaders)("$name writes and publishes nothing for zero quests", async ({ load }) => {
+		const { pending, team } = await pendingTeam({ arcs: [] })
+		const { events, unsubscribe } = recordEvents(team._id, pending._id)
+		await load(team, now)
+		await load(team, now)
+		unsubscribe()
+		expect(await getTeam(team._id)).toEqual(team)
+		expect(events).toEqual([])
+		const writes = await Promise.all(vi.mocked(fillQuestOrders).mock.results.map((result) => result.value))
+		expect(writes).toEqual([false, false])
+	})
+
+	it.each(loaders)("$name skips fill and extra reads for existing orders or progress", async ({ load }) => {
+		const { pending, team } = await pendingTeam()
+		await setTeamField(team._id, "questOrder", [current])
+		await freshTeam({ seasonId: pending._id, questOrder: [], progress: ninjas.progress })
+		await load(team, now)
+		expect(vi.mocked(fillQuestOrders)).not.toHaveBeenCalled()
+		expect(vi.mocked(listTeams)).toHaveBeenCalledExactlyOnceWith(pending._id)
+	})
+
+	it.each([null, new Date(now.getTime() + 1)])("skips fill and extra reads before start %s", async (start) => {
+		const { pending, team } = await pendingTeam({ start })
+		for (const load of [loadGame, loadStandings]) {
+			vi.mocked(listTeams).mockClear()
+			await load(team, now)
+			expect(vi.mocked(listTeams)).toHaveBeenCalledExactlyOnceWith(pending._id)
+		}
+		expect(vi.mocked(fillQuestOrders)).not.toHaveBeenCalled()
+		expect(await getTeam(team._id)).toEqual(team)
 	})
 })

@@ -1,5 +1,5 @@
 import { getSeason, listSeasons } from "@/lib/db/seasons"
-import { getTeam, listTeams, revealHint as revealTeamHint, solveCurrentQuest } from "@/lib/db/teams"
+import { fillQuestOrders, getTeam, listTeams, revealHint as revealTeamHint, solveCurrentQuest } from "@/lib/db/teams"
 import {
 	boardSeasons,
 	currentQuest,
@@ -17,7 +17,7 @@ import {
 	playerStandings,
 	publicBoard,
 } from "@/lib/domain/player-game"
-import type { Team } from "@/lib/domain/schemas"
+import type { Season, Team } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
 
 export type SubmitResult =
@@ -29,15 +29,32 @@ export type RevealResult = { ok: false; reason: "not-running" | "stale" } | { ok
 
 const solveRetries = 3
 
+async function fillEmptyQuestOrders(season: Season | null, teams: Team[], now: Date): Promise<Team[]> {
+	if (
+		!season?.start ||
+		season.start > now ||
+		!teams.some((team) => team.questOrder.length === 0 && team.progress.length === 0)
+	) {
+		return teams
+	}
+	if (await fillQuestOrders(season, teams)) {
+		publish(seasonChannel(season._id))
+		publish(boardChannel)
+	}
+	return listTeams(season._id)
+}
+
 export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame> {
 	if (!team.seasonId) return playerGame(null, team, [], now)
-	const [season, teams] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
+	const [season, listed] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
+	const teams = await fillEmptyQuestOrders(season, listed, now)
 	return playerGame(season, teams.find((candidate) => candidate._id === team._id) ?? team, teams, now)
 }
 
 export async function loadStandings(team: Team, now = new Date()): Promise<PlayerStandings> {
 	if (!team.seasonId) return playerStandings(null, team, [], now)
-	const [season, teams] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
+	const [season, listed] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
+	const teams = await fillEmptyQuestOrders(season, listed, now)
 	return playerStandings(season, teams.find((candidate) => candidate._id === team._id) ?? team, teams, now)
 }
 
@@ -45,7 +62,9 @@ export async function loadBoard(now = new Date()): Promise<PublicBoard> {
 	const seasons = await listSeasons()
 	const { running, final } = boardSeasons(seasons, now)
 	const season = running ?? final
-	const teamsBySeason = season ? { [season._id]: await listTeams(season._id) } : {}
+	const teamsBySeason = season
+		? { [season._id]: await fillEmptyQuestOrders(season, await listTeams(season._id), now) }
+		: {}
 	return publicBoard(seasons, teamsBySeason, now)
 }
 

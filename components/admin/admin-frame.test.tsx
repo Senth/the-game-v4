@@ -7,6 +7,7 @@ it("renders responsive header and menu slots with logout at the far right", () =
 		<AdminFrame
 			title="Seasons"
 			status={<span>Status slot</span>}
+			controls={<button type="button">Controls slot</button>}
 			menu={<nav>Menu slot</nav>}
 			phoneHeader={<header>Phone slot</header>}
 		>
@@ -19,6 +20,8 @@ it("renders responsive header and menu slots with logout at the far right", () =
 	expect(html).toContain("w-72")
 	expect(html).toContain("lg:block")
 	expect(html).toContain("Status slot")
+	expect(html).toContain("Controls slot")
+	expect(html.indexOf("Controls slot")).toBeLessThan(html.indexOf('action="/logout"'))
 	expect(html).toContain("Menu slot")
 	expect(html).toContain("Phone slot")
 	expect(html).toContain("Content slot")
@@ -29,6 +32,16 @@ it("renders responsive header and menu slots with logout at the far right", () =
 	expect(html).toContain('action="/logout" method="post"')
 	expect(html).toContain("min-w-0 flex-1")
 	expect(html).not.toContain("w-92")
+})
+
+it("puts desktop live controls after autosave status and before logout", () => {
+	const html = renderToStaticMarkup(
+		<AdminFrame title="Season" menu={null} phoneHeader={null} controls={<span>Live controls</span>}>
+			<p>Content</p>
+		</AdminFrame>,
+	)
+	expect(html.indexOf("Live controls")).toBeGreaterThan(html.indexOf("ml-auto"))
+	expect(html.indexOf("Live controls")).toBeLessThan(html.indexOf("Log out"))
 })
 
 it("keeps the preview beside the flexible middle pane only on desktop", () => {

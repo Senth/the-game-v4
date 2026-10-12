@@ -33,7 +33,7 @@ export function SeasonList({ seasons, now }: { seasons: Season[]; now: number })
 															: "No start time"}
 													</p>
 												</div>
-												{status !== "ended" && <SeasonStatus status={status} end={season.end} now={now} />}
+												{status !== "ended" && <SeasonStatus start={season.start} end={season.end} now={now} />}
 												<span aria-hidden="true" className="text-muted">
 													›
 												</span>

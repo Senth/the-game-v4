@@ -33,7 +33,7 @@ export type Arc = z.infer<typeof Arc>
 export const Season = z.object({
 	_id: id,
 	title: z.string(),
-	lengthMinutes: z.number(),
+	lengthMinutes: z.number().int().min(1).max(1440),
 	start: z.date().nullable(),
 	end: z.date().nullable(),
 	shuffleArcs: z.boolean(),

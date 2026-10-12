@@ -1,15 +1,21 @@
-import { describe, expect, it } from "vitest"
+import { Collection } from "mongodb"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { scheduleWindow, startNowWindow } from "@/lib/domain/admin-seasons"
 import type { Quest, SeasonInput } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
-import { NotFoundError } from "./collections"
+import { collections, NotFoundError } from "./collections"
 import {
 	createSeason,
 	getSeason,
 	listSeasons,
 	patchSeasonList,
 	RegistrationConflictError,
+	SeasonOverlapError,
+	StaleWindowError,
 	setRegistrationOpen,
 	setSeasonField,
+	setSeasonLength,
+	setSeasonWindow,
 } from "./seasons"
 import { createTeam, getTeam, revealHint } from "./teams"
 
@@ -334,5 +340,154 @@ describe("seasons", () => {
 		await expect(setSeasonField(season._id, { field: "registrationOpen" }, true)).rejects.toThrow("setRegistrationOpen")
 		expect((await getSeason(season._id))?.registrationOpen).toBe(false)
 		await setRegistrationOpen(open._id, false)
+	})
+})
+
+describe("season window writes", () => {
+	const now = new Date("2026-10-24T17:00:00Z")
+	const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000)
+	const empty = { start: null, end: null }
+
+	beforeEach(async () => {
+		await (await collections()).seasons.deleteMany({})
+	})
+
+	it("applies one of two concurrent writes with the same expected window", async () => {
+		const season = await createSeason(seasonInput())
+		const next = { start: at(1), end: at(121) }
+		const results = await Promise.allSettled([
+			setSeasonWindow(season._id, empty, next, now),
+			setSeasonWindow(season._id, empty, next, now),
+		])
+
+		expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+		const rejected = results.find((result) => result.status === "rejected")
+		expect(rejected?.status === "rejected" && rejected.reason).toBeInstanceOf(StaleWindowError)
+		expect(await getSeason(season._id)).toEqual({ ...season, ...next })
+	})
+
+	it.each(["start now", "schedule"])("rejects stale length when deriving %s before the window read", async (action) => {
+		const season = await createSeason({ ...seasonInput(), lengthMinutes: 60 })
+		const next = action === "start now" ? startNowWindow(season, now) : scheduleWindow(at(10), season.lengthMinutes)
+		await setSeasonLength(season._id, 120, now)
+
+		await expect(setSeasonWindow(season._id, season, next, now)).rejects.toThrow(StaleWindowError)
+		expect(await getSeason(season._id)).toEqual({ ...season, lengthMinutes: 120 })
+	})
+
+	it.each(["start now", "schedule"])("rejects concurrent length edits before the %s window write", async (action) => {
+		const season = await createSeason({ ...seasonInput(), lengthMinutes: 60 })
+		const next = action === "start now" ? startNowWindow(season, now) : scheduleWindow(at(10), season.lengthMinutes)
+		const updateOne = Collection.prototype.updateOne
+		const write = vi.spyOn(Collection.prototype, "updateOne").mockImplementationOnce(async function (
+			this: Collection,
+			...args
+		) {
+			await setSeasonLength(season._id, 120, now)
+			return updateOne.apply(this, args)
+		})
+		try {
+			await expect(setSeasonWindow(season._id, season, next, now)).rejects.toThrow(StaleWindowError)
+			expect(await getSeason(season._id)).toEqual({ ...season, lengthMinutes: 120 })
+		} finally {
+			write.mockRestore()
+		}
+	})
+
+	it.each(["start", "end"] as const)("rejects a stale expected %s without changing either date", async (field) => {
+		const season = await createSeason({ ...seasonInput(), start: at(10), end: at(130) })
+		await createSeason({ ...seasonInput(), start: at(130), end: at(250) })
+		const expected = { start: season.start, end: season.end, [field]: at(20) }
+		await expect(setSeasonWindow(season._id, expected, { start: at(15), end: at(135) }, now)).rejects.toThrow(
+			StaleWindowError,
+		)
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+
+	it.each([-30, 30])("rejects overlap with a season starting %i minutes from now without writing", async (start) => {
+		const blocker = await createSeason({ ...seasonInput(), title: "Spring Hunt", start: at(start), end: at(90) })
+		const season = await createSeason(seasonInput())
+		const rejected = setSeasonWindow(season._id, empty, { start: at(60), end: at(180) }, now)
+
+		await expect(rejected).rejects.toBeInstanceOf(SeasonOverlapError)
+		await expect(rejected).rejects.toMatchObject({ season: blocker })
+		await expect(rejected).rejects.toThrow("Spring Hunt")
+		expect(await getSeason(season._id)).toEqual(season)
+		expect(await getSeason(blocker._id)).toEqual(blocker)
+	})
+
+	it("allows touching windows, updates its own window and clears both dates together", async () => {
+		await createSeason({ ...seasonInput(), start: at(-30), end: at(30) })
+		await createSeason({ ...seasonInput(), start: at(150), end: at(270) })
+		const season = await createSeason(seasonInput())
+		const next = { start: at(30), end: at(150) }
+		await setSeasonWindow(season._id, empty, next, now)
+		const shorter = { ...next, end: at(145) }
+		await setSeasonWindow(season._id, next, shorter, now)
+		expect(await getSeason(season._id)).toEqual({ ...season, ...shorter })
+		await setSeasonWindow(season._id, shorter, empty, now)
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+
+	it("refuses to reopen a flagged ended season while another counting season has registration open", async () => {
+		const ended = await createSeason({ ...seasonInput(), start: at(-120), end: at(0) })
+		await setRegistrationOpen(ended._id, true, at(-1))
+		const open = await createSeason({ ...seasonInput(), title: "Season Open" })
+		await setRegistrationOpen(open._id, true, now)
+		const before = await getSeason(ended._id)
+		const next = { start: ended.start, end: at(5) }
+		const rejected = setSeasonWindow(ended._id, ended, next, now)
+		await expect(rejected).rejects.toThrow(RegistrationConflictError)
+		await expect(rejected).rejects.toThrow('Registration is already open for "Season Open"')
+		expect(await getSeason(ended._id)).toEqual(before)
+		await setSeasonWindow(ended._id, ended, { start: ended.start, end: at(-1) }, now)
+		await setRegistrationOpen(open._id, false, now)
+		await setSeasonWindow(ended._id, { start: ended.start, end: at(-1) }, next, now)
+		expect(await getSeason(ended._id)).toEqual({ ...before, ...next })
+	})
+
+	it("validates window dates and rejects missing seasons without writing", async () => {
+		const season = await createSeason(seasonInput())
+		await expect(setSeasonWindow("missing", empty, empty, now)).rejects.toThrow(NotFoundError)
+		await expect(
+			setSeasonWindow(season._id, empty, { start: new Date("invalid"), end: at(120) }, now),
+		).rejects.toThrow()
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+
+	it.each([
+		{ state: "unscheduled", start: null, end: null, nextEnd: null },
+		{ state: "upcoming", start: at(1), end: at(121), nextEnd: at(61) },
+	])("changes length while $state and keeps its window consistent", async ({ start, end, nextEnd }) => {
+		const season = await createSeason({ ...seasonInput(), start, end })
+		await setSeasonLength(season._id, 60, now)
+		expect(await getSeason(season._id)).toEqual({ ...season, lengthMinutes: 60, end: nextEnd })
+	})
+
+	it.each([
+		{ state: "live", start: at(0), end: at(120) },
+		{ state: "ended", start: at(-120), end: at(0) },
+	])("locks length while $state", async ({ start, end }) => {
+		const season = await createSeason({ ...seasonInput(), start, end })
+		await expect(setSeasonLength(season._id, 60, now)).rejects.toThrow("Set at start")
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+
+	it("checks overlap when changing upcoming length and permits touching the next season", async () => {
+		const season = await createSeason({ ...seasonInput(), start: at(30), end: at(150) })
+		await createSeason({ ...seasonInput(), start: at(150), end: at(270) })
+		await expect(setSeasonLength(season._id, 121, now)).rejects.toThrow(SeasonOverlapError)
+		expect(await getSeason(season._id)).toEqual(season)
+		await setSeasonLength(season._id, 120, now)
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+
+	it("validates length before writing and rejects missing seasons", async () => {
+		const season = await createSeason(seasonInput())
+		for (const minutes of [0, 1441, 1.5, Number.NaN]) {
+			await expect(setSeasonLength(season._id, minutes, now)).rejects.toThrow()
+		}
+		await expect(setSeasonLength("missing", 60, now)).rejects.toThrow(NotFoundError)
+		expect(await getSeason(season._id)).toEqual(season)
 	})
 })

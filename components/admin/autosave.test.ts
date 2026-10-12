@@ -18,6 +18,31 @@ afterEach(() => {
 })
 
 describe("createFieldSaver", () => {
+	it("retains the latest failure message through retry and clears it on success", async () => {
+		const save = vi.fn(async (_value: string): Promise<{ ok: boolean; error?: string }> => ({ ok: true }))
+		save.mockResolvedValueOnce({ ok: false, error: "Pick a time in the future." })
+		save.mockResolvedValueOnce({ ok: false, error: '"Spring Hunt" is live. End it first.' })
+		const saver = createFieldSaver({ save, onState: vi.fn() })
+		saver.edit("First")
+		await saver.flush()
+		expect(saver.error).toBe("Pick a time in the future.")
+		await saver.retry()
+		expect(saver.error).toBe('"Spring Hunt" is live. End it first.')
+		await saver.retry()
+		expect(saver.error).toBeUndefined()
+		expect(save.mock.calls).toEqual([["First"], ["First"], ["First"]])
+	})
+
+	it("clears a failed message when the edit returns to the saved value", async () => {
+		const save = vi.fn(async (_value: string) => ({ ok: false, error: "Invalid value." }))
+		const saver = createFieldSaver({ save, onState: vi.fn() })
+		saver.sync("Initial")
+		saver.edit("Failed")
+		await saver.flush()
+		saver.edit("Initial")
+		expect(saver.error).toBeUndefined()
+	})
+
 	it("tracks an adopted server value without sending it", async () => {
 		const save = vi.fn(async (_value: string) => ({ ok: true }))
 		const saver = createFieldSaver({ save, onState: vi.fn() })

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { requireAdmin } from "@/lib/auth/guards"
+import { collections } from "@/lib/db/collections"
 import type { SeasonFieldTarget } from "@/lib/db/seasons"
 import * as seasons from "@/lib/db/seasons"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
@@ -15,7 +16,8 @@ vi.mock("@/lib/events/bus", async (original) => ({
 
 useTestDb()
 
-beforeEach(() => {
+beforeEach(async () => {
+	await (await collections()).seasons.deleteMany({})
 	vi.restoreAllMocks()
 	vi.mocked(requireAdmin).mockReset().mockResolvedValue({ _id: "admin", name: "admin", passwordHash: "hash" })
 	vi.mocked(publish).mockClear()
@@ -54,6 +56,123 @@ async function setup() {
 const quest = { arcId: "a1", questId: "q1" }
 
 describe("autosave actions", () => {
+	it("rejects direct end saves without writing or publishing", async () => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field: "end" }, new Date())).toMatchObject({ ok: false })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("rejects scheduling in the past with shared copy", async () => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field: "start" }, new Date(Date.now() - 1000))).toEqual({
+			ok: false,
+			error: "Pick a time in the future.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("schedules start and end together", async () => {
+		const season = await setup()
+		const start = new Date(Date.now() + 60_000)
+		expect(await saveSeasonField(season._id, { field: "start" }, start)).toEqual({ ok: true })
+		expect(await seasons.getSeason(season._id)).toMatchObject({
+			start,
+			end: new Date(start.getTime() + 3_600_000),
+		})
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+	})
+
+	it("allows scheduling without quests and clearing the upcoming window", async () => {
+		const season = await setup()
+		await seasons.setSeasonField(season._id, { field: "arcs" }, [])
+		const start = new Date(Date.now() + 60_000)
+		expect(await saveSeasonField(season._id, { field: "start" }, start)).toEqual({ ok: true })
+		vi.mocked(publish).mockClear()
+		expect(await saveSeasonField(season._id, { field: "start" }, null)).toEqual({ ok: true })
+		expect(await seasons.getSeason(season._id)).toMatchObject({ start: null, end: null })
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+	})
+
+	it("updates configured length and the upcoming end together", async () => {
+		const season = await setup()
+		const start = new Date(Date.now() + 60_000)
+		await seasons.setSeasonWindow(season._id, season, { start, end: new Date(start.getTime() + 3_600_000) }, new Date())
+		expect(await saveSeasonField(season._id, { field: "lengthMinutes" }, 90)).toEqual({ ok: true })
+		expect(await seasons.getSeason(season._id)).toMatchObject({
+			start,
+			end: new Date(start.getTime() + 5_400_000),
+			lengthMinutes: 90,
+		})
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+	})
+
+	it.each([0, 1.5, 1441, "60"])("rejects invalid configured length %j", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field: "lengthMinutes" }, value)).toEqual({
+			ok: false,
+			error: "Invalid value.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each(["live", "ended"])("locks start and length when %s", async (state) => {
+		const season = await setup()
+		const now = new Date()
+		await seasons.setSeasonWindow(
+			season._id,
+			season,
+			{
+				start: new Date(now.getTime() - 60_000),
+				end: new Date(now.getTime() + (state === "live" ? 60_000 : -1000)),
+			},
+			now,
+		)
+		const before = await seasons.getSeason(season._id)
+		for (const [field, value] of [
+			["start", null],
+			["start", new Date(now.getTime() + 60_000)],
+			["lengthMinutes", 90],
+		] as const) {
+			expect(await saveSeasonField(season._id, { field }, value)).toEqual({
+				ok: false,
+				error: "Set at start. Use −5 / +5 min while live.",
+			})
+		}
+		expect(await seasons.getSeason(season._id)).toEqual(before)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each(["start", "lengthMinutes"])("%s returns formatted scheduled overlap copy", async (field) => {
+		const season = await setup()
+		const start = new Date("2099-10-24T17:00:00Z")
+		const end = new Date("2099-10-24T18:00:00Z")
+		if (field === "lengthMinutes") {
+			const earlier = new Date(start.getTime() - 3_600_000)
+			await seasons.setSeasonWindow(season._id, season, { start: earlier, end: start }, new Date())
+		}
+		await seasons.createSeason({ title: "Spring Hunt", lengthMinutes: 60, start, end, shuffleArcs: false, arcs: [] })
+		expect(
+			await saveSeasonField(season._id, { field: field as "start" | "lengthMinutes" }, field === "start" ? start : 90),
+		).toEqual({
+			ok: false,
+			error: 'Overlaps "Spring Hunt", Sat 24 Oct 19:00–20:00.',
+		})
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("returns stale window errors without publishing", async () => {
+		const season = await setup()
+		vi.spyOn(seasons, "setSeasonWindow").mockRejectedValueOnce(new seasons.StaleWindowError("Season window changed"))
+		expect(await saveSeasonField(season._id, { field: "start" }, new Date(Date.now() + 60_000))).toEqual({
+			ok: false,
+			error: "Season window changed",
+		})
+		expect(publish).not.toHaveBeenCalled()
+	})
+
 	it.each(["save", "patch"])("checks guard before reading arguments for %s and preserves redirect", async (action) => {
 		const season = await setup()
 		vi.mocked(requireAdmin).mockImplementationOnce(async () => redirect("/login"))
@@ -82,22 +201,28 @@ describe("autosave actions", () => {
 		{ field: "registrationOpen" },
 	])("rejects list or registration field %j without writing or publishing", async (target) => {
 		const season = await setup()
-		expect(await saveSeasonField(season._id, target, [])).toEqual({ ok: false })
+		expect(await saveSeasonField(season._id, target, [])).toEqual({ ok: false, error: "Invalid value." })
 		expect(await seasons.getSeason(season._id)).toEqual(season)
 		expect(publish).not.toHaveBeenCalled()
 	})
 
 	it.each([42, "", "  ", "x".repeat(61)])("rejects invalid season title %j", async (value) => {
 		const season = await setup()
-		expect(await saveSeasonField(season._id, { field: "title" }, value)).toEqual({ ok: false })
+		expect(await saveSeasonField(season._id, { field: "title" }, value)).toEqual({ ok: false, error: "Invalid value." })
 		expect(await seasons.getSeason(season._id)).toEqual(season)
 		expect(publish).not.toHaveBeenCalled()
 	})
 
 	it("rejects invalid field values, unknown ids and invalid hint patches without writing or publishing", async () => {
 		const season = await setup()
-		expect(await saveSeasonField(season._id, { ...quest, field: "points" }, "ten")).toEqual({ ok: false })
-		expect(await saveSeasonField("missing", { field: "title" }, "New")).toEqual({ ok: false })
+		expect(await saveSeasonField(season._id, { ...quest, field: "points" }, "ten")).toEqual({
+			ok: false,
+			error: "Invalid value.",
+		})
+		expect(await saveSeasonField("missing", { field: "title" }, "New")).toMatchObject({
+			ok: false,
+			error: expect.any(String),
+		})
 		expect(
 			await patchSeasonList(
 				season._id,
@@ -138,7 +263,7 @@ describe("autosave actions", () => {
 		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
 	})
 
-	it("returns false on registration conflict without publishing", async () => {
+	it("rejects end autosave even when it would reopen registration", async () => {
 		const season = await setup()
 		const open = await seasons.createSeason({
 			title: "Open",
@@ -153,7 +278,7 @@ describe("autosave actions", () => {
 		await seasons.setRegistrationOpen(season._id, true, new Date(now.getTime() - 2000))
 		await seasons.setRegistrationOpen(open._id, true)
 		const before = await seasons.getSeason(season._id)
-		expect(await saveSeasonField(season._id, { field: "end" }, null)).toEqual({ ok: false })
+		expect(await saveSeasonField(season._id, { field: "end" }, null)).toEqual({ ok: false, error: "Invalid value." })
 		expect(await seasons.getSeason(season._id)).toEqual(before)
 		expect(publish).not.toHaveBeenCalled()
 		await seasons.setRegistrationOpen(open._id, false)

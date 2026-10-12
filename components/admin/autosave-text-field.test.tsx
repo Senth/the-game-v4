@@ -16,6 +16,7 @@ const field = {
 	onFocus: vi.fn(),
 	onBlur: vi.fn(async () => {}),
 	failed: false,
+	error: undefined,
 }
 
 beforeEach(() => {
@@ -49,9 +50,16 @@ it("marks failed edits with a warn border and an accessible Not saved line", () 
 	expect(html).toContain(`id="${id}-error" role="alert" class="mt-1.5 font-cond text-xs text-warn">Not saved`)
 })
 
+it("shows the action's exact error instead of generic Not saved copy", () => {
+	vi.mocked(useAutosaveField).mockReturnValue({ ...field, failed: true, error: "Invalid value." })
+	const html = renderToStaticMarkup(<AutosaveTextField label="Title" target={target} serverValue="Old title" />)
+	expect(html).toContain("Invalid value.")
+	expect(html).not.toContain("Not saved")
+})
+
 it("passes title edits, focus and blur to the autosave hook", async () => {
 	const element = AutosaveTextField({ label: "Title", target, serverValue: "Cipher Night 2026" })
-	const input = element.props.children[1]
+	const input = element
 	input.props.onChange({ target: { value: "New title" } })
 	input.props.onFocus()
 	await input.props.onBlur()

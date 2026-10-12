@@ -125,8 +125,14 @@ Opening registration on an ended season is rejected. Ended seasons keep their fl
 Changing `end` so a flagged ended season counts again is rejected the same way while another counting season has it.
 Names may repeat in different seasons, not within one season.
 Self-registration trims names, accepts 1 to 30 characters and needs a password of at least 4.
-A team registering before start gets an empty order. Live Start builds it (#14).
-Live Start sets start and end. The admin can shift end by minus or plus 5 minutes, or confirm End game.
+The first game, standings or board load after start builds a team's empty order.
+Exactly one concurrent load writes it.
+"Start now" sets `start` 20 seconds from now and `end` to `start` plus `lengthMinutes`. It needs at least one quest.
+Admins may schedule a future start on Settings or clear it while upcoming.
+A scheduled `end` always follows `start` plus `lengthMinutes`.
+Length locks once the season is live. While live, −5 min needs more than 5 minutes left; +5 min always works.
+"End game" sets `end` to now. On an ended season, +5 min sets `end` to now plus 5 minutes.
+Two seasons' start-to-end windows may not overlap. Rejections name the other season.
 
 ### Quest order and rail
 
@@ -206,8 +212,10 @@ Other teams' rails show solved and todo only; only your row shows current, and o
 
 ### Authoring and live edits
 
-Every season field except `registrationOpen` autosaves on blur or after 500 ms idle.
-A server action `$set`s one validated path.
+Every season field except `end` and `registrationOpen` autosaves on blur or after 500 ms idle.
+`start` and `lengthMinutes` autosave through window checks. Window saves set `start` and `end` together.
+`end` changes only through live controls.
+A server action validates values before writing.
 The `registrationOpen` field keeps its own action.
 Lists never save whole. `answers` and `hints` change by adding or removing one item.
 Arc and quest add and remove belong to I-15 and I-24.

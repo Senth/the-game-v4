@@ -178,6 +178,7 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 			return saver.blur()
 		},
 		failed: state === "failed",
+		error: saver.error,
 	}
 }
 
