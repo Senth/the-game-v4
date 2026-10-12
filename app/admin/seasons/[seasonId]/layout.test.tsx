@@ -18,6 +18,7 @@ vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn(), listSeasons: vi.fn() }))
 vi.mock("@/lib/db/teams", () => ({ countTeams: vi.fn() }))
 vi.mock("@/app/admin/actions", () => ({ createSeasonAction: vi.fn() }))
+vi.mock("@/app/admin/live-actions", () => ({ startSeasonNow: vi.fn(), shiftSeasonEnd: vi.fn(), endSeason: vi.fn() }))
 vi.mock("next/navigation", async (importOriginal) => ({
 	...(await importOriginal<typeof import("next/navigation")>()),
 	useSelectedLayoutSegment: vi.fn(),
@@ -94,10 +95,38 @@ it("renders both frames with this season expanded, real team count, quiet previe
 	expect(html).not.toContain("Saved")
 	expect(html).not.toContain("border-warn")
 	expect(html).toContain("border-b px-1 font-cond border-z1")
+	expect(html.split("Start now")).toHaveLength(3)
+	expect(html).toContain('class="mt-3"')
 	expect(html).toContain("w-72")
 	expect(html).toContain("w-92")
 	expect(html).toContain("min-w-0 flex-1")
 	expect(renderToStaticMarkup(await SeasonPage())).toContain("hidden h-full")
+})
+
+it("disables Start now and shows the muted helper in both frames without quests", async () => {
+	vi.mocked(getSeason).mockResolvedValue({ ...season, arcs: [] })
+	const html = renderToStaticMarkup(
+		await SeasonLayout({ children: <p>Season content</p>, params: Promise.resolve({ seasonId: season._id }) }),
+	)
+	expect(html.match(/disabled=""[^>]*>Start now/g)).toHaveLength(2)
+	expect(html.split("Add a quest first.")).toHaveLength(3)
+	expect(html).toContain('class="mt-2 font-cond text-xs text-muted"')
+})
+
+it("passes season timing and real team count to live controls on every season page", async () => {
+	vi.mocked(getSeason).mockResolvedValue({
+		...season,
+		start: new Date(Date.now() - 1000),
+		end: new Date(Date.now() + 600_000),
+	})
+	const html = renderToStaticMarkup(
+		await SeasonLayout({ children: <p>Season content</p>, params: Promise.resolve({ seasonId: season._id }) }),
+	)
+	expect(html.split("−5 min")).toHaveLength(3)
+	expect(html.split("+5 min")).toHaveLength(3)
+	expect(html.split("All 10 teams see their final score.")).toHaveLength(3)
+	expect(html.indexOf("−5 min")).toBeLessThan(html.indexOf("Log out"))
+	expect(html.lastIndexOf("+5 min")).toBeLessThan(html.indexOf('aria-label="Season sections"'))
 })
 
 it.each([

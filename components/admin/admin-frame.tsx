@@ -5,6 +5,7 @@ import { AutosaveHeader, SaveStatus } from "./save-status"
 export function AdminFrame({
 	title,
 	status,
+	controls,
 	menu,
 	phoneHeader,
 	preview,
@@ -12,6 +13,7 @@ export function AdminFrame({
 }: {
 	title: ReactNode
 	status?: ReactNode
+	controls?: ReactNode
 	menu: ReactNode
 	phoneHeader: ReactNode
 	preview?: ReactNode
@@ -24,6 +26,7 @@ export function AdminFrame({
 				{status}
 				<div className="ml-auto flex shrink-0 items-center gap-4">
 					<SaveStatus />
+					{controls}
 					<LogOutButton />
 				</div>
 			</AutosaveHeader>

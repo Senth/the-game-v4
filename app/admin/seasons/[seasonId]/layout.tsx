@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { AdminFrame } from "@/components/admin/admin-frame"
 import { AutosaveProvider } from "@/components/admin/autosave-provider"
+import { LiveControls } from "@/components/admin/live-controls"
 import { AutosaveHeader, SaveStatus } from "@/components/admin/save-status"
 import { SeasonMenu } from "@/components/admin/season-menu"
 import { SeasonStatus } from "@/components/admin/season-status"
@@ -9,7 +10,7 @@ import { SeasonMenuLinks, SeasonTabs } from "@/components/admin/season-tabs"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason, listSeasons } from "@/lib/db/seasons"
 import { countTeams } from "@/lib/db/teams"
-import { seasonStatus } from "@/lib/domain/admin-seasons"
+import { liveControls } from "@/lib/domain/admin-seasons"
 
 export default async function SeasonLayout({ children, params }: LayoutProps<"/admin/seasons/[seasonId]">) {
 	await requireAdmin()
@@ -18,12 +19,23 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 	if (!season) notFound()
 	const [seasons, teamCount] = await Promise.all([listSeasons(), countTeams(seasonId)])
 	const now = Date.now()
-	const status = <SeasonStatus status={seasonStatus(season, new Date(now))} end={season.end} now={now} />
+	const status = <SeasonStatus start={season.start} end={season.end} now={now} />
+	const controls = (
+		<LiveControls
+			seasonId={seasonId}
+			start={season.start}
+			end={season.end}
+			now={now}
+			teamCount={teamCount}
+			hasQuests={liveControls(season, new Date(now)).hasQuests}
+		/>
+	)
 	return (
 		<AutosaveProvider key={seasonId} seasonId={seasonId}>
 			<AdminFrame
 				title={season.title}
 				status={status}
+				controls={controls}
 				menu={
 					<SeasonMenu seasons={seasons} now={now} openSeasonId={seasonId}>
 						<SeasonMenuLinks seasonId={seasonId} teamCount={teamCount} />
@@ -43,7 +55,10 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 								<SaveStatus />
 							</div>
 						</AutosaveHeader>
-						<div className="border-b border-z1 px-4 py-3">{status}</div>
+						<div className="border-b border-z1 px-4 py-3">
+							{status}
+							<div className="mt-3">{controls}</div>
+						</div>
 						<SeasonTabs seasonId={seasonId} />
 					</>
 				}
