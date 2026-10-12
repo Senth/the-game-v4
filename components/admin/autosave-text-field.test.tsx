@@ -16,6 +16,7 @@ const field = {
 	onFocus: vi.fn(),
 	onBlur: vi.fn(async () => {}),
 	failed: false,
+	error: undefined,
 }
 
 beforeEach(() => {

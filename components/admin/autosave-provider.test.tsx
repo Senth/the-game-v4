@@ -215,14 +215,16 @@ it("preserves failed field values and retries through the provider", async () =>
 	const owner = provider()
 	const state = scope()
 	const field = () => render(state, () => useAutosaveField({ field: "title" }, "First"))
-	vi.mocked(saveSeasonField).mockResolvedValueOnce({ ok: false })
+	vi.mocked(saveSeasonField).mockResolvedValueOnce({ ok: false, error: "Invalid value." })
 	field().onChange("Local")
 	await field().onBlur()
 	expect(field().failed).toBe(true)
+	expect(field().error).toBe("Invalid value.")
 	expect(field().value).toBe("Local")
 	owner.context.retryAll()
 	await vi.advanceTimersByTimeAsync(0)
 	expect(field().failed).toBe(false)
+	expect(field().error).toBeUndefined()
 	expect(field().value).toBe("Local")
 	expect(saveSeasonField).toHaveBeenCalledTimes(2)
 	expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", { field: "title" }, "Local")
@@ -234,7 +236,7 @@ it.each(["failed before navigation", "failed unmount flush"])(
 		const owner = provider()
 		let state = scope()
 		const field = () => render(state, () => useAutosaveField({ field: "title" }, "First"))
-		vi.mocked(saveSeasonField).mockResolvedValue({ ok: false })
+		vi.mocked(saveSeasonField).mockResolvedValue({ ok: false, error: "Invalid value." })
 		field().onChange("Local")
 		if (failure === "failed before navigation") await field().onBlur()
 		unmount(state)
@@ -295,11 +297,11 @@ it.each(["pending blur", "idle save", "failed retry"])(
 		if (flow !== "idle save") field("First").onFocus()
 		field("First").onChange("Local")
 		if (flow === "failed retry") {
-			vi.mocked(saveSeasonField).mockResolvedValueOnce({ ok: false })
+			vi.mocked(saveSeasonField).mockResolvedValueOnce({ ok: false, error: "Invalid value." })
 			await field("First").onBlur()
 			expect(field("First").failed).toBe(true)
 		}
-		let finish: ((result: { ok: boolean }) => void) | undefined
+		let finish: ((result: Awaited<ReturnType<typeof saveSeasonField>>) => void) | undefined
 		vi.mocked(saveSeasonField).mockImplementationOnce(
 			() =>
 				new Promise((resolve) => {
@@ -331,7 +333,7 @@ it("reattaches a field during an unmount flush without starting a second saver",
 	const owner = provider()
 	let state = scope()
 	const field = () => render(state, () => useAutosaveField({ field: "title" }, "First"))
-	let finish: ((result: { ok: boolean }) => void) | undefined
+	let finish: ((result: Awaited<ReturnType<typeof saveSeasonField>>) => void) | undefined
 	vi.mocked(saveSeasonField).mockImplementationOnce(
 		() =>
 			new Promise((resolve) => {
@@ -342,7 +344,7 @@ it("reattaches a field during an unmount flush without starting a second saver",
 	unmount(state)
 	state = scope()
 	expect(field().value).toBe("Local")
-	finish?.({ ok: false })
+	finish?.({ ok: false, error: "Invalid value." })
 	await vi.advanceTimersByTimeAsync(0)
 	expect(field().failed).toBe(true)
 	owner.context.retryAll()
@@ -360,7 +362,7 @@ it("retains drafts by target rather than component identity or target property o
 	const state = scope()
 	const target = { arcId: "arc", field: "title" } as const
 	const field = () => render(state, () => useAutosaveField(target, "Arc"))
-	vi.mocked(saveSeasonField).mockResolvedValue({ ok: false })
+	vi.mocked(saveSeasonField).mockResolvedValue({ ok: false, error: "Invalid value." })
 	field().onChange("Local arc")
 	await field().onBlur()
 	unmount(state)
