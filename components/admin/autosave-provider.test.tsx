@@ -223,8 +223,167 @@ it("preserves failed field values and retries through the provider", async () =>
 	owner.context.retryAll()
 	await vi.advanceTimersByTimeAsync(0)
 	expect(field().failed).toBe(false)
+	expect(field().value).toBe("Local")
 	expect(saveSeasonField).toHaveBeenCalledTimes(2)
 	expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", { field: "title" }, "Local")
+})
+
+it.each(["failed before navigation", "failed unmount flush"])(
+	"retains field edits after %s and remount",
+	async (failure) => {
+		const owner = provider()
+		let state = scope()
+		const field = () => render(state, () => useAutosaveField({ field: "title" }, "First"))
+		vi.mocked(saveSeasonField).mockResolvedValue({ ok: false })
+		field().onChange("Local")
+		if (failure === "failed before navigation") await field().onBlur()
+		unmount(state)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(provider(owner.state).context.status).toBe("failed")
+		const leaving = new Event("beforeunload", { cancelable: true })
+		window.dispatchEvent(leaving)
+		expect(leaving.defaultPrevented).toBe(true)
+		state = scope()
+		expect(field().value).toBe("Local")
+		expect(field().failed).toBe(true)
+		field().onChange("Latest local")
+		await field().onBlur()
+		unmount(state)
+		vi.mocked(saveSeasonField).mockResolvedValue({ ok: true })
+		window.dispatchEvent(new Event("online"))
+		await vi.advanceTimersByTimeAsync(0)
+		expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", { field: "title" }, "Latest local")
+		expect(provider(owner.state).context.status).toBe(null)
+		const saved = new Event("beforeunload", { cancelable: true })
+		window.dispatchEvent(saved)
+		expect(saved.defaultPrevented).toBe(false)
+	},
+)
+
+it("adopts the latest remote field value after focus ends without an edit", async () => {
+	provider()
+	const state = scope()
+	const field = (value: string) => render(state, () => useAutosaveField({ field: "title" }, value))
+	field("First").onFocus()
+	field("Remote")
+	expect(field("Latest remote").value).toBe("First")
+	await field("Latest remote").onBlur()
+	field("Latest remote")
+	expect(field("Latest remote").value).toBe("Latest remote")
+	expect(saveSeasonField).not.toHaveBeenCalled()
+})
+
+it("adopts deferred remote field values when an unfocused field becomes saved", () => {
+	provider()
+	const state = scope()
+	const field = (value: string) => render(state, () => useAutosaveField({ field: "title" }, value))
+	field("First").onChange("Local")
+	field("Remote")
+	expect(field("Remote").value).toBe("Local")
+	field("Remote").onChange("First")
+	field("Remote")
+	expect(field("Remote").value).toBe("Remote")
+})
+
+it("reattaches a field during an unmount flush without starting a second saver", async () => {
+	const owner = provider()
+	let state = scope()
+	const field = () => render(state, () => useAutosaveField({ field: "title" }, "First"))
+	let finish: ((result: { ok: boolean }) => void) | undefined
+	vi.mocked(saveSeasonField).mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+	)
+	field().onChange("Local")
+	unmount(state)
+	state = scope()
+	expect(field().value).toBe("Local")
+	finish?.({ ok: false })
+	await vi.advanceTimersByTimeAsync(0)
+	expect(field().failed).toBe(true)
+	owner.context.retryAll()
+	await vi.advanceTimersByTimeAsync(0)
+	expect(field().value).toBe("Local")
+	expect(field().failed).toBe(false)
+	expect(provider(owner.state).context.status).toBe("saved")
+	expect(saveSeasonField).toHaveBeenCalledTimes(2)
+	unmount(state)
+	expect(provider(owner.state).context.status).toBe(null)
+})
+
+it("retains drafts by target rather than component identity or target property order", async () => {
+	const owner = provider()
+	const state = scope()
+	const target = { arcId: "arc", field: "title" } as const
+	const field = () => render(state, () => useAutosaveField(target, "Arc"))
+	vi.mocked(saveSeasonField).mockResolvedValue({ ok: false })
+	field().onChange("Local arc")
+	await field().onBlur()
+	unmount(state)
+	const other = scope()
+	expect(render(other, () => useAutosaveField({ field: "title" }, "Season")).value).toBe("Season")
+	const remount = scope()
+	const retained = render(remount, () => useAutosaveField({ field: "title", arcId: "arc" }, "Arc"))
+	expect(retained.value).toBe("Local arc")
+	expect(retained.failed).toBe(true)
+	expect(provider(owner.state).context.status).toBe("failed")
+})
+
+it.each(["failed before navigation", "failed after navigation"])(
+	"retains list operations after %s and remount",
+	async (failure) => {
+		const owner = provider()
+		let state = scope()
+		const target = { arcId: "arc", questId: "quest", field: "answers" } as const
+		const items = ["old"]
+		const list = () => render(state, () => useAutosaveList(target, items))
+		vi.mocked(patchSeasonList).mockResolvedValue({ ok: false })
+		list().add("lamp")
+		list().remove("old")
+		if (failure === "failed before navigation") await vi.advanceTimersByTimeAsync(0)
+		unmount(state)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(provider(owner.state).context.status).toBe("failed")
+		const leaving = new Event("beforeunload", { cancelable: true })
+		window.dispatchEvent(leaving)
+		expect(leaving.defaultPrevented).toBe(true)
+		state = scope()
+		expect(list().items).toEqual(["lamp"])
+		expect(list().failed).toBe(true)
+		list().add("keeper")
+		unmount(state)
+		vi.mocked(patchSeasonList).mockResolvedValue({ ok: true })
+		owner.context.retryAll()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(vi.mocked(patchSeasonList).mock.calls.map((call) => call[2])).toEqual([
+			{ op: "add", value: "lamp" },
+			{ op: "add", value: "lamp" },
+			{ op: "remove", value: "old" },
+			{ op: "add", value: "keeper" },
+		])
+		expect(provider(owner.state).context.status).toBe(null)
+		const saved = new Event("beforeunload", { cancelable: true })
+		window.dispatchEvent(saved)
+		expect(saved.defaultPrevented).toBe(false)
+	},
+)
+
+it("keeps successful list patches alongside a failed operation when remounted with stale server items", async () => {
+	provider()
+	let state = scope()
+	const target = { arcId: "arc", questId: "quest", field: "answers" } as const
+	const list = () => render(state, () => useAutosaveList(target, ["old"]))
+	vi.mocked(patchSeasonList).mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false })
+	list().add("lamp")
+	list().remove("old")
+	await vi.advanceTimersByTimeAsync(0)
+	unmount(state)
+	state = scope()
+	list()
+	expect(list().items).toEqual(["lamp"])
+	expect(list().failed).toBe(true)
 })
 
 it("keeps optimistic list edits on failure and sends one-item answer patches in order", async () => {
