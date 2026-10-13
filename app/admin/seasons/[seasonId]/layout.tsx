@@ -5,6 +5,7 @@ import { AutosaveProvider } from "@/components/admin/autosave-provider"
 import { LiveControls } from "@/components/admin/live-controls"
 import { AutosaveHeader, SaveStatus } from "@/components/admin/save-status"
 import { SeasonMenu } from "@/components/admin/season-menu"
+import { SeasonPhoneChrome } from "@/components/admin/season-phone-chrome"
 import { SeasonStatus } from "@/components/admin/season-status"
 import { SeasonMenuLinks, SeasonTabs } from "@/components/admin/season-tabs"
 import { SeasonTree } from "@/components/admin/season-tree"
@@ -53,7 +54,7 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 					</SeasonMenu>
 				}
 				phoneHeader={
-					<>
+					<SeasonPhoneChrome>
 						<AutosaveHeader className="flex min-h-12 items-center border-b px-1 font-cond">
 							<Link
 								href="/admin"
@@ -71,7 +72,7 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 							<div className="mt-3">{controls}</div>
 						</div>
 						<SeasonTabs seasonId={seasonId} />
-					</>
+					</SeasonPhoneChrome>
 				}
 				preview={
 					<>

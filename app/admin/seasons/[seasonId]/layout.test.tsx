@@ -11,6 +11,7 @@ import { proxy } from "@/proxy"
 import { buildFixture } from "@/scripts/fixture"
 import SeasonLayout from "./layout"
 import SeasonPage from "./page"
+import QuestPage from "./quests/[questId]/page"
 import SettingsPage from "./settings/page"
 import TeamsPage from "./teams/page"
 
@@ -164,6 +165,29 @@ it("returns the Next.js 404 interrupt when Settings loads an unknown season", as
 it("returns the Next.js 404 interrupt when Quests loads an unknown season", async () => {
 	vi.mocked(getSeason).mockResolvedValue(null)
 	await expect(SeasonPage(settingsProps)).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
+})
+
+it("replaces season phone chrome on a quest while retaining the desktop tree and top-bar controls", async () => {
+	vi.mocked(useSelectedLayoutSegment).mockReturnValue("quests")
+	const quest = season.arcs[0]?.quests[0]
+	if (!quest) throw new Error("Fixture needs a quest")
+	const html = renderToStaticMarkup(
+		await SeasonLayout({
+			children: await QuestPage({
+				params: Promise.resolve({ seasonId: season._id, questId: quest.id }),
+				searchParams: Promise.resolve({}),
+			}),
+			params: settingsProps.params,
+		}),
+	)
+	expect(html).not.toContain("‹ Seasons")
+	expect(html).not.toContain('aria-label="Season sections"')
+	expect(html).toContain("‹ Lighthouse")
+	expect(html.split("Start now")).toHaveLength(2)
+	expect(html).toContain("Display title")
+	expect(html).toContain("Internal title")
+	expect(html).toContain("Season settings")
+	expect(html).toContain("Player preview")
 })
 
 it.each(["", "/teams", "/settings"])(
