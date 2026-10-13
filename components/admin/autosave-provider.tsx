@@ -103,7 +103,7 @@ type FieldDraft<T> = {
 	serverValue: T
 	latestServerValue: T
 	state: AutosaveState
-	notify?: () => void
+	listeners: Set<() => void>
 	saver: ReturnType<typeof createFieldSaver<T>>
 }
 
@@ -120,6 +120,7 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 			serverValue,
 			latestServerValue: serverValue,
 			state: "saved",
+			listeners: new Set(),
 			saver: createFieldSaver<T>({
 				async save(value) {
 					const result = await saveSeasonField(seasonId, target, value)
@@ -128,13 +129,14 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 				},
 				onState(next) {
 					draft.state = next
-					draft.notify?.()
+					for (const notify of draft.listeners) notify()
 					update(id, next, () => void draft.saver.retry())
-					if (!draft.notify && next === "saved") remove(id)
+					if (!draft.listeners.size && next === "saved") remove(id)
 				},
 			}),
 		}
 		draft.saver.sync(serverValue)
+		drafts.set(id, draft)
 		return draft
 	})
 	const { saver } = draft
@@ -144,10 +146,15 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 
 	useEffect(() => {
 		drafts.set(id, draft)
-		draft.notify = () => setState(draft.state)
+		const notify = () => {
+			setValue(draft.value)
+			setState(draft.state)
+		}
+		draft.listeners.add(notify)
 		update(id, draft.state, () => void saver.retry())
 		return () => {
-			draft.notify = undefined
+			draft.listeners.delete(notify)
+			if (draft.listeners.size) return
 			if (draft.state === "pending" || draft.state === "saving") void saver.flush()
 			else if (draft.state === "saved") remove(id)
 		}
@@ -158,7 +165,7 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 		if (!focused && state === "saved" && draft.state === "saved" && !Object.is(serverValue, draft.serverValue)) {
 			draft.serverValue = serverValue
 			draft.value = serverValue
-			setValue(serverValue)
+			for (const notify of draft.listeners) notify()
 			saver.sync(serverValue)
 		}
 	}, [serverValue, saver, draft, focused, state])
@@ -167,7 +174,7 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 		value,
 		onChange(next: T) {
 			draft.value = next
-			setValue(next)
+			for (const notify of draft.listeners) notify()
 			saver.edit(next)
 		},
 		onFocus() {

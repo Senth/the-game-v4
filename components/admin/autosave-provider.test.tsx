@@ -230,6 +230,31 @@ it("preserves failed field values and retries through the provider", async () =>
 	expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", { field: "title" }, "Local")
 })
 
+it("shares arc shuffle drafts and failures between desktop and phone trees until the last unmount", async () => {
+	const owner = provider()
+	const menu = scope()
+	const page = scope()
+	const target = { arcId: "arc-1", field: "shuffleQuests" } as const
+	const field = (state: Scope) => render(state, () => useAutosaveField(target, false))
+	field(menu)
+	field(page)
+	vi.mocked(saveSeasonField).mockResolvedValueOnce({ ok: false, error: "Invalid value." })
+	field(menu).onChange(true)
+	expect(field(page).value).toBe(true)
+	await field(menu).onBlur()
+	expect(field(menu).failed).toBe(true)
+	expect(field(page).failed).toBe(true)
+	owner.context.retryAll()
+	await vi.advanceTimersByTimeAsync(0)
+	unmount(page)
+	expect(provider(owner.state).context.status).toBe("saved")
+	field(menu).onChange(false)
+	await field(menu).onBlur()
+	expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", target, false)
+	unmount(menu)
+	expect(provider(owner.state).context.status).toBe(null)
+})
+
 it.each(["failed before navigation", "failed unmount flush"])(
 	"retains field edits after %s and remount",
 	async (failure) => {

@@ -22,6 +22,7 @@ vi.mock("@/app/admin/live-actions", () => ({ startSeasonNow: vi.fn(), shiftSeaso
 vi.mock("next/navigation", async (importOriginal) => ({
 	...(await importOriginal<typeof import("next/navigation")>()),
 	useSelectedLayoutSegment: vi.fn(),
+	useSelectedLayoutSegments: () => [],
 	useRouter: () => ({ refresh: vi.fn() }),
 }))
 
@@ -53,7 +54,7 @@ it.each([
 it("requires admin access before reading season or team data", async () => {
 	vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
 	await expect(
-		SeasonLayout({ children: <SeasonPage />, params: Promise.resolve({ seasonId: season._id }) }),
+		SeasonLayout({ children: <p>Quests</p>, params: Promise.resolve({ seasonId: season._id }) }),
 	).rejects.toThrow("Unauthorized")
 	expect(getSeason).not.toHaveBeenCalled()
 	expect(listSeasons).not.toHaveBeenCalled()
@@ -63,16 +64,19 @@ it("requires admin access before reading season or team data", async () => {
 it("returns the Next.js 404 interrupt for an unknown season", async () => {
 	vi.mocked(getSeason).mockResolvedValue(null)
 	await expect(
-		SeasonLayout({ children: <SeasonPage />, params: Promise.resolve({ seasonId: "unknown" }) }),
+		SeasonLayout({ children: <p>Quests</p>, params: Promise.resolve({ seasonId: "unknown" }) }),
 	).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
 	expect(getSeason).toHaveBeenCalledWith("unknown")
 	expect(listSeasons).not.toHaveBeenCalled()
 	expect(countTeams).not.toHaveBeenCalled()
 })
 
-it("renders both frames with this season expanded, real team count, quiet preview and empty quests", async () => {
+it("renders both frames with this season expanded, real team count, quiet preview and the quest tree", async () => {
 	const html = renderToStaticMarkup(
-		await SeasonLayout({ children: await SeasonPage(), params: Promise.resolve({ seasonId: season._id }) }),
+		await SeasonLayout({
+			children: await SeasonPage(settingsProps),
+			params: Promise.resolve({ seasonId: season._id }),
+		}),
 	)
 	expect(getSeason).toHaveBeenCalledWith(season._id)
 	expect(countTeams).toHaveBeenCalledWith(season._id)
@@ -91,7 +95,10 @@ it("renders both frames with this season expanded, real team count, quiet previe
 	expect(html).toContain("Player preview")
 	expect(html).toContain("Open a quest or team to preview it.")
 	expect(html).toContain('action="/logout" method="post"')
-	expect(html).not.toMatch(/<iframe|<input|Backwards log/)
+	expect(html).not.toMatch(/<iframe|<input/)
+	expect(html.split("Backwards log")).toHaveLength(3)
+	expect(html).toContain(`href="/admin/seasons/${season._id}/quests/${season.arcs[0]?.quests[0]?.id}"`)
+	expect(html).toContain("+ Quest in Lighthouse")
 	expect(html).not.toContain("Saved")
 	expect(html).not.toContain("border-warn")
 	expect(html).toContain("border-b px-1 font-cond border-z1")
@@ -100,7 +107,7 @@ it("renders both frames with this season expanded, real team count, quiet previe
 	expect(html).toContain("w-72")
 	expect(html).toContain("w-92")
 	expect(html).toContain("min-w-0 flex-1")
-	expect(renderToStaticMarkup(await SeasonPage())).toContain("hidden h-full")
+	expect(html).toContain("hidden h-full")
 })
 
 it("disables Start now and shows the muted helper in both frames without quests", async () => {
@@ -152,6 +159,11 @@ it.each([
 it("returns the Next.js 404 interrupt when Settings loads an unknown season", async () => {
 	vi.mocked(getSeason).mockResolvedValue(null)
 	await expect(SettingsPage(settingsProps)).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
+})
+
+it("returns the Next.js 404 interrupt when Quests loads an unknown season", async () => {
+	vi.mocked(getSeason).mockResolvedValue(null)
+	await expect(SeasonPage(settingsProps)).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
 })
 
 it.each(["", "/teams", "/settings"])(
