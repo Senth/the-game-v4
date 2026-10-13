@@ -142,6 +142,12 @@ read first arc names, second quest titles, third points; must not show drag hand
 Use Quests / Teams / Settings tabs and the live strip. Arc rows have Ordered/Random controls;
 quest rows show title and points, with `+ Quest in <arc>` and "+ Arc" after their lists.
 Tap an arc title to rename it; opening a newly added quest goes directly to its editor.
+Quest rows show internal title, else display title, else muted `Untitled quest`. Missing points show muted `–`.
+Tapping an arc title opens an H2-style panel with an `Arc title` field, `Remove arc` and `Done`.
+Done, Enter or Escape close it.
+Add and remove controls show only before start. Removing a quest is a quiet link at the bottom of its page.
+Removing an arc with quests, or any quest, confirms in End game's `<dialog>` style.
+Desktop tree rows are 44 px tall. D1's 36 px rows are superseded.
 While live, show completion bars and "N/M done". Tap expands Completed by chips, hints with revealers,
 and "Edit quest ›". The same live block appears above the desktop form.
 PROJECT.md owns the visibility window for these stats.
