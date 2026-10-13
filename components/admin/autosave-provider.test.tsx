@@ -2,7 +2,7 @@ import type { EffectCallback } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
-import { removeArc, removeQuest } from "@/app/admin/tree-actions"
+import { addQuest, removeArc, removeQuest } from "@/app/admin/tree-actions"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { AdminFrame } from "./admin-frame"
 import { AutosaveProvider, useAutosaveField, useAutosaveList } from "./autosave-provider"
@@ -404,8 +404,56 @@ it.each(["pending", "saving"])(
 	},
 )
 
+it.each(["retained layout", "unrelated tree refresh"])(
+	"saves new quest edits before layout catches up during %s",
+	async (flow) => {
+		const owner = provider()
+		const menu = scope()
+		const title = scope()
+		const arc = { id: "arc", title: "Arc", shuffleQuests: false, quests: [] }
+		const tree = { arcs: [arc] }
+		const props = { seasonId: "season-1", start: null, end: null, now: Date.now(), variant: "menu" as const }
+		const view = (snapshot = tree) => render(menu, () => SeasonTree({ ...props, tree: snapshot }))
+		vi.mocked(addQuest).mockResolvedValueOnce({ ok: true, questId: "new-quest" })
+		view().props.children[0][0].props.onAdd()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(hooks.push).toHaveBeenCalledWith("/admin/seasons/season-1/quests/new-quest")
+		const target = { arcId: "arc", questId: "new-quest", field: "displayTitle" } as const
+		const field = () => render(title, () => useAutosaveField(target, ""))
+		field().onChange("New quest title")
+		provider(owner.state)
+		view()
+		if (flow === "unrelated tree refresh") view({ arcs: [{ ...arc, title: "Remote arc title" }] })
+		await field().onBlur()
+		expect(saveSeasonField).toHaveBeenCalledExactlyOnceWith("season-1", target, "New quest title")
+		render(menu, () =>
+			SeasonTree({
+				...props,
+				tree: { arcs: [{ ...arc, quests: [{ id: "new-quest", label: "New quest title", points: null }] }] },
+			}),
+		)
+		field().onChange("After refresh")
+		provider(owner.state)
+		await field().onBlur()
+		expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", target, "After refresh")
+		expect(provider(owner.state).context.status).toBe("saved")
+	},
+)
+
 it.each(["quest", "arc"] as const)("discards only removed %s drafts after an external tree refresh", async (kind) => {
 	const owner = provider()
+	const menu = scope()
+	const props = { seasonId: "season-1", start: null, end: null, now: Date.now(), variant: "menu" as const }
+	render(menu, () =>
+		SeasonTree({
+			...props,
+			tree: {
+				arcs: [
+					{ id: "arc", title: "Arc", shuffleQuests: false, quests: [{ id: "quest", label: "First", points: null }] },
+				],
+			},
+		}),
+	)
 	const title = scope()
 	const survivor = scope()
 	const arcTitle = scope()
@@ -424,9 +472,7 @@ it.each(["quest", "arc"] as const)("discards only removed %s drafts after an ext
 	await arcField.onBlur()
 	unmount(arcTitle)
 	const tree = { arcs: kind === "quest" ? [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [] }] : [] }
-	render(scope(), () =>
-		SeasonTree({ seasonId: "season-1", tree, start: null, end: null, now: Date.now(), variant: "menu" }),
-	)
+	render(menu, () => SeasonTree({ ...props, tree }))
 	expect(owner.context.drafts.size).toBe(kind === "quest" ? 2 : 1)
 	expect(provider(owner.state).context.status).toBe("failed")
 	vi.mocked(saveSeasonField).mockResolvedValue({ ok: true })

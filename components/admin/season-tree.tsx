@@ -40,18 +40,25 @@ export function SeasonTree({
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<{ control: string; message: string } | null>(null)
 	const confirmedArc = tree.arcs.find((arc) => arc.id === confirming)
+	const previousTree = useRef(tree)
+	const discard = autosave?.discard
 
 	useEffect(() => {
-		if (!autosave) return
-		for (const { target } of autosave.drafts.values()) {
-			if (!target.arcId) continue
-			const arc = tree.arcs.find((arc) => arc.id === target.arcId)
-			if (!arc) autosave.discard({ arcId: target.arcId })
-			else if (target.questId && !arc.quests.some((quest) => quest.id === target.questId)) {
-				autosave.discard({ arcId: target.arcId, questId: target.questId })
+		const previous = previousTree.current
+		previousTree.current = tree
+		if (!discard || previous === tree) return
+		for (const arc of previous.arcs) {
+			const current = tree.arcs.find((current) => current.id === arc.id)
+			if (!current) discard({ arcId: arc.id })
+			else {
+				for (const quest of arc.quests) {
+					if (!current.quests.some((current) => current.id === quest.id)) {
+						discard({ arcId: arc.id, questId: quest.id })
+					}
+				}
 			}
 		}
-	}, [tree, autosave])
+	}, [tree, discard])
 
 	async function run(control: string, action: () => Promise<ActionResult>) {
 		if (pending || !editable) return
