@@ -214,6 +214,23 @@ it("adds a quest and navigates to its returned id", async () => {
 	expect(addQuest).toHaveBeenCalledWith("s1", "a1")
 })
 
+it.each(["navigation first", "refresh first"])("marks a newly added desktop quest when %s commits", async (order) => {
+	render({ variant: "menu" }).button("+ Quest").props.onClick?.()
+	await vi.waitFor(() => expect(hooks.push).toHaveBeenCalledWith("/admin/seasons/s1/quests/new-quest"))
+	const tree = { arcs: [{ ...arc, quests: [...arc.quests, { id: "new-quest", label: null, points: null }] }] }
+	if (order === "navigation first") {
+		hooks.segments = ["quests", "new-quest"]
+		expect(render({ variant: "menu" }).html).not.toContain('aria-current="page"')
+	} else {
+		expect(render({ variant: "menu", tree }).html).not.toContain('aria-current="page"')
+		hooks.segments = ["quests", "new-quest"]
+	}
+	const selected = render({ variant: "menu", tree }).all.find((element) => element.props["aria-current"] === "page")
+	expect(selected?.props.href).toBe("/admin/seasons/s1/quests/new-quest")
+	expect(selected?.props.className).toContain("border-l-2 border-accent bg-accent/15 text-head")
+	expect(render({ variant: "menu", tree }).html).toContain("Untitled quest")
+})
+
 it.each([1, 5])("confirms removal of an arc with %i quests before writing", async (count) => {
 	const props = {
 		tree: {

@@ -17,7 +17,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 		<>
 			<QuestHeader seasonId={seasonId} arcTitle={arc.title} label={label} />
 			<div className="px-4 py-5 lg:px-8 lg:py-6">
-				<h2 className={`mb-6 hidden font-head text-2xl lg:block ${label ? "text-head" : "text-muted"}`}>
+				<h2 className={`mb-6 hidden truncate font-head text-2xl lg:block ${label ? "text-head" : "text-muted"}`}>
 					{label ?? "Untitled quest"}
 				</h2>
 				<QuestTitles

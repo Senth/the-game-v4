@@ -76,7 +76,7 @@ it.each([
 	const heading = element.props.children[1].props.children[0]
 	expect(header.props.label).toBe(label)
 	expect(heading.props.children).toBe(label ?? "Untitled quest")
-	expect(heading.props.className).toContain("hidden font-head text-2xl lg:block")
+	expect(heading.props.className).toContain("hidden truncate font-head text-2xl lg:block")
 	expect(heading.props.className).toContain(label ? "text-head" : "text-muted")
 })
 
@@ -86,4 +86,18 @@ it("loads a quest outside the first arc", async () => {
 		params: Promise.resolve({ seasonId: season._id, questId: "harbour-map" }),
 	})
 	expect(element.props.children[0].props.arcTitle).toBe("Old Town")
+})
+
+it("contains an accepted unbroken 100-character desktop heading without shortening the editable title", async () => {
+	const displayTitle = "A".repeat(100)
+	vi.mocked(getSeason).mockResolvedValue({
+		...season,
+		arcs: [{ ...arc, quests: [{ ...quest, internalTitle: "", displayTitle }] }],
+	})
+	const element = await QuestPage(props)
+	const content = element.props.children[1]
+	const heading = content.props.children[0]
+	expect(heading.props.children).toBe(displayTitle)
+	expect(heading.props.className.split(" ")).toContain("truncate")
+	expect(content.props.children[1].props.quest.displayTitle).toBe(displayTitle)
 })

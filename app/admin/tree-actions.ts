@@ -1,5 +1,6 @@
 "use server"
 
+import { refresh } from "next/cache"
 import { z } from "zod"
 import { requireAdmin } from "@/lib/auth/guards"
 import {
@@ -41,6 +42,7 @@ export async function addQuest(
 	}
 	publish(seasonChannel(seasonId))
 	publish(boardChannel)
+	refresh()
 	return { ok: true, questId }
 }
 
