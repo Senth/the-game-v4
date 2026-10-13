@@ -36,7 +36,7 @@ vi.mock("react", async (importOriginal) => ({
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: hooks.push }) }))
 vi.mock("@/app/admin/tree-actions", () => ({ removeQuest: vi.fn() }))
-vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn() }))
+vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn(), useAutosave: () => null }))
 vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }))
 
 const now = new Date("2026-10-12T17:00:00Z").getTime()

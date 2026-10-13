@@ -33,6 +33,7 @@ it.each(["saved", "saving", "failed"] as const)("shows %s status at the right an
 		drafts: new Map(),
 		update: vi.fn(),
 		remove: vi.fn(),
+		discard: vi.fn(),
 		retryAll,
 	})
 	const html = renderToStaticMarkup(<QuestHeader seasonId="s1" arcTitle="Old Town" label="Harbour map" />)

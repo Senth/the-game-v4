@@ -36,7 +36,7 @@ vi.mock("next/navigation", () => ({
 }))
 vi.mock("next/link", () => ({ default: (props: object) => <a {...props} /> }))
 vi.mock("@/app/admin/tree-actions", () => ({ addArc: vi.fn(), addQuest: vi.fn(), removeArc: vi.fn() }))
-vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn() }))
+vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn(), useAutosave: () => null }))
 vi.mock("./confirm-dialog", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./confirm-dialog")>()),
 	ConfirmDialog: vi.fn(({ open, title, body, confirmLabel, disabled, onConfirm, onClose }) =>

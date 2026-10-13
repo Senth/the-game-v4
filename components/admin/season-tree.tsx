@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import type { ActionResult } from "@/app/admin/action-result"
 import { addArc, addQuest, removeArc } from "@/app/admin/tree-actions"
 import { canEditStructure, type treeView } from "@/lib/domain/season-tree"
-import { useAutosaveField } from "./autosave-provider"
+import { useAutosave, useAutosaveField } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { ConfirmDialog, outlineClass } from "./confirm-dialog"
 import { useSeasonClock } from "./use-season-clock"
@@ -32,6 +32,7 @@ export function SeasonTree({
 	variant: Variant
 }) {
 	const router = useRouter()
+	const autosave = useAutosave()
 	const segments = useSelectedLayoutSegments()
 	const editable = canEditStructure({ start, end }, new Date(useSeasonClock(now, start, end)))
 	const [editing, setEditing] = useState<{ arcId: string; selectTitle: boolean } | null>(null)
@@ -39,6 +40,18 @@ export function SeasonTree({
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<{ control: string; message: string } | null>(null)
 	const confirmedArc = tree.arcs.find((arc) => arc.id === confirming)
+
+	useEffect(() => {
+		if (!autosave) return
+		for (const { target } of autosave.drafts.values()) {
+			if (!target.arcId) continue
+			const arc = tree.arcs.find((arc) => arc.id === target.arcId)
+			if (!arc) autosave.discard({ arcId: target.arcId })
+			else if (target.questId && !arc.quests.some((quest) => quest.id === target.questId)) {
+				autosave.discard({ arcId: target.arcId, questId: target.questId })
+			}
+		}
+	}, [tree, autosave])
 
 	async function run(control: string, action: () => Promise<ActionResult>) {
 		if (pending || !editable) return
@@ -58,6 +71,7 @@ export function SeasonTree({
 		return run(`remove:${arcId}`, async () => {
 			const result = await removeArc(seasonId, arcId)
 			if (result.ok) {
+				autosave?.discard({ arcId })
 				setEditing(null)
 				router.refresh()
 			}

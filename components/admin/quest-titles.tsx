@@ -5,6 +5,7 @@ import { useState } from "react"
 import { removeQuest } from "@/app/admin/tree-actions"
 import type { Quest } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
+import { useAutosave } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { ConfirmDialog } from "./confirm-dialog"
 import { useSeasonClock } from "./use-season-clock"
@@ -25,6 +26,7 @@ export function QuestTitles({
 	now: number
 }) {
 	const router = useRouter()
+	const autosave = useAutosave()
 	const editable = canEditStructure({ start, end }, new Date(useSeasonClock(now, start, end)))
 	const label = questLabel(quest)
 	const [confirming, setConfirming] = useState(false)
@@ -37,8 +39,10 @@ export function QuestTitles({
 		setError(null)
 		try {
 			const result = await removeQuest(seasonId, arcId, quest.id)
-			if (result.ok) router.push(`/admin/seasons/${seasonId}`)
-			else setError(result.error)
+			if (result.ok) {
+				autosave?.discard({ arcId, questId: quest.id })
+				router.push(`/admin/seasons/${seasonId}`)
+			} else setError(result.error)
 		} catch {
 			setError("Not saved, retry")
 		} finally {
