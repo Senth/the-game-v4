@@ -2,6 +2,11 @@ import { z } from "zod"
 
 const id = z.string().min(1)
 
+export const AnswerAddValue = z
+	.string()
+	.transform((value) => value.trim().normalize("NFC"))
+	.pipe(z.string().min(1).max(200))
+
 export const Hint = z.object({
 	id,
 	text: z.string(),
@@ -16,7 +21,7 @@ export const Quest = z.object({
 	content: z.string(),
 	assetPath: z.string().nullable(),
 	answers: z.array(z.string()),
-	points: z.number().nullable(),
+	points: z.number().int().min(0).max(10000).nullable(),
 	adminNotes: z.string(),
 	hints: z.array(Hint),
 })

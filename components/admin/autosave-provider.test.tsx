@@ -6,7 +6,7 @@ import { addQuest, removeArc, removeQuest } from "@/app/admin/tree-actions"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { AdminFrame } from "./admin-frame"
 import { AutosaveProvider, useAutosaveField, useAutosaveList } from "./autosave-provider"
-import { QuestTitles } from "./quest-titles"
+import { QuestEditor } from "./quest-editor"
 import { AutosaveHeader, SaveStatus } from "./save-status"
 import { SeasonTree } from "./season-tree"
 
@@ -332,7 +332,20 @@ it.each(["quest", "arc"] as const)(
 		const props = { seasonId: "season-1", start: null, end: null, now: Date.now() }
 		if (kind === "quest") {
 			const element = render(view, () =>
-				QuestTitles({ ...props, arcId: "arc", quest: { id: "quest", displayTitle: "First", internalTitle: "" } }),
+				QuestEditor({
+					...props,
+					arcId: "arc",
+					quest: {
+						id: "quest",
+						displayTitle: "First",
+						internalTitle: "",
+						content: "",
+						assetPath: null,
+						answers: [],
+						points: null,
+						adminNotes: "",
+					},
+				}),
 			)
 			element.props.children[2].props.onConfirm()
 		} else {

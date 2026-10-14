@@ -1,8 +1,17 @@
 import type { Filter, UpdateFilter } from "mongodb"
 import { z } from "zod"
 import { overlappingSeason, scheduleWindow, seasonStatus } from "@/lib/domain/admin-seasons"
-import { hasEnded, registrationConflict } from "@/lib/domain/game"
-import { Arc, Hint, HintInput, Quest, Season, type SeasonInput, withHintIds } from "@/lib/domain/schemas"
+import { hasEnded, normalizeAnswer, registrationConflict } from "@/lib/domain/game"
+import {
+	AnswerAddValue,
+	Arc,
+	Hint,
+	HintInput,
+	Quest,
+	Season,
+	type SeasonInput,
+	withHintIds,
+} from "@/lib/domain/schemas"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { collections, NotFoundError } from "./collections"
 
@@ -210,7 +219,10 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 	if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
 }
 
-const AnswerPatch = z.object({ op: z.enum(["add", "remove"]), value: Quest.shape.answers.element })
+const AnswerPatch = z.discriminatedUnion("op", [
+	z.object({ op: z.literal("add"), value: AnswerAddValue }),
+	z.object({ op: z.literal("remove"), value: z.string() }),
+])
 const HintPatch = z.discriminatedUnion("op", [
 	z.object({ op: z.literal("add"), hint: HintInput }),
 	z.object({ op: z.literal("remove"), hintId: Hint.shape.id }),
@@ -226,7 +238,17 @@ export async function patchSeasonList(
 	let hintId: string | undefined
 	if (target.field === "answers") {
 		const parsed = AnswerPatch.parse(op)
-		update = parsed.op === "add" ? { $addToSet: { [path]: parsed.value } } : { $pull: { [path]: parsed.value } }
+		if (parsed.op === "add") {
+			const season = await getSeason(seasonId)
+			const quest = season?.arcs
+				.find((arc) => arc.id === target.arcId)
+				?.quests.find((quest) => quest.id === target.questId)
+			if (!quest) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
+			if (quest.answers.some((answer) => normalizeAnswer(answer) === normalizeAnswer(parsed.value))) return
+			update = { $addToSet: { [path]: parsed.value } }
+		} else {
+			update = { $pull: { [path]: parsed.value } }
+		}
 	} else {
 		const parsed = HintPatch.parse(op)
 		if (parsed.op === "add") {

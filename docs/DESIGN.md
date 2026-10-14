@@ -165,6 +165,12 @@ image, answers, points and admin notes. Answers become chips on Enter or comma a
 with ✕ or Backspace. Keep autosave status visible. "+ Add hint" follows the hint rows.
 H1/H2 supersede M2's always-open hint rows, not its field order or Revealed by chips.
 
+- Comma, Enter, paste and leaving the field all turn typed text into chips.
+- A duplicate answer clears the input and shows muted "Already an answer".
+- Content and Admin notes grow with their text; only the page scrolls.
+- Until I-17, Image shows the current asset read-only and hides when there is none.
+- On desktop, titles share a row, and so do Answers and Points, as D1.
+
 ## M3: admin teams
 
 Mock: [HTML](mocks/M3-teams.html), [PNG](mocks/M3-teams.png).

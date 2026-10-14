@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest"
+import { QuestEditor } from "@/components/admin/quest-editor"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 import { buildFixture } from "@/scripts/fixture"
@@ -38,7 +39,7 @@ it.each(["season", "arc", "quest"])("redirects to the Quests tab when %s disappe
 	})
 })
 
-it("selects the quest's own arc and passes only title values with timing across the client boundary", async () => {
+it("selects the quest's own arc and passes editor fields without hints across the client boundary", async () => {
 	const before = Date.now()
 	const element = await QuestPage(props)
 	const header = element.props.children[0]
@@ -48,17 +49,22 @@ it("selects the quest's own arc and passes only title values with timing across 
 	expect(header.props).toEqual({ seasonId: season._id, arcTitle: arc.title, label: quest.internalTitle })
 	expect(content.props.className).toBe("px-4 py-5 lg:px-8 lg:py-6")
 	expect(titles.key).toBe(quest.id)
+	expect(titles.type).toBe(QuestEditor)
 	expect(titles.props.quest).toEqual({
 		id: quest.id,
 		displayTitle: quest.displayTitle,
 		internalTitle: quest.internalTitle,
+		content: quest.content,
+		assetPath: quest.assetPath,
+		answers: quest.answers,
+		points: quest.points,
+		adminNotes: quest.adminNotes,
 	})
 	expect(titles.props.arcId).toBe(arc.id)
 	expect(titles.props.start).toBe(season.start)
 	expect(titles.props.end).toBe(season.end)
 	expect(titles.props.now).toBeGreaterThanOrEqual(before)
 	expect(titles.props.now).toBeLessThanOrEqual(Date.now())
-	expect(titles.props.quest).not.toHaveProperty("answers")
 	expect(titles.props.quest).not.toHaveProperty("hints")
 })
 

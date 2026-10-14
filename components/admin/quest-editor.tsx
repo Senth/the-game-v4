@@ -5,12 +5,16 @@ import { useState } from "react"
 import { removeQuest } from "@/app/admin/tree-actions"
 import type { Quest } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
+import { AnswerChips } from "./answer-chips"
+import { AutosavePointsField } from "./autosave-points-field"
 import { useAutosave } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
+import { AutosaveTextarea } from "./autosave-textarea"
 import { ConfirmDialog } from "./confirm-dialog"
+import { QuestAsset } from "./quest-asset"
 import { useSeasonClock } from "./use-season-clock"
 
-export function QuestTitles({
+export function QuestEditor({
 	seasonId,
 	arcId,
 	quest,
@@ -20,7 +24,7 @@ export function QuestTitles({
 }: {
 	seasonId: string
 	arcId: string
-	quest: Pick<Quest, "id" | "displayTitle" | "internalTitle">
+	quest: Omit<Quest, "hints">
 	start: Date | null
 	end: Date | null
 	now: number
@@ -51,26 +55,55 @@ export function QuestTitles({
 	}
 
 	return (
-		<div>
+		<div className="max-w-2xl">
 			<div className="space-y-5">
-				<AutosaveTextField
+				<div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
+					<AutosaveTextField
+						label={
+							<>
+								Display title <span className="ml-2 font-body normal-case tracking-normal">players see this</span>
+							</>
+						}
+						target={{ arcId, questId: quest.id, field: "displayTitle" }}
+						serverValue={quest.displayTitle}
+						autoFocus={label === null}
+					/>
+					<AutosaveTextField
+						label={
+							<>
+								Internal title <span className="ml-2 font-body normal-case tracking-normal">admin only</span>
+							</>
+						}
+						target={{ arcId, questId: quest.id, field: "internalTitle" }}
+						serverValue={quest.internalTitle}
+					/>
+				</div>
+				<AutosaveTextarea
 					label={
 						<>
-							Display title <span className="ml-2 font-body normal-case tracking-normal">players see this</span>
+							Content <span className="ml-2 font-body normal-case tracking-normal">Markdown</span>
 						</>
 					}
-					target={{ arcId, questId: quest.id, field: "displayTitle" }}
-					serverValue={quest.displayTitle}
-					autoFocus={label === null}
+					target={{ arcId, questId: quest.id, field: "content" }}
+					serverValue={quest.content}
+					minRows={5}
+					mono
 				/>
-				<AutosaveTextField
+				<QuestAsset assetPath={quest.assetPath} />
+				<div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
+					<AnswerChips arcId={arcId} questId={quest.id} answers={quest.answers} />
+					<AutosavePointsField arcId={arcId} questId={quest.id} serverValue={quest.points} />
+				</div>
+				<AutosaveTextarea
 					label={
 						<>
-							Internal title <span className="ml-2 font-body normal-case tracking-normal">admin only</span>
+							Admin notes <span className="ml-2 font-body normal-case tracking-normal">admin only</span>
 						</>
 					}
-					target={{ arcId, questId: quest.id, field: "internalTitle" }}
-					serverValue={quest.internalTitle}
+					target={{ arcId, questId: quest.id, field: "adminNotes" }}
+					serverValue={quest.adminNotes}
+					minRows={1}
+					mono={false}
 				/>
 			</div>
 			{editable && (
