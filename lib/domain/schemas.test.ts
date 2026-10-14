@@ -14,6 +14,14 @@ const draftQuest = {
 }
 
 describe("Quest", () => {
+	it.each([null, 0, 10000])("accepts points %j", (points) => {
+		expect(Quest.parse({ ...draftQuest, points }).points).toBe(points)
+	})
+
+	it.each([-1, 10001, 2.5, Number.NaN, Number.POSITIVE_INFINITY, "50"])("rejects points %j", (points) => {
+		expect(Quest.safeParse({ ...draftQuest, points }).success).toBe(false)
+	})
+
 	it("accepts a draft with empty content, no answers and no points", () => {
 		expect(Quest.safeParse(draftQuest).success).toBe(true)
 	})

@@ -16,7 +16,7 @@ export const Quest = z.object({
 	content: z.string(),
 	assetPath: z.string().nullable(),
 	answers: z.array(z.string()),
-	points: z.number().nullable(),
+	points: z.number().int().min(0).max(10000).nullable(),
 	adminNotes: z.string(),
 	hints: z.array(Hint),
 })

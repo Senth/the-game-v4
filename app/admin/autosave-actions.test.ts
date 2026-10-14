@@ -56,6 +56,71 @@ async function setup() {
 const quest = { arcId: "a1", questId: "q1" }
 
 describe("autosave actions", () => {
+	it("rejects assetPath autosave without writing or publishing", async () => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { ...quest, field: "assetPath" }, "/assets/image.png")).toEqual({
+			ok: false,
+			error: "Invalid value.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each([null, 0, 10000])("saves quest points %j", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { ...quest, field: "points" }, value)).toEqual({ ok: true })
+		expect((await seasons.getSeason(season._id))?.arcs[0]?.quests[0]?.points).toBe(value)
+	})
+
+	it.each([-1, 10001, 2.5, Number.NaN])("rejects quest points %j with shared copy without writing", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { ...quest, field: "points" }, value)).toEqual({
+			ok: false,
+			error: "Use a whole number from 0 to 10000.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each(["", "   ", "x".repeat(201)])("rejects invalid answer %j without writing or publishing", async (value) => {
+		const season = await setup()
+		expect(await patchSeasonList(season._id, { ...quest, field: "answers" }, { op: "add", value })).toEqual({
+			ok: false,
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("returns ok for cleaned answer adds and normalized duplicates", async () => {
+		const season = await setup()
+		for (const value of [" Fyren ", "fyren", "å", "a\u030a", "x".repeat(200)]) {
+			expect(await patchSeasonList(season._id, { ...quest, field: "answers" }, { op: "add", value })).toEqual({
+				ok: true,
+			})
+		}
+		expect((await seasons.getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual([
+			"lamp",
+			"Fyren",
+			"å",
+			"x".repeat(200),
+		])
+	})
+
+	it.each([-1, 10001, 2.5, Number.NaN, "assetPath", "", "   ", "x".repeat(201)])(
+		"rejects a team session before new validation for %j",
+		async (value) => {
+			const season = await setup()
+			vi.mocked(requireAdmin).mockImplementationOnce(async () => redirect("/"))
+			const action =
+				typeof value === "number" || value === "assetPath"
+					? saveSeasonField(season._id, { ...quest, field: value === "assetPath" ? "assetPath" : "points" }, value)
+					: patchSeasonList(season._id, { ...quest, field: "answers" }, { op: "add", value })
+			await expect(action).rejects.toMatchObject({ digest: expect.stringContaining("NEXT_REDIRECT") })
+			expect(await seasons.getSeason(season._id)).toEqual(season)
+			expect(publish).not.toHaveBeenCalled()
+		},
+	)
+
 	it("rejects direct end saves without writing or publishing", async () => {
 		const season = await setup()
 		expect(await saveSeasonField(season._id, { field: "end" }, new Date())).toMatchObject({ ok: false })
@@ -198,6 +263,7 @@ describe("autosave actions", () => {
 		{ arcId: "a1", field: "quests" },
 		{ ...quest, field: "answers" },
 		{ ...quest, field: "hints" },
+		{ ...quest, field: "assetPath" },
 		{ field: "registrationOpen" },
 	])("rejects list or registration field %j without writing or publishing", async (target) => {
 		const season = await setup()
@@ -217,7 +283,7 @@ describe("autosave actions", () => {
 		const season = await setup()
 		expect(await saveSeasonField(season._id, { ...quest, field: "points" }, "ten")).toEqual({
 			ok: false,
-			error: "Invalid value.",
+			error: "Use a whole number from 0 to 10000.",
 		})
 		expect(await saveSeasonField("missing", { field: "title" }, "New")).toMatchObject({
 			ok: false,

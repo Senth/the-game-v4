@@ -21,7 +21,13 @@ const id = z.string().min(1)
 const FieldTarget = z.union([
 	z.object({ field: Season.omit({ _id: true, arcs: true, registrationOpen: true, end: true }).keyof() }).strict(),
 	z.object({ arcId: id, field: Arc.omit({ id: true, quests: true }).keyof() }).strict(),
-	z.object({ arcId: id, questId: id, field: Quest.omit({ id: true, answers: true, hints: true }).keyof() }).strict(),
+	z
+		.object({
+			arcId: id,
+			questId: id,
+			field: Quest.omit({ id: true, answers: true, hints: true, assetPath: true }).keyof(),
+		})
+		.strict(),
 	z.object({ arcId: id, questId: id, hintId: id, field: Hint.omit({ id: true }).keyof() }).strict(),
 ])
 const ListTarget = z.object({ arcId: id, questId: id, field: z.enum(["answers", "hints"]) }).strict()
@@ -36,6 +42,14 @@ export async function saveSeasonField(
 	try {
 		const parsed = FieldTarget.parse(target)
 		id.parse(seasonId)
+		if (
+			"questId" in parsed &&
+			!("hintId" in parsed) &&
+			parsed.field === "points" &&
+			!Quest.shape.points.safeParse(value).success
+		) {
+			return { ok: false, error: "Use a whole number from 0 to 10000." }
+		}
 		if (!("arcId" in parsed) && parsed.field === "start") {
 			const start = Season.shape.start.parse(value)
 			const season = await getSeason(seasonId)

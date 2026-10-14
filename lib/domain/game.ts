@@ -3,7 +3,7 @@ import { hintPenalty } from "./scoring"
 
 export const maxAnswerLength = 200
 
-const normalizeAnswer = (answer: string) => answer.normalize("NFC").trim().toLowerCase()
+export const normalizeAnswer = (answer: string) => answer.normalize("NFC").trim().toLowerCase()
 
 export function matchesAnswer(submitted: string, answers: string[]): boolean {
 	const normalized = normalizeAnswer(submitted)

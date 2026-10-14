@@ -136,6 +136,48 @@ describe("seasons", () => {
 		])
 	})
 
+	it("cleans answers and skips sequential normalized duplicates; concurrent Fyren/fyren duplicates are harmless", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "answers" } as const
+		await patchSeasonList(season._id, target, { op: "add", value: " Fyren " })
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["Fyren"])
+		const write = vi.spyOn(Collection.prototype, "updateOne")
+		try {
+			await expect(patchSeasonList(season._id, target, { op: "add", value: "fyren" })).resolves.toBeUndefined()
+			expect(write).not.toHaveBeenCalled()
+		} finally {
+			write.mockRestore()
+		}
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["Fyren"])
+		await patchSeasonList(season._id, target, { op: "add", value: " a\u030a " })
+		await patchSeasonList(season._id, target, { op: "add", value: "å" })
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["Fyren", "å"])
+	})
+
+	it.each(["", "   ", "x".repeat(201)])("rejects invalid answer %j without writing", async (value) => {
+		const season = await createSeason(seasonInput())
+		await expect(
+			patchSeasonList(season._id, { arcId: "a1", questId: "q1", field: "answers" }, { op: "add", value }),
+		).rejects.toThrow()
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+
+	it("checks answer length after trim and NFC and accepts 200 characters", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "answers" } as const
+		await patchSeasonList(season._id, target, { op: "add", value: ` ${"a\u030a".repeat(200)} ` })
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["å".repeat(200)])
+	})
+
+	it("removes only the exact stored answer, including legacy whitespace and decomposed Unicode", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "answers" } as const
+		await setSeasonField(season._id, target, [" Fyren ", "Fyren", "a\u030a", "å"])
+		await patchSeasonList(season._id, target, { op: "remove", value: " Fyren " })
+		await patchSeasonList(season._id, target, { op: "remove", value: "a\u030a" })
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["Fyren", "å"])
+	})
+
 	it("keeps concurrent answer adds and deduplicates repeated values", async () => {
 		const season = await createSeason(seasonInput())
 		const target = { arcId: "a1", questId: "q1", field: "answers" } as const
