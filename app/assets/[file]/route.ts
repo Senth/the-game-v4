@@ -13,6 +13,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ fil
 			headers: {
 				"Content-Type": asset.contentType,
 				"Cache-Control": "public, max-age=31536000, immutable",
+				"X-Content-Type-Options": "nosniff",
 			},
 		})
 	} catch {

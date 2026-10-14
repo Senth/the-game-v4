@@ -1,8 +1,14 @@
+import * as fs from "node:fs/promises"
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { GET } from "../../app/assets/[file]/route"
 import { deleteAssetFile, assetsDir as getAssetsDir, resolveAssetFile, saveAsset } from "./files"
+
+vi.mock("node:fs/promises", async (original) => {
+	const fs = await original<typeof import("node:fs/promises")>()
+	return { ...fs, writeFile: vi.fn(fs.writeFile) }
+})
 
 const filename = "01234567-89ab-cdef-0123-456789abcdef.png"
 const content = Buffer.from("asset contents")
@@ -44,6 +50,23 @@ describe("asset file storage", () => {
 		await expect(deleteAssetFile(assetPath)).resolves.toBeUndefined()
 	})
 
+	it("removes a partial file when writing fails", async () => {
+		const error = new Error("Disk full")
+		let partialPath = ""
+		const { writeFile: realWrite } = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+		const write = vi.spyOn(fs, "writeFile").mockImplementationOnce(async (file) => {
+			partialPath = String(file)
+			await realWrite(file, "partial")
+			throw error
+		})
+		try {
+			await expect(saveAsset(content, "png")).rejects.toBe(error)
+			await expect(access(partialPath)).rejects.toMatchObject({ code: "ENOENT" })
+		} finally {
+			write.mockRestore()
+		}
+	})
+
 	it.each(["../x.png", "/assets/legacy.png"])("ignores non-matching path %s", async (assetPath) => {
 		const file = path.join(assetsDir, path.basename(assetPath))
 		await writeFile(file, content)
@@ -81,6 +104,7 @@ describe("GET /assets/[file]", () => {
 		expect(response.status).toBe(200)
 		expect(response.headers.get("Content-Type")).toBe("image/png")
 		expect(response.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable")
+		expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff")
 		expect(Buffer.from(await response.arrayBuffer())).toEqual(content)
 	})
 

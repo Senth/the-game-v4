@@ -28,8 +28,14 @@ export async function saveAsset(
 	const directory = assetsDir()
 	await mkdir(directory, { recursive: true })
 	const filename = `${randomUUID()}.${extension}`
-	await writeFile(path.join(directory, filename), bytes)
-	return `/assets/${filename}`
+	const assetPath = `/assets/${filename}`
+	try {
+		await writeFile(path.join(directory, filename), bytes)
+	} catch (error) {
+		await deleteAssetFile(assetPath)
+		throw error
+	}
+	return assetPath
 }
 
 export async function deleteAssetFile(assetPath: string): Promise<void> {
