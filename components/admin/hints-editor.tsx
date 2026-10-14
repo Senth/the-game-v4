@@ -13,12 +13,14 @@ export function HintsEditor({
 	points,
 	hints,
 	revealers,
+	hasStarted,
 }: {
 	arcId: string
 	questId: string
 	points: number | null
 	hints: Hint[]
 	revealers: Record<string, string[]>
+	hasStarted: boolean
 }) {
 	const autosave = useAutosave()
 	const list = useAutosaveList({ arcId, questId, field: "hints" }, hints)
@@ -65,6 +67,7 @@ export function HintsEditor({
 						onOpen={() => setOpenId(hint.id)}
 						onClose={() => setOpenId(null)}
 						onPointsChange={updatePenalty}
+						revealerNames={hasStarted ? (revealers[hint.id] ?? []) : null}
 						create={hint.id === newHint?.id ? list.add : undefined}
 						onCreated={() => setNewHint((current) => (current?.id === hint.id ? null : current))}
 						onDiscard={() => remove(hint.id)}
@@ -118,6 +121,7 @@ function HintRow({
 	onCreated,
 	onDiscard,
 	onRemove,
+	revealerNames,
 }: {
 	arcId: string
 	questId: string
@@ -130,6 +134,7 @@ function HintRow({
 	onCreated: () => void
 	onDiscard: () => void
 	onRemove: (points: number) => void
+	revealerNames: string[] | null
 }) {
 	const savedText = useAutosaveField({ arcId, questId, hintId: hint.id, field: "text" }, hint.text)
 	const savedPoints = useAutosaveField({ arcId, questId, hintId: hint.id, field: "points" }, hint.points)
@@ -312,6 +317,25 @@ function HintRow({
 					</span>
 					<span className="shrink-0 font-cond text-sm text-muted tabular-nums">−{points.value}p</span>
 				</button>
+			)}
+			{revealerNames !== null && (
+				<div className="pb-2.5">
+					{revealerNames.length ? (
+						<div className="flex flex-wrap items-center gap-1.5">
+							<span className="mr-1 font-cond text-xs text-muted">Revealed by</span>
+							{revealerNames.map((name) => (
+								<span
+									key={name}
+									className="inline-flex min-h-6 max-w-full items-center rounded bg-z2 px-2 font-cond text-xs text-ink break-all"
+								>
+									{name}
+								</span>
+							))}
+						</div>
+					) : (
+						<p className="font-cond text-xs text-muted">Not revealed yet</p>
+					)}
+				</div>
 			)}
 		</li>
 	)

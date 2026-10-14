@@ -17,6 +17,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 	if (!season || !arc || !quest) redirect(`/admin/seasons/${seasonId}`)
 	const label = questLabel(quest)
 	const revealers = hintRevealers(await listTeams(seasonId), questId)
+	const now = Date.now()
 	return (
 		<>
 			<QuestHeader seasonId={seasonId} arcTitle={arc.title} label={label} />
@@ -40,7 +41,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 					}}
 					start={season.start}
 					end={season.end}
-					now={Date.now()}
+					now={now}
 				>
 					<HintsEditor
 						arcId={arc.id}
@@ -48,6 +49,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 						points={quest.points}
 						hints={quest.hints}
 						revealers={revealers}
+						hasStarted={season.start !== null && season.start.getTime() <= now}
 					/>
 				</QuestEditor>
 			</div>

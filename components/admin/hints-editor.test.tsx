@@ -2,6 +2,7 @@ import { Children, cloneElement, type EffectCallback, isValidElement, type React
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
+import { hintRevealers } from "@/lib/domain/hints"
 import { AutosavePointsField } from "./autosave-points-field"
 import { AutosaveProvider } from "./autosave-provider"
 import { HintsEditor } from "./hints-editor"
@@ -89,6 +90,7 @@ const props = {
 		{ id: "h2", text: "Read the last letters.", points: 10 },
 	],
 	revealers: {} as Record<string, string[]>,
+	hasStarted: false,
 }
 let editor: Scope
 let rows: Map<string, Scope>
@@ -108,7 +110,7 @@ type NodeProps = {
 function nodes(node: ReactNode, type: string): ReactElement<NodeProps>[] {
 	return Children.toArray(node).flatMap((child) => {
 		if (!isValidElement<NodeProps>(child)) return []
-		return child.type === type ? [child] : nodes(child.props.children, type)
+		return [...(child.type === type ? [child] : []), ...nodes(child.props.children, type)]
 	})
 }
 function view(snapshot = props) {
@@ -509,4 +511,57 @@ it("does not resurrect a newly saved hint after another admin removes it", async
 	view(props)
 	expect(view(props).html).not.toContain("Look up")
 	expect(view(props).html).toContain(">15p</b>")
+})
+
+it("hides all revealer metadata before start, even if reveal history exists", () => {
+	const snapshot = { ...props, revealers: { h1: ["Ninjas"] } }
+	const resting = view(snapshot)
+	expect(resting.html).not.toContain("Revealed by")
+	expect(resting.html).not.toContain("Not revealed yet")
+	expect(resting.html).not.toContain("Ninjas")
+	resting.buttons[0]?.props.onClick?.()
+	expect(view(snapshot).html).not.toContain("Revealed by")
+	expect(view(snapshot).html).not.toContain("Not revealed yet")
+})
+
+it("renders seven neutral wrapping chips in reveal order and quiet unrevealed text", () => {
+	const names = ["Rävarna", "Team Kaos", "Fjällräv", "Byggarna", "Glada Gänget", "Lagom", "Ninjas"]
+	const teams = names.toReversed().map((name, index) => ({
+		name,
+		progress: [
+			{
+				questId: "quest",
+				pointsEarned: 0,
+				hintsRevealed: [{ hintId: "h1", text: "Hint", points: 5, revealedAt: new Date(names.length - index) }],
+			},
+		],
+	}))
+	const snapshot = { ...props, hasStarted: true, revealers: hintRevealers(teams, "quest") }
+	const resting = view(snapshot)
+	const chips = nodes(resting.tree, "span").filter((node) => node.props.className?.includes("bg-z2"))
+	expect(chips.map((chip) => chip.props.children)).toEqual(names)
+	expect(resting.html).toContain("Revealed by")
+	expect(resting.html).toContain("Not revealed yet")
+	expect(nodes(resting.tree, "div").some((node) => node.props.className?.includes("flex flex-wrap"))).toBe(true)
+	for (const chip of chips) {
+		expect(chip.props.className).toContain("font-cond text-xs text-ink")
+		expect(chip.props.className).toContain("max-w-full")
+		expect(chip.props.className).toContain("break-all")
+		expect(chip.props.className).not.toMatch(/accent|warn|overflow|whitespace-nowrap/)
+	}
+	expect(resting.inputs).toHaveLength(0)
+	expect(resting.textareas).toHaveLength(0)
+	expect(resting.html.indexOf("Start from the bottom.")).toBeLessThan(resting.html.indexOf("Revealed by"))
+})
+
+it("keeps chips below Remove and Done and accepts refreshed revealers without losing local edits", () => {
+	const snapshot = { ...props, hasStarted: true, revealers: { h1: ["Rävarna"] } }
+	view(snapshot).buttons[0]?.props.onClick?.()
+	const opened = view(snapshot)
+	expect(opened.html.indexOf("Done</button>")).toBeLessThan(opened.html.indexOf("Revealed by"))
+	opened.textareas[0]?.props.onChange?.({ target: { value: "Local edit", valueAsNumber: Number.NaN } })
+	const refreshed = view({ ...snapshot, revealers: { h1: ["Rävarna", "Ninjas"] } })
+	expect(refreshed.html).toContain("Ninjas")
+	expect(refreshed.textareas[0]?.props.value).toBe("Local edit")
+	expect(refreshed.html.indexOf("Rävarna")).toBeLessThan(refreshed.html.indexOf("Ninjas"))
 })
