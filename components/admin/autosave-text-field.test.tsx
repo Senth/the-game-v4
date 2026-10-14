@@ -67,3 +67,17 @@ it("passes title edits, focus and blur to the autosave hook", async () => {
 	expect(field.onFocus).toHaveBeenCalledOnce()
 	expect(field.onBlur).toHaveBeenCalledOnce()
 })
+
+it("keeps inline label notes and forwards autofocus for newly added quest titles", () => {
+	const label = (
+		<>
+			Display title <span className="ml-2 font-body normal-case tracking-normal">players see this</span>
+		</>
+	)
+	const element = AutosaveTextField({ label, target, serverValue: "", autoFocus: true })
+	expect(element.props.label).toBe(label)
+	expect(element.props.autoFocus).toBe(true)
+	const html = renderToStaticMarkup(element)
+	expect(html).toContain("players see this</span></label>")
+	expect(html).toContain('autofocus=""')
+})

@@ -7,12 +7,18 @@ import type { Hint, HintInput } from "@/lib/domain/schemas"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { type AutosaveState, createFieldSaver, createListSaver } from "./autosave"
 
+type Draft = {
+	target: Record<string, string>
+	saver: { cancel: () => void }
+}
+
 type SaveContext = {
 	seasonId: string
 	status: "saved" | "saving" | "failed" | null
-	drafts: Map<string, unknown>
+	drafts: Map<string, Draft>
 	update: (id: string, state: AutosaveState, retry: () => void) => void
 	remove: (id: string) => void
+	discard: (target: { arcId: string; questId?: string }) => void
 	retryAll: () => void
 }
 
@@ -28,7 +34,7 @@ export function AutosaveProvider({ seasonId, children }: { seasonId: string; chi
 	const [status, setStatus] = useState<SaveContext["status"]>(null)
 	const [registry] = useState(() => {
 		const fields = new Map<string, { state: AutosaveState; retry: () => void }>()
-		const drafts = new Map<string, unknown>()
+		const drafts = new Map<string, Draft>()
 		function changed() {
 			const states = [...fields.values()].map((field) => field.state)
 			setStatus(
@@ -50,6 +56,16 @@ export function AutosaveProvider({ seasonId, children }: { seasonId: string; chi
 			remove(id: string) {
 				fields.delete(id)
 				drafts.delete(id)
+				changed()
+			},
+			discard(target: { arcId: string; questId?: string }) {
+				for (const [id, draft] of drafts) {
+					if (draft.target.arcId !== target.arcId || (target.questId && draft.target.questId !== target.questId))
+						continue
+					draft.saver.cancel()
+					fields.delete(id)
+					drafts.delete(id)
+				}
 				changed()
 			},
 			retryAll() {
@@ -98,13 +114,23 @@ function autosaveId(seasonId: string, kind: "field" | "list", target: Record<str
 	return JSON.stringify([seasonId, kind, Object.entries(target).sort(([left], [right]) => left.localeCompare(right))])
 }
 
-type FieldDraft<T> = {
+type FieldDraft<T> = Draft & {
 	value: T
 	serverValue: T
 	latestServerValue: T
 	state: AutosaveState
-	notify?: () => void
+	listeners: Set<() => void>
+	focusedSubscribers: Set<object>
 	saver: ReturnType<typeof createFieldSaver<T>>
+}
+
+function syncFieldDraft<T>(draft: FieldDraft<T>) {
+	if (draft.focusedSubscribers.size || draft.state !== "saved" || Object.is(draft.latestServerValue, draft.serverValue))
+		return
+	draft.serverValue = draft.latestServerValue
+	draft.value = draft.latestServerValue
+	draft.saver.sync(draft.latestServerValue)
+	for (const notify of draft.listeners) notify()
 }
 
 export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1], serverValue: T) {
@@ -116,10 +142,13 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 		const retained = drafts.get(id) as FieldDraft<T> | undefined
 		if (retained) return retained
 		const draft: FieldDraft<T> = {
+			target,
 			value: serverValue,
 			serverValue,
 			latestServerValue: serverValue,
 			state: "saved",
+			listeners: new Set(),
+			focusedSubscribers: new Set(),
 			saver: createFieldSaver<T>({
 				async save(value) {
 					const result = await saveSeasonField(seasonId, target, value)
@@ -128,53 +157,59 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 				},
 				onState(next) {
 					draft.state = next
-					draft.notify?.()
+					for (const notify of draft.listeners) notify()
 					update(id, next, () => void draft.saver.retry())
-					if (!draft.notify && next === "saved") remove(id)
+					if (!draft.listeners.size && next === "saved") remove(id)
 				},
 			}),
 		}
 		draft.saver.sync(serverValue)
+		drafts.set(id, draft)
 		return draft
 	})
 	const { saver } = draft
 	const [value, setValue] = useState(draft.value)
 	const [state, setState] = useState(draft.state)
-	const [focused, setFocused] = useState(false)
+	const [subscriber] = useState(() => ({}))
 
 	useEffect(() => {
 		drafts.set(id, draft)
-		draft.notify = () => setState(draft.state)
+		const notify = () => {
+			setValue(draft.value)
+			setState(draft.state)
+		}
+		draft.listeners.add(notify)
 		update(id, draft.state, () => void saver.retry())
 		return () => {
-			draft.notify = undefined
+			draft.listeners.delete(notify)
+			draft.focusedSubscribers.delete(subscriber)
+			if (draft.listeners.size) {
+				syncFieldDraft(draft)
+				return
+			}
 			if (draft.state === "pending" || draft.state === "saving") void saver.flush()
 			else if (draft.state === "saved") remove(id)
 		}
-	}, [id, drafts, draft, update, remove, saver])
+	}, [id, drafts, draft, update, remove, saver, subscriber])
 
 	useEffect(() => {
 		draft.latestServerValue = serverValue
-		if (!focused && state === "saved" && draft.state === "saved" && !Object.is(serverValue, draft.serverValue)) {
-			draft.serverValue = serverValue
-			draft.value = serverValue
-			setValue(serverValue)
-			saver.sync(serverValue)
-		}
-	}, [serverValue, saver, draft, focused, state])
+		if (state === "saved") syncFieldDraft(draft)
+	}, [serverValue, draft, state])
 
 	return {
 		value,
 		onChange(next: T) {
 			draft.value = next
-			setValue(next)
+			for (const notify of draft.listeners) notify()
 			saver.edit(next)
 		},
 		onFocus() {
-			setFocused(true)
+			draft.focusedSubscribers.add(subscriber)
 		},
 		onBlur() {
-			setFocused(false)
+			draft.focusedSubscribers.delete(subscriber)
+			syncFieldDraft(draft)
 			return saver.blur()
 		},
 		failed: state === "failed",
@@ -186,7 +221,7 @@ type ListTarget = Parameters<typeof patchSeasonList>[1]
 type ListOp = Parameters<typeof patchSeasonList>[2]
 type ListItem = string | Hint
 type ListResult<T, Add> = { items: T[]; add(item: Add): void; remove(id: string): void; failed: boolean }
-type ListDraft = {
+type ListDraft = Draft & {
 	items: ListItem[]
 	serverItems: string
 	state: AutosaveState
@@ -219,13 +254,14 @@ export function useAutosaveList(target: ListTarget, serverItems: ListItem[]): Li
 		const retained = drafts.get(id) as ListDraft | undefined
 		if (retained) return retained
 		const draft: ListDraft = {
+			target,
 			items: serverItems,
 			serverItems: JSON.stringify(serverItems),
 			state: "saved",
 			saver: createListSaver<ListOp>({
 				async patch(op) {
 					const result = await patchSeasonList(seasonId, target, op)
-					if (result.ok) {
+					if (result.ok && drafts.get(id) === draft) {
 						draft.items = applyList(draft.items, op)
 						draft.notify?.()
 					}

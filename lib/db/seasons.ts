@@ -3,6 +3,7 @@ import { z } from "zod"
 import { overlappingSeason, scheduleWindow, seasonStatus } from "@/lib/domain/admin-seasons"
 import { hasEnded, registrationConflict } from "@/lib/domain/game"
 import { Arc, Hint, HintInput, Quest, Season, type SeasonInput, withHintIds } from "@/lib/domain/schemas"
+import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { collections, NotFoundError } from "./collections"
 
 type Field<T> = Exclude<keyof T, "_id" | "id">
@@ -31,6 +32,57 @@ export async function getSeason(id: string): Promise<Season | null> {
 
 export async function listSeasons(): Promise<Season[]> {
 	return (await collections()).seasons.find().toArray()
+}
+
+export class SeasonStartedError extends Error {
+	name = "SeasonStartedError"
+
+	constructor() {
+		super("The game has started.")
+	}
+}
+
+async function writeSeasonTree(
+	seasonId: string,
+	now: Date,
+	filter: Filter<Season>,
+	update: UpdateFilter<Season>,
+	arrayFilters: Filter<unknown>[] = [],
+): Promise<void> {
+	const { seasons } = await collections()
+	const target = { ...filter, _id: seasonId }
+	const result = await seasons.updateOne({ ...target, $or: [{ start: null }, { start: { $gt: now } }] }, update, {
+		arrayFilters,
+	})
+	if (result.matchedCount === 0) {
+		if (!(await seasons.findOne(target))) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(filter)}`)
+		throw new SeasonStartedError()
+	}
+}
+
+export async function addArc(seasonId: string, now: Date): Promise<string> {
+	const season = await getSeason(seasonId)
+	if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
+	const arc = newArc(season.shuffleArcs)
+	await writeSeasonTree(seasonId, now, {}, { $push: { arcs: arc } })
+	return arc.id
+}
+
+export async function addQuest(seasonId: string, arcId: string, now: Date): Promise<string> {
+	const quest = newQuest()
+	const { path, filter, arrayFilters } = locate({ arcId, field: "quests" })
+	await writeSeasonTree(seasonId, now, filter, { $push: { [path]: quest } }, arrayFilters)
+	return quest.id
+}
+
+export async function removeArc(seasonId: string, arcId: string, now: Date): Promise<void> {
+	await writeSeasonTree(seasonId, now, { "arcs.id": arcId }, { $pull: { arcs: { id: arcId } } })
+}
+
+export async function removeQuest(seasonId: string, arcId: string, questId: string, now: Date): Promise<void> {
+	const { path, arrayFilters } = locate({ arcId, field: "quests" })
+	const filter = { arcs: { $elemMatch: { id: arcId, "quests.id": questId } } }
+	await writeSeasonTree(seasonId, now, filter, { $pull: { [path]: { id: questId } } }, arrayFilters)
 }
 
 const SeasonWindow = Season.pick({ start: true, end: true })

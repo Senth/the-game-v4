@@ -8,15 +8,18 @@ export function AutosaveTextField({
 	label,
 	target,
 	serverValue,
+	autoFocus,
 }: {
-	label: string
+	label: ReactNode
 	target: Parameters<typeof useAutosaveField>[0]
 	serverValue: string
+	autoFocus?: boolean
 }) {
 	const field = useAutosaveField(target, serverValue)
 	return (
 		<AutosaveInput
 			label={label}
+			autoFocus={autoFocus}
 			type="text"
 			value={field.value}
 			onChange={(event) => field.onChange(event.target.value)}
@@ -37,7 +40,7 @@ export function AutosaveInput({
 	children,
 	...input
 }: Omit<ComponentProps<"input">, "id" | "className" | "children"> & {
-	label: string
+	label: ReactNode
 	failed: boolean
 	error?: string
 	helper?: string

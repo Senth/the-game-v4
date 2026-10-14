@@ -18,6 +18,7 @@ export function createFieldSaver<T>({
 	let hasSavedValue = false
 	let inFlight = false
 	let running: Promise<void> | undefined
+	let canceled = false
 
 	function setState(next: AutosaveState) {
 		if (state === next) return
@@ -43,6 +44,7 @@ export function createFieldSaver<T>({
 		} catch {
 			error = undefined
 		}
+		if (canceled) return
 		inFlight = false
 		if (!ok) {
 			clearTimer()
@@ -63,6 +65,7 @@ export function createFieldSaver<T>({
 
 	async function flush(): Promise<void> {
 		clearTimer()
+		if (canceled) return
 		if (inFlight) return running
 		if (!hasValue || unchanged()) {
 			error = undefined
@@ -76,15 +79,20 @@ export function createFieldSaver<T>({
 	}
 
 	return {
+		cancel() {
+			canceled = true
+			clearTimer()
+		},
 		get error() {
 			return error
 		},
 		sync(next: T) {
-			if (state !== "saved" || inFlight) return
+			if (canceled || state !== "saved" || inFlight) return
 			value = savedValue = next
 			hasValue = hasSavedValue = true
 		},
 		edit(next: T) {
+			if (canceled) return
 			value = next
 			hasValue = true
 			clearTimer()
@@ -114,6 +122,7 @@ export function createListSaver<Operation>({
 	const queue: Operation[] = []
 	let state: AutosaveState = "saved"
 	let inFlight = false
+	let canceled = false
 
 	function setState(next: AutosaveState) {
 		if (state === next) return
@@ -122,7 +131,7 @@ export function createListSaver<Operation>({
 	}
 
 	async function drain() {
-		if (inFlight || queue.length === 0) return
+		if (canceled || inFlight || queue.length === 0) return
 		inFlight = true
 		setState("saving")
 		while (queue.length > 0) {
@@ -130,6 +139,7 @@ export function createListSaver<Operation>({
 			try {
 				ok = (await patch(queue[0] as Operation)).ok
 			} catch {}
+			if (canceled) return
 			if (!ok) {
 				inFlight = false
 				setState("failed")
@@ -142,7 +152,12 @@ export function createListSaver<Operation>({
 	}
 
 	return {
+		cancel() {
+			canceled = true
+			queue.length = 0
+		},
 		enqueue(op: Operation) {
+			if (canceled) return
 			queue.push(op)
 			if (state !== "failed") void drain()
 		},

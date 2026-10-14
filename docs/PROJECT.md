@@ -218,7 +218,10 @@ Every season field except `end` and `registrationOpen` autosaves on blur or afte
 A server action validates values before writing.
 The `registrationOpen` field keeps its own action.
 Lists never save whole. `answers` and `hints` change by adding or removing one item.
-Arc and quest add and remove belong to I-15 and I-24.
+Before start, admins add and remove arcs and quests freely. Once live or ended, I-24 owns those changes.
+A new arc is titled "New arc" and copies `shuffleArcs` into `shuffleQuests`.
+A new quest has empty display title, internal title and content, no answers, hints or asset, and `points: null`.
+Removing an arc removes its quests.
 A save publishes `season:<id>` and `board`. Open admin pages reload server data on `season:<id>`.
 A field accepts a value from another tab only when it is unfocused and has no unsaved edit.
 Otherwise, its local value stays and its next save wins.

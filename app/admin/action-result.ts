@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { NotFoundError } from "@/lib/db/collections"
-import { RegistrationConflictError, SeasonOverlapError, StaleWindowError } from "@/lib/db/seasons"
+import { RegistrationConflictError, SeasonOverlapError, SeasonStartedError, StaleWindowError } from "@/lib/db/seasons"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
@@ -18,7 +18,7 @@ const time = new Intl.DateTimeFormat("en-GB", {
 	hourCycle: "h23",
 })
 
-export function actionFailure(error: unknown, now: Date): ActionResult {
+export function actionFailure(error: unknown, now: Date): Extract<ActionResult, { ok: false }> {
 	if (error instanceof SeasonOverlapError) {
 		const season = error.season
 		return {
@@ -33,6 +33,7 @@ export function actionFailure(error: unknown, now: Date): ActionResult {
 	if (
 		error instanceof NotFoundError ||
 		error instanceof RegistrationConflictError ||
+		error instanceof SeasonStartedError ||
 		error instanceof StaleWindowError ||
 		(error instanceof Error && error.message === "Set at start. Use −5 / +5 min while live.")
 	) {
