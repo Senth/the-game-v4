@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation"
+import { HintsEditor } from "@/components/admin/hints-editor"
 import { QuestEditor } from "@/components/admin/quest-editor"
 import { QuestHeader } from "@/components/admin/quest-header"
 import { requireAdmin } from "@/lib/auth/guards"
@@ -37,7 +38,9 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 					start={season.start}
 					end={season.end}
 					now={Date.now()}
-				/>
+				>
+					<HintsEditor arcId={arc.id} questId={quest.id} points={quest.points} hints={quest.hints} />
+				</QuestEditor>
 			</div>
 		</>
 	)

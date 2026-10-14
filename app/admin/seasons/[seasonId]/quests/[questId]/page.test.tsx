@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest"
+import { HintsEditor } from "@/components/admin/hints-editor"
 import { QuestEditor } from "@/components/admin/quest-editor"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
@@ -66,6 +67,13 @@ it("selects the quest's own arc and passes editor fields without hints across th
 	expect(titles.props.now).toBeGreaterThanOrEqual(before)
 	expect(titles.props.now).toBeLessThanOrEqual(Date.now())
 	expect(titles.props.quest).not.toHaveProperty("hints")
+	expect(titles.props.children.type).toBe(HintsEditor)
+	expect(titles.props.children.props).toEqual({
+		arcId: arc.id,
+		questId: quest.id,
+		points: quest.points,
+		hints: quest.hints,
+	})
 })
 
 it.each([

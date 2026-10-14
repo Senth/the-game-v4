@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { removeQuest } from "@/app/admin/tree-actions"
 import type { Quest } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
@@ -21,6 +21,7 @@ export function QuestEditor({
 	start,
 	end,
 	now,
+	children,
 }: {
 	seasonId: string
 	arcId: string
@@ -28,6 +29,7 @@ export function QuestEditor({
 	start: Date | null
 	end: Date | null
 	now: number
+	children?: ReactNode
 }) {
 	const router = useRouter()
 	const autosave = useAutosave()
@@ -143,6 +145,7 @@ export function QuestEditor({
 					minRows={1}
 					mono={false}
 				/>
+				{children}
 			</div>
 			{editable && (
 				<div className="mt-8 border-t border-z1 pt-2">
