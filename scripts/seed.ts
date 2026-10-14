@@ -2,6 +2,7 @@ import { copyFile, mkdir } from "node:fs/promises"
 import path from "node:path"
 import { loadEnvConfig } from "@next/env"
 import type { Db } from "mongodb"
+import { assetsDir } from "@/lib/assets/files"
 import { hashPassword } from "@/lib/auth/password"
 import { closeDb, getDb } from "@/lib/db/client"
 import { collectionsOf } from "@/lib/db/collections"
@@ -41,9 +42,9 @@ export async function seed(db: Db, now: Date): Promise<string> {
 	await collections.teams.insertMany(teams)
 	await collections.admins.insertMany(admins)
 
-	const assetsDir = process.env.ASSETS_DIR ?? ".tmp/assets"
-	await mkdir(assetsDir, { recursive: true })
-	await copyFile("scripts/fixture/backwards-log.png", path.join(assetsDir, path.basename(backwardsLogAsset)))
+	const directory = assetsDir()
+	await mkdir(directory, { recursive: true })
+	await copyFile("scripts/fixture/backwards-log.png", path.join(directory, path.basename(backwardsLogAsset)))
 
 	return `Seeded "${fixture.season.title}" into ${db.databaseName}: 1 season, ${teams.length} teams, ${admins.length} admin`
 }

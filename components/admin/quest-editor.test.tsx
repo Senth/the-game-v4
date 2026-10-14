@@ -1,6 +1,7 @@
 import { Children, cloneElement, type EffectCallback, isValidElement, type ReactElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { uploadQuestAsset } from "@/app/admin/asset-actions"
 import { removeQuest } from "@/app/admin/tree-actions"
 import { useAutosaveField, useAutosaveList } from "./autosave-provider"
 import { ConfirmDialog } from "./confirm-dialog"
@@ -10,6 +11,7 @@ const hooks = vi.hoisted(() => ({
 	states: [] as unknown[],
 	cursor: 0,
 	refCursor: 0,
+	refs: [] as { current: unknown }[],
 	effects: [] as EffectCallback[],
 	push: vi.fn(),
 	showModal: vi.fn(),
@@ -29,13 +31,21 @@ vi.mock("react", async (importOriginal) => ({
 		]
 	},
 	useEffect: (effect: EffectCallback) => hooks.effects.push(effect),
-	useRef: () => ({
-		current: hooks.refCursor++ === 0 ? { showModal: hooks.showModal, close: hooks.close } : { focus: hooks.focus },
-	}),
+	useRef: (initial: unknown) => {
+		const index = hooks.refCursor++
+		hooks.refs[index] ??= {
+			current: initial === null ? { showModal: hooks.showModal, close: hooks.close, focus: hooks.focus } : initial,
+		}
+		return hooks.refs[index]
+	},
+	useImperativeHandle: (ref: { current: unknown }, create: () => unknown) => {
+		ref.current = create()
+	},
 	useId: () => "quest-title",
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: hooks.push }) }))
 vi.mock("@/app/admin/tree-actions", () => ({ removeQuest: vi.fn() }))
+vi.mock("@/app/admin/asset-actions", () => ({ uploadQuestAsset: vi.fn(), removeQuestAsset: vi.fn() }))
 vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn(), useAutosaveList: vi.fn(), useAutosave: () => null }))
 vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }))
 
@@ -75,7 +85,9 @@ function render(props: Partial<Parameters<typeof QuestEditor>[0]> = {}) {
 	const children = element.props.children
 	const dialog = ConfirmDialog(children[2].props)
 	return {
-		html: renderToStaticMarkup(cloneElement(element, {}, children[0], children[1], dialog)),
+		html: renderToStaticMarkup(cloneElement(element, {}, children[0], children[1], dialog, children[3])),
+		root: element,
+		asset: children[0].props.children[2],
 		fields: children[0].props.children[0].props.children,
 		remove: buttons(children[1])[0],
 		dialog,
@@ -89,6 +101,8 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	vi.stubGlobal("document", { body: {} })
 	hooks.states.length = 0
+	hooks.refs.length = 0
+	vi.mocked(uploadQuestAsset).mockReset().mockResolvedValue({ ok: true, assetPath: "/assets/new-image.png" })
 	vi.mocked(removeQuest).mockReset().mockResolvedValue({ ok: true })
 	vi.mocked(useAutosaveList).mockImplementation((_target, items) => ({
 		items,
@@ -129,7 +143,7 @@ it("renders all seven fields in M2 order with helper text, desktop pairs and qui
 	expect(view.html).toContain("any match, case-insensitive")
 	expect(view.html).toContain("max-w-2xl")
 	expect(view.html.match(/lg:grid-cols-2 lg:gap-5/g)).toHaveLength(2)
-	expect(view.html.match(/<input/g)).toHaveLength(4)
+	expect(view.html.match(/<input/g)).toHaveLength(5)
 	expect(view.html).toMatch(/rows="5"[^>]*font-mono/)
 	expect(view.html).toMatch(/rows="1"[^>]*font-body/)
 	expect(view.html).toContain("mt-8 border-t border-z1")
@@ -144,11 +158,97 @@ it("renders all seven fields in M2 order with helper text, desktop pairs and qui
 	expect(useAutosaveList).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "answers" }, ["harbour"])
 })
 
-it("hides the read-only Image row when the quest has no asset", () => {
+it("shows Upload and empty Image row when the quest has no asset", () => {
 	const view = render({ quest: { ...defaults.quest, assetPath: null } })
-	expect(view.html).not.toContain(">Image<")
+	expect(view.html).toContain(">Image")
 	expect(view.html).not.toContain("<img")
+	expect(view.html).toContain("Upload</button>")
+	expect(view.html).toContain("No image")
 	expect(view.html).toContain("Answers")
+})
+
+function drag(files: File[] = [], types = ["Files"]) {
+	return { dataTransfer: { types, files, dropEffect: "none" }, preventDefault: vi.fn() }
+}
+
+it.each([null, defaults.quest.assetPath])(
+	"shows matching desktop overlay while file drag is over form, asset=%s",
+	(assetPath) => {
+		const props = { quest: { ...defaults.quest, assetPath } }
+		const event = drag()
+		render(props).root.props.onDragEnter(event)
+		const view = render(props)
+		expect(view.html).toContain(assetPath ? "Drop to replace the image" : "Drop to add an image or PDF")
+		expect(view.html).toContain("absolute inset-0")
+		expect(view.html).toContain("border-2 border-dashed border-accent bg-z0/85")
+		expect(view.html).toContain("lg:flex")
+		view.root.props.onDragEnter(event)
+		render(props).root.props.onDragLeave(event)
+		expect(render(props).html).toContain("Drop to")
+		render(props).root.props.onDragLeave(event)
+		expect(render(props).html).not.toContain("Drop to")
+	},
+)
+
+it("leaves text drags and drops alone without an overlay", () => {
+	const event = drag([], ["text/plain"])
+	const root = render().root
+	root.props.onDragEnter(event)
+	root.props.onDragOver(event)
+	root.props.onDrop(event)
+	expect(render().html).not.toContain("Drop to")
+	expect(event.preventDefault).not.toHaveBeenCalled()
+	expect(uploadQuestAsset).not.toHaveBeenCalled()
+})
+
+it("rejects multiple files in Image row error slot and resets overlay", () => {
+	const event = drag([new File(["a"], "a.png"), new File(["b"], "b.pdf")])
+	render().root.props.onDragEnter(event)
+	render().root.props.onDrop(event)
+	const view = render()
+	expect(event.preventDefault).toHaveBeenCalled()
+	expect(view.html).not.toContain("Drop to")
+	expect(view.html).toContain('role="alert"')
+	expect(view.html).toContain("Drop one file at a time.")
+	expect(uploadQuestAsset).not.toHaveBeenCalled()
+})
+
+it("accepts a file drop bubbled from Content, uploads once and updates Image row without reload", async () => {
+	const file = new File(["png"], "map.png")
+	const event = drag([file])
+	render().root.props.onDragEnter(event)
+	render().root.props.onDragOver(event)
+	expect(event.dataTransfer.dropEffect).toBe("copy")
+	render().root.props.onDrop(event)
+	await vi.waitFor(() => expect(render().html).toContain('src="/assets/new-image.png"'))
+	expect(event.preventDefault).toHaveBeenCalled()
+	expect(uploadQuestAsset).toHaveBeenCalledOnce()
+	expect(vi.mocked(uploadQuestAsset).mock.calls[0]?.slice(0, 3)).toEqual(["s1", "a1", "q1"])
+	expect(render().html).not.toContain("Drop to")
+})
+
+it.each([null, defaults.quest.assetPath])("changes Remove quest copy with current file, asset=%s", (assetPath) => {
+	const props = { quest: { ...defaults.quest, assetPath } }
+	render(props).remove?.props.onClick()
+	expect(render(props).html).toContain(
+		assetPath ? "Its answers, hints and image go too." : "Its answers and hints go too.",
+	)
+	render(props).asset.props.onChange(assetPath ? null : "/assets/new.png")
+	expect(render(props).html).toContain(
+		assetPath ? "Its answers and hints go too." : "Its answers, hints and image go too.",
+	)
+})
+
+it("syncs Image row from refreshed server props after another admin changes asset", () => {
+	render()
+	const props = { quest: { ...defaults.quest, assetPath: "/assets/another-admin.pdf" } }
+	render(props)
+	hooks.effects[1]?.()
+	expect(render(props).asset.props.assetPath).toBe("/assets/another-admin.pdf")
+	const removed = { quest: { ...defaults.quest, assetPath: null } }
+	render(removed)
+	hooks.effects[1]?.()
+	expect(render(removed).html).toContain("No image")
 })
 
 it.each([
@@ -173,8 +273,8 @@ it.each([null, new Date(now + 60_000)])(
 		const view = render(props)
 		expect(removeQuest).not.toHaveBeenCalled()
 		expect(view.html).toContain("Remove Harbour map?")
-		expect(view.html).toContain("Its answers and hints go too.")
-		hooks.effects[1]?.()
+		expect(view.html).toContain("Its answers, hints and image go too.")
+		hooks.effects[2]?.()
 		expect(hooks.showModal).toHaveBeenCalledOnce()
 		expect(hooks.focus).toHaveBeenCalledOnce()
 		view.confirm?.props.onClick()
@@ -210,10 +310,10 @@ it.each([now, now + 60_000])(
 		const view = render({ start: new Date(now - 60_000), end: new Date(end) })
 		expect(view.remove).toBeUndefined()
 		expect(view.html).not.toContain("Remove quest")
-		expect(view.html.match(/<input/g)).toHaveLength(4)
+		expect(view.html.match(/<input/g)).toHaveLength(5)
 		expect(view.html.match(/<textarea/g)).toHaveLength(2)
-		expect(view.html).not.toContain("disabled")
-		expect(view.html).not.toContain("readonly")
+		expect(view.html).not.toContain('disabled=""')
+		expect(view.html).not.toContain('readonly=""')
 	},
 )
 

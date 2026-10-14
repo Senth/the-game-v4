@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache"
 import { z } from "zod"
+import { releaseAsset } from "@/lib/assets/release"
 import { requireAdmin } from "@/lib/auth/guards"
 import {
 	removeArc as deleteArc,
@@ -50,7 +51,9 @@ export async function removeArc(seasonId: string, arcId: string): Promise<Action
 	await requireAdmin()
 	const now = new Date()
 	try {
-		await deleteArc(id.parse(seasonId), id.parse(arcId), now)
+		const paths = await deleteArc(id.parse(seasonId), id.parse(arcId), now)
+		for (const assetPath of paths)
+			await releaseAsset(assetPath).catch((error) => console.error("Failed to release asset", assetPath, error))
 	} catch (error) {
 		return actionFailure(error, now)
 	}
@@ -63,7 +66,9 @@ export async function removeQuest(seasonId: string, arcId: string, questId: stri
 	await requireAdmin()
 	const now = new Date()
 	try {
-		await deleteQuest(id.parse(seasonId), id.parse(arcId), id.parse(questId), now)
+		const paths = await deleteQuest(id.parse(seasonId), id.parse(arcId), id.parse(questId), now)
+		for (const assetPath of paths)
+			await releaseAsset(assetPath).catch((error) => console.error("Failed to release asset", assetPath, error))
 	} catch (error) {
 		return actionFailure(error, now)
 	}

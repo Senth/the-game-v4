@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { removeQuest } from "@/app/admin/tree-actions"
 import type { Quest } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
@@ -11,7 +11,7 @@ import { useAutosave } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { AutosaveTextarea } from "./autosave-textarea"
 import { ConfirmDialog } from "./confirm-dialog"
-import { QuestAsset } from "./quest-asset"
+import { QuestAsset, type QuestAssetHandle } from "./quest-asset"
 import { useSeasonClock } from "./use-season-clock"
 
 export function QuestEditor({
@@ -36,6 +36,11 @@ export function QuestEditor({
 	const [confirming, setConfirming] = useState(false)
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [assetPath, setAssetPath] = useState(quest.assetPath)
+	const asset = useRef<QuestAssetHandle>(null)
+	const dragDepth = useRef(0)
+	const [dragging, setDragging] = useState(false)
+	useEffect(() => setAssetPath(quest.assetPath), [quest.assetPath])
 
 	async function remove() {
 		if (pending || !editable) return
@@ -55,7 +60,33 @@ export function QuestEditor({
 	}
 
 	return (
-		<div className="max-w-2xl">
+		<section
+			aria-label="Quest editor"
+			className="relative max-w-2xl"
+			onDragEnter={(event) => {
+				if (!event.dataTransfer.types.includes("Files")) return
+				event.preventDefault()
+				dragDepth.current++
+				setDragging(true)
+			}}
+			onDragLeave={() => {
+				if (dragDepth.current > 0 && --dragDepth.current === 0) setDragging(false)
+			}}
+			onDragOver={(event) => {
+				if (!event.dataTransfer.types.includes("Files")) return
+				event.preventDefault()
+				event.dataTransfer.dropEffect = "copy"
+			}}
+			onDrop={(event) => {
+				if (!event.dataTransfer.types.includes("Files")) return
+				event.preventDefault()
+				dragDepth.current = 0
+				setDragging(false)
+				const files = event.dataTransfer.files
+				if (files.length > 1) asset.current?.setError("Drop one file at a time.")
+				else if (files[0]) void asset.current?.upload(files[0])
+			}}
+		>
 			<div className="space-y-5">
 				<div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
 					<AutosaveTextField
@@ -89,7 +120,14 @@ export function QuestEditor({
 					minRows={5}
 					mono
 				/>
-				<QuestAsset assetPath={quest.assetPath} />
+				<QuestAsset
+					ref={asset}
+					seasonId={seasonId}
+					arcId={arcId}
+					questId={quest.id}
+					assetPath={assetPath}
+					onChange={setAssetPath}
+				/>
 				<div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
 					<AnswerChips arcId={arcId} questId={quest.id} answers={quest.answers} />
 					<AutosavePointsField arcId={arcId} questId={quest.id} serverValue={quest.points} />
@@ -126,12 +164,19 @@ export function QuestEditor({
 			<ConfirmDialog
 				open={confirming}
 				title={label ? `Remove ${label}?` : "Remove this quest?"}
-				body="Its answers and hints go too."
+				body={assetPath ? "Its answers, hints and image go too." : "Its answers and hints go too."}
 				confirmLabel="Remove quest"
 				disabled={pending || !editable}
 				onConfirm={() => void remove()}
 				onClose={() => setConfirming(false)}
 			/>
-		</div>
+			{dragging && (
+				<div className="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center rounded-md border-2 border-dashed border-accent bg-z0/85 lg:flex">
+					<span className="font-head text-lg text-head">
+						{assetPath ? "Drop to replace the image" : "Drop to add an image or PDF"}
+					</span>
+				</div>
+			)}
+		</section>
 	)
 }

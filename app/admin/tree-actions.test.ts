@@ -1,5 +1,9 @@
+import { mkdtemp, readdir, rm } from "node:fs/promises"
+import path from "node:path"
 import { refresh } from "next/cache"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { saveAsset } from "@/lib/assets/files"
+import * as assets from "@/lib/assets/release"
 import { getSession } from "@/lib/auth/session"
 import { collections } from "@/lib/db/collections"
 import * as seasons from "@/lib/db/seasons"
@@ -76,6 +80,57 @@ it("refreshes the season layout after quest creation before navigation can reuse
 	expect(await creating).toEqual({ ok: true, questId: "new-quest" })
 	expect(refresh).toHaveBeenCalledExactlyOnceWith()
 	expect(steps).toEqual(["write", "refresh", "navigate"])
+})
+
+describe("tree asset cleanup", () => {
+	let directory: string
+	beforeEach(async () => {
+		directory = await mkdtemp(path.resolve(".tmp", "tree-assets-"))
+		vi.stubEnv("ASSETS_DIR", directory)
+	})
+	afterEach(async () => {
+		vi.unstubAllEnvs()
+		await rm(directory, { recursive: true, force: true })
+	})
+
+	it.each(["quest", "arc"])("keeps committed %s removal and publishes when releaseAsset fails", async (kind) => {
+		await setup()
+		const first = await saveAsset(new Uint8Array([1]), "png")
+		await seasons.setQuestAsset(...ids, first)
+		if (kind === "arc") {
+			const second = await saveAsset(new Uint8Array([2]), "pdf")
+			const questId = await seasons.addQuest(ids[0], ids[1], now)
+			await seasons.setQuestAsset(ids[0], ids[1], questId, second)
+		}
+		const error = new Error("Asset cleanup unavailable")
+		const release = vi.spyOn(assets, "releaseAsset").mockRejectedValueOnce(error)
+		const log = vi.spyOn(console, "error").mockImplementation(() => {})
+		expect(await (kind === "quest" ? removeQuest(...ids) : removeArc(ids[0], ids[1]))).toEqual({ ok: true })
+		const season = await seasons.getSeason(ids[0])
+		expect(kind === "arc" ? season?.arcs : season?.arcs[0]?.quests).toEqual([])
+		expect(release).toHaveBeenCalledWith(first)
+		expect(release).toHaveBeenCalledTimes(kind === "arc" ? 2 : 1)
+		expect(log).toHaveBeenCalledExactlyOnceWith("Failed to release asset", first, error)
+		expect(await readdir(directory)).toEqual([path.basename(first)])
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(ids[0])], [boardChannel]])
+	})
+
+	it.each(["quest", "arc"])("removing %s deletes all unreferenced files and keeps shared files", async (kind) => {
+		const season = await setup()
+		const first = await saveAsset(new Uint8Array([1]), "png")
+		await seasons.setQuestAsset(...ids, first)
+		const other = await seasons.createSeason({ ...season, _id: "other" })
+		await seasons.setQuestAsset(other._id, ids[1], ids[2], first)
+		if (kind === "arc") {
+			const second = await saveAsset(new Uint8Array([2]), "pdf")
+			const questId = await seasons.addQuest(ids[0], ids[1], now)
+			await seasons.setQuestAsset(ids[0], ids[1], questId, second)
+		}
+		expect(await (kind === "quest" ? removeQuest(...ids) : removeArc(ids[0], ids[1]))).toEqual({ ok: true })
+		expect(await readdir(directory)).toEqual([path.basename(first)])
+		expect(await removeQuest(other._id, ids[1], ids[2])).toEqual({ ok: true })
+		expect(await readdir(directory)).toEqual([])
+	})
 })
 
 describe.each(actions)("$name", ({ name, run, count }) => {
