@@ -6,7 +6,7 @@ import { contentTypes, type detectAssetExtension } from "@/lib/domain/assets"
 const assetName = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.(jpg|jpeg|png|gif|webp|pdf)$/i
 
 export function assetsDir(): string {
-	return path.resolve(process.env.ASSETS_DIR ?? ".tmp/assets")
+	return path.resolve(/* turbopackIgnore: true */ process.env.ASSETS_DIR ?? ".tmp/assets")
 }
 
 export function resolveAssetFile(file: string) {
@@ -30,7 +30,7 @@ export async function saveAsset(
 	const filename = `${randomUUID()}.${extension}`
 	const assetPath = `/assets/${filename}`
 	try {
-		await writeFile(path.join(directory, filename), bytes)
+		await writeFile(path.join(/* turbopackIgnore: true */ directory, filename), bytes)
 	} catch (error) {
 		await deleteAssetFile(assetPath)
 		throw error

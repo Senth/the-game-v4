@@ -52,7 +52,8 @@ export async function removeArc(seasonId: string, arcId: string): Promise<Action
 	const now = new Date()
 	try {
 		const paths = await deleteArc(id.parse(seasonId), id.parse(arcId), now)
-		for (const assetPath of paths) await releaseAsset(assetPath)
+		for (const assetPath of paths)
+			await releaseAsset(assetPath).catch((error) => console.error("Failed to release asset", assetPath, error))
 	} catch (error) {
 		return actionFailure(error, now)
 	}
@@ -66,7 +67,8 @@ export async function removeQuest(seasonId: string, arcId: string, questId: stri
 	const now = new Date()
 	try {
 		const paths = await deleteQuest(id.parse(seasonId), id.parse(arcId), id.parse(questId), now)
-		for (const assetPath of paths) await releaseAsset(assetPath)
+		for (const assetPath of paths)
+			await releaseAsset(assetPath).catch((error) => console.error("Failed to release asset", assetPath, error))
 	} catch (error) {
 		return actionFailure(error, now)
 	}

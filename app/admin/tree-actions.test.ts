@@ -3,6 +3,7 @@ import path from "node:path"
 import { refresh } from "next/cache"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { saveAsset } from "@/lib/assets/files"
+import * as assets from "@/lib/assets/release"
 import { getSession } from "@/lib/auth/session"
 import { collections } from "@/lib/db/collections"
 import * as seasons from "@/lib/db/seasons"
@@ -90,6 +91,28 @@ describe("tree asset cleanup", () => {
 	afterEach(async () => {
 		vi.unstubAllEnvs()
 		await rm(directory, { recursive: true, force: true })
+	})
+
+	it.each(["quest", "arc"])("keeps committed %s removal and publishes when releaseAsset fails", async (kind) => {
+		await setup()
+		const first = await saveAsset(new Uint8Array([1]), "png")
+		await seasons.setQuestAsset(...ids, first)
+		if (kind === "arc") {
+			const second = await saveAsset(new Uint8Array([2]), "pdf")
+			const questId = await seasons.addQuest(ids[0], ids[1], now)
+			await seasons.setQuestAsset(ids[0], ids[1], questId, second)
+		}
+		const error = new Error("Asset cleanup unavailable")
+		const release = vi.spyOn(assets, "releaseAsset").mockRejectedValueOnce(error)
+		const log = vi.spyOn(console, "error").mockImplementation(() => {})
+		expect(await (kind === "quest" ? removeQuest(...ids) : removeArc(ids[0], ids[1]))).toEqual({ ok: true })
+		const season = await seasons.getSeason(ids[0])
+		expect(kind === "arc" ? season?.arcs : season?.arcs[0]?.quests).toEqual([])
+		expect(release).toHaveBeenCalledWith(first)
+		expect(release).toHaveBeenCalledTimes(kind === "arc" ? 2 : 1)
+		expect(log).toHaveBeenCalledExactlyOnceWith("Failed to release asset", first, error)
+		expect(await readdir(directory)).toEqual([path.basename(first)])
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(ids[0])], [boardChannel]])
 	})
 
 	it.each(["quest", "arc"])("removing %s deletes all unreferenced files and keeps shared files", async (kind) => {

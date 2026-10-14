@@ -38,7 +38,8 @@ export async function uploadQuestAsset(
 			await deleteAssetFile(assetPath)
 			throw error
 		}
-		if (previous !== assetPath) await releaseAsset(previous)
+		if (previous !== assetPath)
+			await releaseAsset(previous).catch((error) => console.error("Failed to release asset", previous, error))
 	} catch (error) {
 		return actionFailure(error, now)
 	}
@@ -52,7 +53,7 @@ export async function removeQuestAsset(seasonId: string, arcId: string, questId:
 	const now = new Date()
 	try {
 		const previous = await setQuestAsset(id.parse(seasonId), id.parse(arcId), id.parse(questId), null)
-		await releaseAsset(previous)
+		await releaseAsset(previous).catch((error) => console.error("Failed to release asset", previous, error))
 	} catch (error) {
 		return actionFailure(error, now)
 	}

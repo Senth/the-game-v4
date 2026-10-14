@@ -3,6 +3,7 @@ import path from "node:path"
 import { redirect } from "next/navigation"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { saveAsset } from "@/lib/assets/files"
+import * as assets from "@/lib/assets/release"
 import { requireAdmin } from "@/lib/auth/guards"
 import { collections } from "@/lib/db/collections"
 import * as seasons from "@/lib/db/seasons"
@@ -165,6 +166,21 @@ describe("quest asset actions", () => {
 	it("removes a null asset without filesystem work", async () => {
 		expect(await removeQuestAsset(...ids)).toEqual({ ok: true })
 		expect(await readdir(directory)).toEqual([])
+	})
+
+	it.each(["upload", "remove"])("keeps committed %s and publishes when releaseAsset fails", async (action) => {
+		const previous = await attach()
+		const error = new Error("Asset cleanup unavailable")
+		const release = vi.spyOn(assets, "releaseAsset").mockRejectedValueOnce(error)
+		const log = vi.spyOn(console, "error").mockImplementation(() => {})
+		const result = await (action === "upload" ? uploadQuestAsset(...ids, form()) : removeQuestAsset(...ids))
+		expect(result).toEqual(action === "upload" ? { ok: true, assetPath: await currentPath() } : { ok: true })
+		if (action === "upload") expect(await currentPath()).not.toBe(previous)
+		else expect(await currentPath()).toBeNull()
+		expect(release).toHaveBeenCalledExactlyOnceWith(previous)
+		expect(log).toHaveBeenCalledExactlyOnceWith("Failed to release asset", previous, error)
+		expect((await readdir(directory)).includes(path.basename(previous))).toBe(true)
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(ids[0])], [boardChannel]])
 	})
 
 	it("returns missing quest message and deletes new file without publishing", async () => {
