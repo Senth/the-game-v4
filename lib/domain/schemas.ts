@@ -10,7 +10,7 @@ export const AnswerAddValue = z
 export const Hint = z.object({
 	id,
 	text: z.string(),
-	points: z.number(),
+	points: z.number().int().min(0).max(10000),
 })
 export type Hint = z.infer<typeof Hint>
 

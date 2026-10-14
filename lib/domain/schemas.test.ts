@@ -33,6 +33,14 @@ describe("Quest", () => {
 })
 
 describe("Hint", () => {
+	it.each([0, 10000])("accepts points %i", (points) => {
+		expect(Hint.parse({ id: "h1", text: "Look north", points }).points).toBe(points)
+	})
+
+	it.each([-3, 10001, 2.5, Number.NaN, Number.POSITIVE_INFINITY, "5"])("rejects points %j", (points) => {
+		expect(Hint.safeParse({ id: "h1", text: "Look north", points }).success).toBe(false)
+	})
+
 	it("rejects a stored hint without id", () => {
 		expect(Hint.safeParse({ text: "Look north", points: 5 }).success).toBe(false)
 	})
