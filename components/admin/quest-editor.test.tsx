@@ -2,9 +2,9 @@ import { Children, cloneElement, type EffectCallback, isValidElement, type React
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { removeQuest } from "@/app/admin/tree-actions"
-import { useAutosaveField } from "./autosave-provider"
+import { useAutosaveField, useAutosaveList } from "./autosave-provider"
 import { ConfirmDialog } from "./confirm-dialog"
-import { QuestTitles } from "./quest-titles"
+import { QuestEditor } from "./quest-editor"
 
 const hooks = vi.hoisted(() => ({
 	states: [] as unknown[],
@@ -36,14 +36,23 @@ vi.mock("react", async (importOriginal) => ({
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: hooks.push }) }))
 vi.mock("@/app/admin/tree-actions", () => ({ removeQuest: vi.fn() }))
-vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn(), useAutosave: () => null }))
+vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn(), useAutosaveList: vi.fn(), useAutosave: () => null }))
 vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }))
 
 const now = new Date("2026-10-12T17:00:00Z").getTime()
 const defaults = {
 	seasonId: "s1",
 	arcId: "a1",
-	quest: { id: "q1", displayTitle: "The map", internalTitle: "Harbour map" },
+	quest: {
+		id: "q1",
+		displayTitle: "The map",
+		internalTitle: "Harbour map",
+		content: "Read the map",
+		assetPath: "/assets/12345678-abcd.png",
+		answers: ["harbour"],
+		points: 10,
+		adminNotes: "Bring a map",
+	},
 	start: null,
 	end: null,
 	now,
@@ -58,16 +67,16 @@ function buttons(node: ReactNode): ReactElement<ButtonProps>[] {
 	})
 }
 
-function render(props: Partial<Parameters<typeof QuestTitles>[0]> = {}) {
+function render(props: Partial<Parameters<typeof QuestEditor>[0]> = {}) {
 	hooks.cursor = 0
 	hooks.refCursor = 0
 	hooks.effects.length = 0
-	const element = QuestTitles({ ...defaults, ...props })
+	const element = QuestEditor({ ...defaults, ...props })
 	const children = element.props.children
 	const dialog = ConfirmDialog(children[2].props)
 	return {
 		html: renderToStaticMarkup(cloneElement(element, {}, children[0], children[1], dialog)),
-		fields: children[0].props.children,
+		fields: children[0].props.children[0].props.children,
 		remove: buttons(children[1])[0],
 		dialog,
 		cancel: buttons(dialog)[0],
@@ -81,6 +90,12 @@ beforeEach(() => {
 	vi.stubGlobal("document", { body: {} })
 	hooks.states.length = 0
 	vi.mocked(removeQuest).mockReset().mockResolvedValue({ ok: true })
+	vi.mocked(useAutosaveList).mockImplementation((_target, items) => ({
+		items,
+		add: vi.fn(),
+		remove: vi.fn(),
+		failed: false,
+	}))
 	vi.mocked(useAutosaveField).mockImplementation((_target, serverValue) => ({
 		value: serverValue,
 		onChange: vi.fn(),
@@ -97,7 +112,7 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 })
 
-it("renders only both autosaved title fields, inline M2 notes and a quiet removal below the divider", () => {
+it("renders all seven fields in M2 order with helper text, desktop pairs and quiet removal", () => {
 	const view = render()
 	expect(view.html).toContain("Display title")
 	expect(view.html).toContain("players see this")
@@ -105,13 +120,35 @@ it("renders only both autosaved title fields, inline M2 notes and a quiet remova
 	expect(view.html).toContain("admin only")
 	expect(view.html).toContain("font-body normal-case tracking-normal")
 	expect(view.html).toContain("space-y-5")
-	expect(view.html.match(/<input/g)).toHaveLength(2)
+	const labels = ["Display title", "Internal title", "Content", "Image", "Answers", "Points", "Admin notes"]
+	const positions = labels.map((label) => view.html.indexOf(`>${label}`))
+	expect(positions.every((position) => position >= 0)).toBe(true)
+	expect(positions).toEqual([...positions].sort((a, b) => a - b))
+	expect(view.html.match(/admin only/g)).toHaveLength(2)
+	expect(view.html).toContain("Markdown")
+	expect(view.html).toContain("any match, case-insensitive")
+	expect(view.html).toContain("max-w-2xl")
+	expect(view.html.match(/lg:grid-cols-2 lg:gap-5/g)).toHaveLength(2)
+	expect(view.html.match(/<input/g)).toHaveLength(4)
+	expect(view.html).toMatch(/rows="5"[^>]*font-mono/)
+	expect(view.html).toMatch(/rows="1"[^>]*font-body/)
 	expect(view.html).toContain("mt-8 border-t border-z1")
 	expect(view.remove?.props.className).toContain("min-h-11")
 	expect(view.remove?.props.className).toContain("text-muted")
 	expect(view.html).not.toContain("Save</button>")
 	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "displayTitle" }, "The map")
 	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "internalTitle" }, "Harbour map")
+	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "content" }, "Read the map")
+	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "adminNotes" }, "Bring a map")
+	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "points" }, 10)
+	expect(useAutosaveList).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "answers" }, ["harbour"])
+})
+
+it("hides the read-only Image row when the quest has no asset", () => {
+	const view = render({ quest: { ...defaults.quest, assetPath: null } })
+	expect(view.html).not.toContain(">Image<")
+	expect(view.html).not.toContain("<img")
+	expect(view.html).toContain("Answers")
 })
 
 it.each([
@@ -121,7 +158,7 @@ it.each([
 	["", "Harbour map", false],
 ])("autofocuses Display title only for unnamed quests %s / %s", (displayTitle, internalTitle, focused) => {
 	const view = render({
-		quest: { id: "q1", displayTitle: displayTitle as string, internalTitle: internalTitle as string },
+		quest: { ...defaults.quest, displayTitle: displayTitle as string, internalTitle: internalTitle as string },
 	})
 	expect(view.fields[0].props.autoFocus).toBe(focused)
 	expect(view.fields[1].props.autoFocus).toBeUndefined()
@@ -151,7 +188,7 @@ it.each([
 	["", "", "Remove this quest?"],
 	["The map", " ", "Remove The map?"],
 ])("uses the matching removal label fallback", (displayTitle, internalTitle, title) => {
-	const props = { quest: { id: "q1", displayTitle, internalTitle } }
+	const props = { quest: { ...defaults.quest, displayTitle, internalTitle } }
 	render(props).remove?.props.onClick()
 	expect(render(props).html).toContain(title)
 })
@@ -167,13 +204,18 @@ it("cancels without calling removal", () => {
 	expect(hooks.push).not.toHaveBeenCalled()
 })
 
-it.each([now, now + 60_000])("hides removal for ended or live season ending at %i but keeps titles editable", (end) => {
-	const view = render({ start: new Date(now - 60_000), end: new Date(end) })
-	expect(view.remove).toBeUndefined()
-	expect(view.html).not.toContain("Remove quest")
-	expect(view.html.match(/<input/g)).toHaveLength(2)
-	expect(view.html).not.toContain("readonly")
-})
+it.each([now, now + 60_000])(
+	"hides removal for ended or live season ending at %i but keeps all fields editable",
+	(end) => {
+		const view = render({ start: new Date(now - 60_000), end: new Date(end) })
+		expect(view.remove).toBeUndefined()
+		expect(view.html).not.toContain("Remove quest")
+		expect(view.html.match(/<input/g)).toHaveLength(4)
+		expect(view.html.match(/<textarea/g)).toHaveLength(2)
+		expect(view.html).not.toContain("disabled")
+		expect(view.html).not.toContain("readonly")
+	},
+)
 
 it("hides removal and blocks already opened confirmation at start without reload", async () => {
 	const props = { start: new Date(now + 1000), end: new Date(now + 60_000) }
