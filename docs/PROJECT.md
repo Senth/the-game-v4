@@ -54,6 +54,9 @@ A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
 
 A quest and each hint must have a stable id. Assign ids to hints that lack them, including on import.
 Draft quests may have empty content, empty answers or missing points.
+Quest points are a whole number from 0 to 10000, or null on a draft.
+Answers are stored trimmed and NFC-normalized, 1 to 200 characters.
+A quest never holds two answers that compare equal.
 Warn in the tree and beside missing fields; starting an incomplete season warns the admin.
 Content is Markdown with trusted, admin-authored raw HTML. Use `react-markdown` with `rehype-raw`
 and Shiki for fenced code. There is no separate v3 `code` field.
@@ -213,6 +216,7 @@ Other teams' rails show solved and todo only; only your row shows current, and o
 ### Authoring and live edits
 
 Every season field except `end` and `registrationOpen` autosaves on blur or after 500 ms idle.
+`assetPath` changes only through I-17's upload actions, never field autosave.
 `start` and `lengthMinutes` autosave through window checks. Window saves set `start` and `end` together.
 `end` changes only through live controls.
 A server action validates values before writing.
