@@ -119,7 +119,7 @@ export function createListSaver<Operation>({
 	patch: (op: Operation) => Promise<{ ok: boolean }>
 	onState: (state: AutosaveState) => void
 }) {
-	const queue: Operation[] = []
+	const queue: { op: Operation; resolve: (saved: boolean) => void }[] = []
 	let state: AutosaveState = "saved"
 	let inFlight = false
 	let canceled = false
@@ -135,9 +135,11 @@ export function createListSaver<Operation>({
 		inFlight = true
 		setState("saving")
 		while (queue.length > 0) {
+			const next = queue[0]
+			if (!next) break
 			let ok = false
 			try {
-				ok = (await patch(queue[0] as Operation)).ok
+				ok = (await patch(next.op)).ok
 			} catch {}
 			if (canceled) return
 			if (!ok) {
@@ -145,7 +147,7 @@ export function createListSaver<Operation>({
 				setState("failed")
 				return
 			}
-			queue.shift()
+			queue.shift()?.resolve(true)
 		}
 		inFlight = false
 		setState("saved")
@@ -154,15 +156,17 @@ export function createListSaver<Operation>({
 	return {
 		cancel() {
 			canceled = true
+			for (const item of queue) item.resolve(false)
 			queue.length = 0
 		},
 		enqueue(op: Operation) {
-			if (canceled) return
-			queue.push(op)
+			if (canceled) return Promise.resolve(false)
+			const saved = new Promise<boolean>((resolve) => queue.push({ op, resolve }))
 			if (state !== "failed") void drain()
+			return saved
 		},
 		applyQueued<T>(items: readonly T[], apply: (items: T[], op: Operation) => T[]): T[] {
-			return queue.reduce(apply, [...items])
+			return queue.reduce((current, item) => apply(current, item.op), [...items])
 		},
 		retry() {
 			if (state === "failed") return drain()

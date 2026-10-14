@@ -3,32 +3,46 @@
 import { type KeyboardEvent, useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react"
 import { inputClass, labelClass } from "@/components/auth-form"
 import { worthWithAllHints } from "@/lib/domain/hints"
-import type { Hint } from "@/lib/domain/schemas"
-import { useAutosaveField } from "./autosave-provider"
-import { primaryClass } from "./confirm-dialog"
+import { Hint } from "@/lib/domain/schemas"
+import { useAutosave, useAutosaveField, useAutosaveList } from "./autosave-provider"
+import { ConfirmDialog, primaryClass } from "./confirm-dialog"
 
 export function HintsEditor({
 	arcId,
 	questId,
 	points,
 	hints,
+	revealers,
 }: {
 	arcId: string
 	questId: string
 	points: number | null
 	hints: Hint[]
+	revealers: Record<string, string[]>
 }) {
+	const autosave = useAutosave()
+	const list = useAutosaveList({ arcId, questId, field: "hints" }, hints)
 	const questPoints = useAutosaveField({ arcId, questId, field: "points" }, points)
 	const [openId, setOpenId] = useState<string | null>(null)
+	const [newHint, setNewHint] = useState<Hint | null>(null)
+	const [confirming, setConfirming] = useState<{ id: string; points: number } | null>(null)
+	const items = newHint && !list.items.some((hint) => hint.id === newHint.id) ? [...list.items, newHint] : list.items
+	const count = confirming ? (revealers[confirming.id]?.length ?? 0) : 0
 	const [penalties, setPenalties] = useState<Record<string, number>>({})
 	const updatePenalty = useCallback((id: string, value: number) => {
 		setPenalties((current) => (Object.is(current[id], value) ? current : { ...current, [id]: value }))
 	}, [])
 	const total = worthWithAllHints(
 		questPoints.value,
-		hints.map((hint) => penalties[hint.id] ?? hint.points),
+		items.map((hint) => penalties[hint.id] ?? hint.points),
 	)
 	const worth = total !== null && Number.isFinite(total) ? total : null
+	function remove(id: string) {
+		autosave?.discard({ arcId, questId, hintId: id })
+		if (list.items.some((hint) => hint.id === id)) list.remove(id)
+		if (newHint?.id === id) setNewHint(null)
+		if (openId === id) setOpenId(null)
+	}
 	return (
 		<section aria-label="Hints" className="pt-3">
 			<div className="flex items-end justify-between gap-3 border-b border-z2 pb-2">
@@ -41,7 +55,7 @@ export function HintsEditor({
 				</p>
 			</div>
 			<ul>
-				{hints.map((hint) => (
+				{items.map((hint) => (
 					<HintRow
 						key={hint.id}
 						arcId={arcId}
@@ -51,9 +65,43 @@ export function HintsEditor({
 						onOpen={() => setOpenId(hint.id)}
 						onClose={() => setOpenId(null)}
 						onPointsChange={updatePenalty}
+						create={hint.id === newHint?.id ? list.add : undefined}
+						onCreated={() => setNewHint((current) => (current?.id === hint.id ? null : current))}
+						onDiscard={() => remove(hint.id)}
+						onRemove={(penalty) => {
+							if (revealers[hint.id]?.length) setConfirming({ id: hint.id, points: penalty })
+							else remove(hint.id)
+						}}
 					/>
 				))}
 			</ul>
+			<button
+				type="button"
+				className="mt-3 min-h-11 w-full rounded-md border border-dashed border-z2 px-4 font-cond text-sm text-link hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+				onClick={() => {
+					const hint = { id: crypto.randomUUID(), text: "", points: 5 }
+					setNewHint(hint)
+					setOpenId(hint.id)
+				}}
+			>
+				+ Add hint
+			</button>
+			{list.failed && (
+				<p role="alert" className="mt-1.5 font-cond text-xs text-warn">
+					Not saved
+				</p>
+			)}
+			<ConfirmDialog
+				open={confirming !== null}
+				title="Remove this hint?"
+				body={`${count} ${count === 1 ? "team revealed it. It keeps" : "teams revealed it. They keep"} its −${confirming?.points ?? 0}p penalty.`}
+				confirmLabel="Remove hint"
+				onConfirm={() => {
+					if (confirming) remove(confirming.id)
+					setConfirming(null)
+				}}
+				onClose={() => setConfirming(null)}
+			/>
 		</section>
 	)
 }
@@ -66,6 +114,10 @@ function HintRow({
 	onOpen,
 	onClose,
 	onPointsChange,
+	create,
+	onCreated,
+	onDiscard,
+	onRemove,
 }: {
 	arcId: string
 	questId: string
@@ -74,14 +126,83 @@ function HintRow({
 	onOpen: () => void
 	onClose: () => void
 	onPointsChange: (id: string, value: number) => void
+	create?: (hint: Hint) => Promise<boolean>
+	onCreated: () => void
+	onDiscard: () => void
+	onRemove: (points: number) => void
 }) {
-	const text = useAutosaveField({ arcId, questId, hintId: hint.id, field: "text" }, hint.text)
-	const points = useAutosaveField({ arcId, questId, hintId: hint.id, field: "points" }, hint.points)
+	const savedText = useAutosaveField({ arcId, questId, hintId: hint.id, field: "text" }, hint.text)
+	const savedPoints = useAutosaveField({ arcId, questId, hintId: hint.id, field: "points" }, hint.points)
+	const [created, setCreated] = useState(!create)
+	const [local, setLocal] = useState(hint)
+	const draft = useRef(hint)
+	const adding = useRef(false)
+	const removed = useRef(false)
+	function edit(next: Hint) {
+		draft.current = next
+		setLocal(next)
+	}
+	const invalid = !created && !Hint.shape.points.safeParse(local.points).success
+	async function saveNew() {
+		if (
+			!create ||
+			created ||
+			adding.current ||
+			removed.current ||
+			!draft.current.text.trim() ||
+			!Hint.shape.points.safeParse(draft.current.points).success
+		)
+			return
+		adding.current = true
+		const added = draft.current
+		if (!(await create(added)) || removed.current) return
+		if (draft.current.text !== added.text) savedText.onChange(draft.current.text)
+		if (draft.current.points !== added.points) savedPoints.onChange(draft.current.points)
+		setCreated(true)
+		onCreated()
+	}
+	const saveNewOnIdle = useEffectEvent(saveNew)
+	useEffect(() => {
+		removed.current = false
+		return () => {
+			removed.current = true
+		}
+	}, [])
+	useEffect(() => {
+		if (created || !local.text.trim() || !Hint.shape.points.safeParse(local.points).success) return
+		const timer = setTimeout(() => void saveNewOnIdle(), 500)
+		return () => clearTimeout(timer)
+	}, [created, local])
+	const text = created
+		? savedText
+		: {
+				...savedText,
+				value: local.text,
+				onChange: (value: string) => edit({ ...draft.current, text: value }),
+				onFocus: () => {},
+				onBlur: () => void saveNew(),
+			}
+	const points = created
+		? savedPoints
+		: {
+				...savedPoints,
+				value: local.points,
+				onChange: (value: number) => edit({ ...draft.current, points: value }),
+				onFocus: () => {},
+				onBlur: () => void saveNew(),
+				failed: invalid,
+				error: invalid ? "Use a whole number from 0 to 10000." : undefined,
+			}
 	const id = useId()
 	const textarea = useRef<HTMLTextAreaElement>(null)
 	const button = useRef<HTMLButtonElement>(null)
 	const returnFocus = useRef(false)
 	const finishEditing = useEffectEvent(() => {
+		if (removed.current) return
+		if (!created && !adding.current && !draft.current.text.trim()) {
+			if (!open) onDiscard()
+			return
+		}
 		void text.onBlur()
 		void points.onBlur()
 	})
@@ -97,6 +218,10 @@ function HintRow({
 		}
 	}, [open])
 	function close() {
+		if (!created && !adding.current && !draft.current.text.trim()) {
+			onDiscard()
+			return
+		}
 		returnFocus.current = true
 		onClose()
 	}
@@ -160,8 +285,8 @@ function HintRow({
 						<span className="text-xs text-muted">p</span>
 						<button
 							type="button"
-							disabled
-							className="ml-auto min-h-11 px-3 font-cond text-sm text-muted disabled:opacity-60"
+							className="ml-auto min-h-11 px-3 font-cond text-sm text-muted hover:underline active:text-head focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+							onClick={() => onRemove(points.value)}
 						>
 							Remove
 						</button>

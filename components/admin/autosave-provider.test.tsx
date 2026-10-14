@@ -784,3 +784,33 @@ it("assigns a stable hint id before patching and removes hints by id", async () 
 	expect(patchSeasonList).toHaveBeenNthCalledWith(1, "season-1", target, { op: "add", hint })
 	expect(patchSeasonList).toHaveBeenNthCalledWith(2, "season-1", target, { op: "remove", hintId: "old" })
 })
+
+it("discards removed hint fields without cancelling quest fields or its list remove patch", async () => {
+	const owner = provider()
+	const hint = scope()
+	const quest = scope()
+	const listState = scope()
+	const hintField = render(hint, () =>
+		useAutosaveField({ arcId: "arc", questId: "quest", hintId: "h1", field: "text" }, "Hint"),
+	)
+	const questField = render(quest, () => useAutosaveField({ arcId: "arc", questId: "quest", field: "points" }, 30))
+	hintField.onChange("Deleted edit")
+	questField.onChange(40)
+	const list = render(listState, () =>
+		useAutosaveList({ arcId: "arc", questId: "quest", field: "hints" }, [{ id: "h1", text: "Hint", points: 5 }]),
+	)
+	owner.context.discard({ arcId: "arc", questId: "quest", hintId: "h1" })
+	list.remove("h1")
+	unmount(hint)
+	await vi.advanceTimersByTimeAsync(500)
+	expect(saveSeasonField).toHaveBeenCalledExactlyOnceWith(
+		"season-1",
+		{ arcId: "arc", questId: "quest", field: "points" },
+		40,
+	)
+	expect(patchSeasonList).toHaveBeenCalledExactlyOnceWith(
+		"season-1",
+		{ arcId: "arc", questId: "quest", field: "hints" },
+		{ op: "remove", hintId: "h1" },
+	)
+})
