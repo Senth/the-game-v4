@@ -3,19 +3,27 @@
 import { useId, useState } from "react"
 import { inputClass, labelClass } from "@/components/auth-form"
 import { normalizeAnswer } from "@/lib/domain/game"
+import { AnswerAddValue } from "@/lib/domain/schemas"
 import { useAutosaveList } from "./autosave-provider"
 
 export function AnswerChips({ arcId, questId, answers }: { arcId: string; questId: string; answers: string[] }) {
 	const list = useAutosaveList({ arcId, questId, field: "answers" }, answers)
 	const [text, setText] = useState("")
 	const [duplicate, setDuplicate] = useState(false)
+	const [invalid, setInvalid] = useState(false)
 	const id = useId()
-	function commit(parts: string[]) {
+	function commit(parts: string[], remaining = "") {
 		const existing = new Set(list.items.map(normalizeAnswer))
 		let foundDuplicate = false
+		const rejected: string[] = []
 		for (const part of parts) {
-			const answer = part.normalize("NFC").trim()
-			if (!answer) continue
+			if (!part.trim()) continue
+			const parsed = AnswerAddValue.safeParse(part)
+			if (!parsed.success) {
+				rejected.push(part)
+				continue
+			}
+			const answer = parsed.data
 			const normalized = normalizeAnswer(answer)
 			if (existing.has(normalized)) foundDuplicate = true
 			else {
@@ -23,9 +31,11 @@ export function AnswerChips({ arcId, questId, answers }: { arcId: string; questI
 				list.add(answer)
 			}
 		}
-		setText("")
+		setText([...rejected, remaining].filter(Boolean).join(", "))
 		setDuplicate(foundDuplicate)
+		setInvalid(rejected.length > 0)
 	}
+	const failed = list.failed || invalid
 	const style = inputClass.replace("h-11", "min-h-11").replace("px-3", "p-2").replace("focus:", "focus-within:")
 	return (
 		<div>
@@ -33,7 +43,7 @@ export function AnswerChips({ arcId, questId, answers }: { arcId: string; questI
 				Answers <span className="ml-2 font-body normal-case tracking-normal">any match, case-insensitive</span>
 			</label>
 			<div
-				className={`${list.failed ? style.replaceAll("border-z2", "border-warn").replaceAll("focus-within:border-accent", "focus-within:border-warn") : style} flex flex-wrap items-center gap-2`}
+				className={`${failed ? style.replaceAll("border-z2", "border-warn").replaceAll("focus-within:border-accent", "focus-within:border-warn") : style} flex flex-wrap items-center gap-2`}
 			>
 				{list.items.map((answer) => (
 					<span key={answer} className="inline-flex min-w-0 items-center rounded bg-z2 pl-2 font-cond text-sm">
@@ -53,15 +63,16 @@ export function AnswerChips({ arcId, questId, answers }: { arcId: string; questI
 					value={text}
 					placeholder="Add answer"
 					maxLength={200}
-					aria-invalid={list.failed}
-					aria-describedby={list.failed ? `${id}-error` : duplicate ? `${id}-duplicate` : undefined}
+					aria-invalid={failed}
+					aria-describedby={failed ? `${id}-error` : duplicate ? `${id}-duplicate` : undefined}
 					className="min-h-11 w-20 min-w-0 flex-1 bg-field font-cond text-sm outline-hidden placeholder:text-muted"
 					onChange={(event) => {
 						setDuplicate(false)
+						setInvalid(false)
 						const parts = event.target.value.split(",")
 						const remaining = parts.pop() ?? ""
-						if (parts.length) commit(parts)
-						setText(remaining)
+						if (parts.length) commit(parts, remaining)
+						else setText(remaining)
 					}}
 					onKeyDown={(event) => {
 						setDuplicate(false)
@@ -91,9 +102,9 @@ export function AnswerChips({ arcId, questId, answers }: { arcId: string; questI
 					}}
 				/>
 			</div>
-			{list.failed && (
+			{failed && (
 				<p id={`${id}-error`} role="alert" className="mt-1.5 font-cond text-xs text-warn">
-					Not saved
+					{invalid ? "Use 1 to 200 characters per answer." : "Not saved"}
 				</p>
 			)}
 			{duplicate && (

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, expect, it, vi } from "vitest"
 import { AnswerChips } from "./answer-chips"
+import { createListSaver } from "./autosave"
 import { useAutosaveList } from "./autosave-provider"
 
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0 }))
@@ -98,6 +99,39 @@ it("uses the input selection when pasting into existing text", () => {
 		preventDefault: vi.fn(),
 	})
 	expect(list.add).toHaveBeenCalledExactlyOnceWith("abcdef")
+})
+
+it("retains oversized pasted parts with an error without blocking a later valid add", async () => {
+	const oversized = "x".repeat(201)
+	const patch = vi.fn(async (answer: string) => ({ ok: answer.length <= 200 }))
+	const onState = vi.fn()
+	const saver = createListSaver({ patch, onState })
+	list.add.mockImplementation((answer: string) => {
+		list.items.push(answer)
+		saver.enqueue(answer)
+	})
+	paste(`${oversized}, keeper`)
+	expect(list.add).toHaveBeenCalledExactlyOnceWith("keeper")
+	expect(input().props.value).toBe(oversized)
+	const html = renderToStaticMarkup(view())
+	expect(html).toContain('aria-invalid="true" aria-describedby="answers-error"')
+	expect(html).toContain("border-warn")
+	expect(html).toContain('id="answers-error" role="alert"')
+	expect(html).toContain("Use 1 to 200 characters per answer.")
+	input().props.onBlur()
+	expect(list.add).toHaveBeenCalledOnce()
+	type("lamp")
+	key("Enter")
+	await vi.waitFor(() => expect(onState).toHaveBeenLastCalledWith("saved"))
+	expect(patch.mock.calls).toEqual([["keeper"], ["lamp"]])
+	expect(input().props.value).toBe("")
+	expect(renderToStaticMarkup(view())).not.toContain("Use 1 to 200 characters per answer.")
+})
+
+it("checks pasted answer length after trim and NFC and accepts 200 characters", () => {
+	paste(` ${"a\u030a".repeat(200)} `)
+	expect(list.add).toHaveBeenCalledExactlyOnceWith("å".repeat(200))
+	expect(input().props.value).toBe("")
 })
 
 it("commits on blur and ignores empty commits", () => {

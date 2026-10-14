@@ -178,6 +178,16 @@ describe("seasons", () => {
 		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["Fyren", "å"])
 	})
 
+	it.each(["", "   ", "x".repeat(201)])("removes legacy answer %j without add validation", async (value) => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1", field: "answers" } as const
+		await setSeasonField(season._id, target, [value, "keeper"])
+		await expect(patchSeasonList(season._id, target, { op: "remove", value })).resolves.toBeUndefined()
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["keeper"])
+		await patchSeasonList(season._id, target, { op: "add", value: "lamp" })
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.answers).toEqual(["keeper", "lamp"])
+	})
+
 	it("keeps concurrent answer adds and deduplicates repeated values", async () => {
 		const season = await createSeason(seasonInput())
 		const target = { arcId: "a1", questId: "q1", field: "answers" } as const

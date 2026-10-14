@@ -56,7 +56,7 @@ A quest and each hint must have a stable id. Assign ids to hints that lack them,
 Draft quests may have empty content, empty answers or missing points.
 Quest points are a whole number from 0 to 10000, or null on a draft.
 Answers are stored trimmed and NFC-normalized, 1 to 200 characters.
-A quest never holds two answers that compare equal.
+Sequential additions deduplicate by `normalizeAnswer`; concurrent near-duplicates are possible and harmless.
 Warn in the tree and beside missing fields; starting an incomplete season warns the admin.
 Content is Markdown with trusted, admin-authored raw HTML. Use `react-markdown` with `rehype-raw`
 and Shiki for fenced code. There is no separate v3 `code` field.

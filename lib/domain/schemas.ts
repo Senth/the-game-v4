@@ -2,6 +2,11 @@ import { z } from "zod"
 
 const id = z.string().min(1)
 
+export const AnswerAddValue = z
+	.string()
+	.transform((value) => value.trim().normalize("NFC"))
+	.pipe(z.string().min(1).max(200))
+
 export const Hint = z.object({
 	id,
 	text: z.string(),

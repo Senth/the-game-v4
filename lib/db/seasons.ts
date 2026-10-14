@@ -2,7 +2,16 @@ import type { Filter, UpdateFilter } from "mongodb"
 import { z } from "zod"
 import { overlappingSeason, scheduleWindow, seasonStatus } from "@/lib/domain/admin-seasons"
 import { hasEnded, normalizeAnswer, registrationConflict } from "@/lib/domain/game"
-import { Arc, Hint, HintInput, Quest, Season, type SeasonInput, withHintIds } from "@/lib/domain/schemas"
+import {
+	AnswerAddValue,
+	Arc,
+	Hint,
+	HintInput,
+	Quest,
+	Season,
+	type SeasonInput,
+	withHintIds,
+} from "@/lib/domain/schemas"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { collections, NotFoundError } from "./collections"
 
@@ -210,13 +219,10 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 	if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
 }
 
-const AnswerPatch = z.object({
-	op: z.enum(["add", "remove"]),
-	value: z
-		.string()
-		.transform((value) => value.trim().normalize("NFC"))
-		.pipe(z.string().min(1).max(200)),
-})
+const AnswerPatch = z.discriminatedUnion("op", [
+	z.object({ op: z.literal("add"), value: AnswerAddValue }),
+	z.object({ op: z.literal("remove"), value: z.string() }),
+])
 const HintPatch = z.discriminatedUnion("op", [
 	z.object({ op: z.literal("add"), hint: HintInput }),
 	z.object({ op: z.literal("remove"), hintId: Hint.shape.id }),
@@ -241,7 +247,7 @@ export async function patchSeasonList(
 			if (quest.answers.some((answer) => normalizeAnswer(answer) === normalizeAnswer(parsed.value))) return
 			update = { $addToSet: { [path]: parsed.value } }
 		} else {
-			update = { $pull: { [path]: "value" in op ? op.value : parsed.value } }
+			update = { $pull: { [path]: parsed.value } }
 		}
 	} else {
 		const parsed = HintPatch.parse(op)
