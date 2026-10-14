@@ -278,9 +278,14 @@ Channel access must not expose another team's private data or admin-only content
 ## Assets, migration and deployment
 
 Assets live under `ASSETS_DIR` on a Docker volume and are served by a Next route handler at
-`/assets/<uuid>.<ext>`. Allow jpg, jpeg, png, gif, webp and pdf up to 10 MB.
-Remove deletes the file. Reject path traversal; serve immutable assets with
+`/assets/<uuid>.<ext>`. Allow jpg, png, gif, webp and pdf up to 10 MB. The server checks a file's
+first bytes, ignores the client MIME type and sets the extension from the detected type. Store
+JPEG files with the `.jpg` extension. Reject path traversal; serve immutable assets with
 `Cache-Control: public, max-age=31536000, immutable`.
+
+Upload, replace and remove work before start and while live. Replace saves the new file before
+deleting the old one. Remove, Replace, Remove quest and Remove arc delete a file only when no
+quest in any season still references its path.
 
 `pnpm import:v3 <export.json>` imports seasons and reusable quests, not teams or users.
 Map themes to arcs, `answer "a|b"` to `["a", "b"]`, and `code` plus `content` to fenced Markdown.
