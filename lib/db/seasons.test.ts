@@ -7,11 +7,13 @@ import { collections, NotFoundError } from "./collections"
 import {
 	createSeason,
 	getSeason,
+	isAssetReferenced,
 	listSeasons,
 	patchSeasonList,
 	RegistrationConflictError,
 	SeasonOverlapError,
 	StaleWindowError,
+	setQuestAsset,
 	setRegistrationOpen,
 	setSeasonField,
 	setSeasonLength,
@@ -392,6 +394,73 @@ describe("seasons", () => {
 		await expect(setSeasonField(season._id, { field: "registrationOpen" }, true)).rejects.toThrow("setRegistrationOpen")
 		expect((await getSeason(season._id))?.registrationOpen).toBe(false)
 		await setRegistrationOpen(open._id, false)
+	})
+})
+
+describe("quest asset writes", () => {
+	const first = "/assets/01234567-89ab-cdef-0123-456789abcdef.png"
+	const second = "/assets/11234567-89ab-cdef-0123-456789abcdef.pdf"
+
+	beforeEach(async () => {
+		await (await collections()).seasons.deleteMany({})
+	})
+
+	it.each([
+		{ state: "unscheduled", start: null, end: null },
+		{ state: "upcoming", start: new Date(Date.now() + 60_000), end: new Date(Date.now() + 120_000) },
+		{ state: "live", start: new Date(Date.now() - 60_000), end: new Date(Date.now() + 60_000) },
+		{ state: "ended", start: new Date(Date.now() - 120_000), end: new Date(Date.now() - 60_000) },
+	])("sets, replaces and clears only the quest asset while $state", async ({ start, end }) => {
+		const season = await createSeason({ ...seasonInput(), start, end })
+		expect(await setQuestAsset(season._id, "a1", "q2", first)).toBeNull()
+		const expected = structuredClone(season)
+		const quest = expected.arcs[0]?.quests[1]
+		if (!quest) throw new Error("fixture")
+		quest.assetPath = first
+		expect(await getSeason(season._id)).toEqual(expected)
+		expect(await setQuestAsset(season._id, "a1", "q2", second)).toBe(first)
+		quest.assetPath = second
+		expect(await getSeason(season._id)).toEqual(expected)
+		expect(await setQuestAsset(season._id, "a1", "q2", null)).toBe(second)
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+
+	it("rejects missing or wrongly parented quests without writing", async () => {
+		const season = await createSeason(seasonInput())
+		for (const [seasonId, arcId, questId] of [
+			["missing", "a1", "q1"],
+			[season._id, "missing", "q1"],
+			[season._id, "a1", "missing"],
+			[season._id, "a2", "q1"],
+		] as const) {
+			await expect(setQuestAsset(seasonId, arcId, questId, first)).rejects.toThrow(NotFoundError)
+		}
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+
+	it("keeps concurrent content and asset edits", async () => {
+		const season = await createSeason(seasonInput())
+		await Promise.all([
+			setSeasonField(season._id, { arcId: "a1", questId: "q1", field: "content" }, "Decode this"),
+			setQuestAsset(season._id, "a1", "q1", first),
+		])
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]).toMatchObject({
+			content: "Decode this",
+			assetPath: first,
+		})
+	})
+
+	it("finds shared references across seasons until the last is cleared", async () => {
+		const season = await createSeason(seasonInput())
+		const other = await createSeason(seasonInput())
+		expect(await isAssetReferenced(first)).toBe(false)
+		await setQuestAsset(season._id, "a1", "q1", first)
+		await setQuestAsset(other._id, "a2", "q3", first)
+		await setQuestAsset(season._id, "a1", "q1", null)
+		expect(await isAssetReferenced(first)).toBe(true)
+		expect(await isAssetReferenced(second)).toBe(false)
+		await setQuestAsset(other._id, "a2", "q3", null)
+		expect(await isAssetReferenced(first)).toBe(false)
 	})
 })
 

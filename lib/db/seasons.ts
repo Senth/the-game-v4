@@ -57,16 +57,22 @@ async function writeSeasonTree(
 	filter: Filter<Season>,
 	update: UpdateFilter<Season>,
 	arrayFilters: Filter<unknown>[] = [],
-): Promise<void> {
+): Promise<Season> {
 	const { seasons } = await collections()
 	const target = { ...filter, _id: seasonId }
-	const result = await seasons.updateOne({ ...target, $or: [{ start: null }, { start: { $gt: now } }] }, update, {
-		arrayFilters,
-	})
-	if (result.matchedCount === 0) {
+	const before = await seasons.findOneAndUpdate(
+		{ ...target, $or: [{ start: null }, { start: { $gt: now } }] },
+		update,
+		{
+			arrayFilters,
+			returnDocument: "before",
+		},
+	)
+	if (!before) {
 		if (!(await seasons.findOne(target))) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(filter)}`)
 		throw new SeasonStartedError()
 	}
+	return before
 }
 
 export async function addArc(seasonId: string, now: Date): Promise<string> {
@@ -84,14 +90,19 @@ export async function addQuest(seasonId: string, arcId: string, now: Date): Prom
 	return quest.id
 }
 
-export async function removeArc(seasonId: string, arcId: string, now: Date): Promise<void> {
-	await writeSeasonTree(seasonId, now, { "arcs.id": arcId }, { $pull: { arcs: { id: arcId } } })
+export async function removeArc(seasonId: string, arcId: string, now: Date): Promise<string[]> {
+	const before = await writeSeasonTree(seasonId, now, { "arcs.id": arcId }, { $pull: { arcs: { id: arcId } } })
+	return before.arcs
+		.filter((arc) => arc.id === arcId)
+		.flatMap((arc) => arc.quests.flatMap((quest) => (quest.assetPath === null ? [] : [quest.assetPath])))
 }
 
-export async function removeQuest(seasonId: string, arcId: string, questId: string, now: Date): Promise<void> {
+export async function removeQuest(seasonId: string, arcId: string, questId: string, now: Date): Promise<string[]> {
 	const { path, arrayFilters } = locate({ arcId, field: "quests" })
 	const filter = { arcs: { $elemMatch: { id: arcId, "quests.id": questId } } }
-	await writeSeasonTree(seasonId, now, filter, { $pull: { [path]: { id: questId } } }, arrayFilters)
+	const before = await writeSeasonTree(seasonId, now, filter, { $pull: { [path]: { id: questId } } }, arrayFilters)
+	const assetPath = before.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)?.assetPath
+	return assetPath == null ? [] : [assetPath]
 }
 
 const SeasonWindow = Season.pick({ start: true, end: true })
@@ -195,6 +206,28 @@ function locate(target: SeasonFieldTarget): {
 		}
 	}
 	return { path: target.field, schema: Season.shape[target.field], filter: {}, arrayFilters: [] }
+}
+
+export async function setQuestAsset(
+	seasonId: string,
+	arcId: string,
+	questId: string,
+	assetPath: string | null,
+): Promise<string | null> {
+	const target = { arcId, questId, field: "assetPath" } as const
+	const { path, schema, filter, arrayFilters } = locate(target)
+	const parsed = schema.parse(assetPath)
+	const before = await (await collections()).seasons.findOneAndUpdate(
+		{ ...filter, _id: seasonId },
+		{ $set: { [path]: parsed } },
+		{ arrayFilters, returnDocument: "before" },
+	)
+	if (!before) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
+	return before.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)?.assetPath ?? null
+}
+
+export async function isAssetReferenced(assetPath: string): Promise<boolean> {
+	return (await (await collections()).seasons.countDocuments({ "arcs.quests.assetPath": assetPath }, { limit: 1 })) > 0
 }
 
 export async function setSeasonField(seasonId: string, target: SeasonFieldTarget, value: unknown): Promise<void> {

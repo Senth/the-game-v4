@@ -12,6 +12,7 @@ import {
 	removeArc,
 	removeQuest,
 	SeasonStartedError,
+	setQuestAsset,
 	setSeasonField,
 } from "./seasons"
 
@@ -121,6 +122,29 @@ describe("season tree writes", () => {
 		expect(arc?.quests.map((quest) => quest.id)).toEqual(["q1", "q2", "q3", id])
 	})
 
+	it("returns only removed asset paths and empty arrays for removals without assets", async () => {
+		const season = await createSeason(seasonInput())
+		await setQuestAsset(season._id, "a1", "q1", "/assets/first.png")
+		await setQuestAsset(season._id, "a1", "q2", "/assets/second.pdf")
+		await setQuestAsset(season._id, "a2", "q4", "/assets/retained.jpg")
+		expect(await removeQuest(season._id, "a1", "q2", now)).toEqual(["/assets/second.pdf"])
+		expect(await removeQuest(season._id, "a1", "q3", now)).toEqual([])
+		expect(await removeArc(season._id, "a1", now)).toEqual(["/assets/first.png"])
+		expect(await removeArc(season._id, "a3", now)).toEqual([])
+		expect((await getSeason(season._id))?.arcs).toMatchObject([
+			{ id: "a2", quests: [{ id: "q4", assetPath: "/assets/retained.jpg" }] },
+		])
+		await setQuestAsset(season._id, "a2", "q4", null)
+		expect(await removeArc(season._id, "a2", now)).toEqual([])
+	})
+
+	it("returns all non-null asset paths from a removed arc", async () => {
+		const season = await createSeason(seasonInput())
+		await setQuestAsset(season._id, "a1", "q1", "/assets/first.png")
+		await setQuestAsset(season._id, "a1", "q3", "/assets/second.pdf")
+		expect(await removeArc(season._id, "a1", now)).toEqual(["/assets/first.png", "/assets/second.pdf"])
+	})
+
 	it("rejects missing seasons for all four writes", async () => {
 		for (const { run } of writes) {
 			await expect(run("missing")).rejects.toThrow(NotFoundError)
@@ -139,13 +163,13 @@ describe("season tree writes", () => {
 
 	it.each(writes)("atomically rejects $name if the season starts before its write", async ({ run }) => {
 		const season = await createSeason(seasonInput())
-		const updateOne = Collection.prototype.updateOne
-		const write = vi.spyOn(Collection.prototype, "updateOne").mockImplementationOnce(async function (
+		const findOneAndUpdate = Collection.prototype.findOneAndUpdate
+		const write = vi.spyOn(Collection.prototype, "findOneAndUpdate").mockImplementationOnce(async function (
 			this: Collection,
 			...args
 		) {
 			await setSeasonField(season._id, { field: "start" }, now)
-			return updateOne.apply(this, args)
+			return findOneAndUpdate.apply(this, args)
 		})
 		try {
 			await expect(run(season._id)).rejects.toThrow(SeasonStartedError)
