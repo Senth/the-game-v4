@@ -483,6 +483,42 @@ it("retries failed creation on edit with latest values and no duplicate add", as
 	expect(patchSeasonList).toHaveBeenCalledTimes(2)
 })
 
+it.each(["idle", "blur"])("retries failed creation when invalid points return to 5 on %s", async (trigger) => {
+	vi.mocked(patchSeasonList).mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: false })
+	add().textareas[0]?.props.onChange?.({ target: { value: "Look up", valueAsNumber: Number.NaN } })
+	view()
+	await vi.advanceTimersByTimeAsync(500)
+	expect(patchSeasonList).toHaveBeenCalledOnce()
+	view().inputs[0]?.props.onChange?.({ target: { value: "1.5", valueAsNumber: 1.5 } })
+	view()
+	await vi.advanceTimersByTimeAsync(500)
+	expect(patchSeasonList).toHaveBeenCalledTimes(2)
+	expect(view().html).toContain("Not saved")
+	expect(saveSeasonField).not.toHaveBeenCalled()
+	view().inputs[0]?.props.onChange?.({ target: { value: "5", valueAsNumber: 5 } })
+	view()
+	if (trigger === "blur") view().inputs[0]?.props.onBlur?.()
+	else {
+		await vi.advanceTimersByTimeAsync(499)
+		expect(patchSeasonList).toHaveBeenCalledTimes(2)
+	}
+	await vi.advanceTimersByTimeAsync(trigger === "idle" ? 1 : 0)
+	expect(patchSeasonList).toHaveBeenCalledTimes(3)
+	const operation = vi.mocked(patchSeasonList).mock.calls[0]?.[2]
+	if (!operation || !("hint" in operation)) throw new Error("Missing add patch")
+	expect(vi.mocked(patchSeasonList).mock.calls.map((call) => call[2])).toEqual([
+		{ op: "add", hint: { id: operation.hint.id, text: "Look up", points: 5 } },
+		{ op: "add", hint: { id: operation.hint.id, text: "Look up", points: 1.5 } },
+		{ op: "add", hint: { id: operation.hint.id, text: "Look up", points: 5 } },
+	])
+	expect(view().inputs[0]?.props.value).toBe(5)
+	expect(view().html).not.toContain("Not saved")
+	view().inputs[0]?.props.onBlur?.()
+	;(hooks.context as { retryAll: () => void }).retryAll()
+	await vi.advanceTimersByTimeAsync(1000)
+	expect(patchSeasonList).toHaveBeenCalledTimes(3)
+})
+
 it("replays pending-create text and points edits after navigation unmounts the editor", async () => {
 	let finish!: (result: { ok: boolean }) => void
 	vi.mocked(patchSeasonList).mockImplementationOnce(

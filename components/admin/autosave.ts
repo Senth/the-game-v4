@@ -91,8 +91,9 @@ export function createFieldSaver<T>({
 			value = savedValue = next
 			hasValue = hasSavedValue = true
 		},
-		edit(next: T) {
+		edit(next: T, force = false) {
 			if (canceled) return
+			if (force) hasSavedValue = false
 			value = next
 			hasValue = true
 			clearTimer()

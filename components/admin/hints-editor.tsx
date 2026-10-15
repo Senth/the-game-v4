@@ -194,7 +194,7 @@ function HintRow({
 				value: local.text,
 				onChange: (value: string) => edit({ ...draft.current, text: value }),
 				onFocus: () => {},
-				onBlur: () => void saveNew(),
+				onBlur: () => (adding.current ? savedText.onBlur() : void saveNew()),
 			}
 	const points = created
 		? savedPoints
@@ -203,7 +203,7 @@ function HintRow({
 				value: local.points,
 				onChange: (value: number) => edit({ ...draft.current, points: value }),
 				onFocus: () => {},
-				onBlur: () => void saveNew(),
+				onBlur: () => (adding.current ? savedPoints.onBlur() : void saveNew()),
 				failed: invalid,
 				error: invalid ? "Use a whole number from 0 to 10000." : undefined,
 			}

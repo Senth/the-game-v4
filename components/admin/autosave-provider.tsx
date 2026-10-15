@@ -220,7 +220,7 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 				list?.notify?.()
 			}
 			for (const notify of draft.listeners) notify()
-			saver.edit(next)
+			saver.edit(next, queued !== undefined)
 		},
 		onFocus() {
 			draft.focusedSubscribers.add(subscriber)
