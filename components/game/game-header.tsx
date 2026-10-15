@@ -19,7 +19,7 @@ export function GameHeader({
 	timeLeftMs: number
 	pace: { band: PaceBand; label: string } | null
 	rail: RailArc[]
-	strip: StripEntry[]
+	strip?: StripEntry[]
 }) {
 	const color = pace ? paceColors[pace.band] : "text-muted"
 	return (
@@ -34,7 +34,7 @@ export function GameHeader({
 				</div>
 				<ArcRail rail={rail} />
 			</div>
-			<StandingsStrip strip={strip} />
+			{strip && <StandingsStrip strip={strip} />}
 		</header>
 	)
 }

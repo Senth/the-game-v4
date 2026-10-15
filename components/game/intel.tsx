@@ -12,10 +12,12 @@ function LockedHint({
 	hint,
 	reducedMotion,
 	onReveal,
+	preview = false,
 }: {
 	hint: Extract<PlayerHint, { revealed: false }>
 	reducedMotion: boolean
-	onReveal: (hintId: string) => Promise<void>
+	onReveal?: (hintId: string) => Promise<void>
+	preview?: boolean
 }) {
 	const hold = useRef<ReturnType<typeof createHold> | null>(null)
 	const [progress, setProgress] = useState(0)
@@ -33,7 +35,7 @@ function LockedHint({
 	)
 
 	function press() {
-		if (pending || hold.current) return
+		if (pending || hold.current || !onReveal) return
 		setHolding(true)
 		setError(false)
 		hold.current = createHold({
@@ -46,6 +48,7 @@ function LockedHint({
 				setProgress(0)
 				setPending(true)
 				try {
+					if (!onReveal) return
 					await onReveal(hint.id)
 				} catch {
 					setError(true)
@@ -62,13 +65,40 @@ function LockedHint({
 		hold.current = null
 		setHolding(false)
 	}
+	const rowClass = "flex min-h-11 w-full items-center justify-between gap-3 text-left font-cond text-sm"
+	const label = (
+		<span className="relative">
+			<span className="mr-2 text-muted">{hintNumber(hint.position)}</span>
+			<span className={holding || pending ? "text-head" : error ? "text-warn" : "text-link"}>
+				{holding
+					? `Decrypting… ${((1 - progress) * 2).toFixed(1)} s`
+					: pending
+						? "Decrypting…"
+						: error
+							? "Could not decrypt. Hold to retry."
+							: "Hold to decrypt"}
+			</span>
+		</span>
+	)
+	const penalty = (
+		<span className={`relative shrink-0 tabular-nums ${holding || pending ? "text-warn" : "text-muted"}`}>
+			−{hint.points}p
+		</span>
+	)
+	if (preview)
+		return (
+			<div className={`${rowClass} select-none`}>
+				{label}
+				{penalty}
+			</div>
+		)
 
 	return (
 		<button
 			type="button"
 			disabled={pending}
 			aria-busy={pending}
-			className="relative flex min-h-11 w-full touch-none select-none items-center justify-between gap-3 overflow-hidden text-left font-cond text-sm hover:bg-link/5 focus-visible:outline-2 focus-visible:outline-link focus-visible:-outline-offset-2 active:bg-link/10 disabled:cursor-wait"
+			className={`relative ${rowClass} touch-none select-none overflow-hidden hover:bg-link/5 focus-visible:outline-2 focus-visible:outline-link focus-visible:-outline-offset-2 active:bg-link/10 disabled:cursor-wait`}
 			onPointerDown={(event) => {
 				if (event.button !== 0 || !event.isPrimary) return
 				event.currentTarget.setPointerCapture(event.pointerId)
@@ -95,21 +125,8 @@ function LockedHint({
 				className={`absolute inset-y-0 left-0 bg-link/15 ${holding ? "" : "transition-[width] duration-200 ease-out"} motion-reduce:transition-none`}
 				style={{ width: reducedMotion ? "0%" : `${progress * 100}%` }}
 			/>
-			<span className="relative">
-				<span className="mr-2 text-muted">{hintNumber(hint.position)}</span>
-				<span className={holding || pending ? "text-head" : error ? "text-warn" : "text-link"}>
-					{holding
-						? `Decrypting… ${((1 - progress) * 2).toFixed(1)} s`
-						: pending
-							? "Decrypting…"
-							: error
-								? "Could not decrypt. Hold to retry."
-								: "Hold to decrypt"}
-				</span>
-			</span>
-			<span className={`relative shrink-0 tabular-nums ${holding || pending ? "text-warn" : "text-muted"}`}>
-				−{hint.points}p
-			</span>
+			{label}
+			{penalty}
 		</button>
 	)
 }
@@ -172,18 +189,22 @@ function RevealedHint({
 	)
 }
 
-export function Intel({
-	quest,
-	onReveal,
-	decrypting,
-	onDecryptComplete,
-}: {
-	quest: Pick<PlayerQuest, "worth" | "points" | "hints">
-	onReveal: (hintId: string) => Promise<void>
-	decrypting: ReadonlySet<string>
-	onDecryptComplete: (hintId: string) => void
-}) {
+type IntelProps =
+	| {
+			quest: Pick<PlayerQuest, "worth" | "points" | "hints">
+			preview: true
+	  }
+	| {
+			quest: Pick<PlayerQuest, "worth" | "points" | "hints">
+			preview?: false
+			onReveal: (hintId: string) => Promise<void>
+			decrypting: ReadonlySet<string>
+			onDecryptComplete: (hintId: string) => void
+	  }
+
+export function Intel({ quest, ...props }: IntelProps) {
 	const reducedMotion = useReducedMotion()
+	const live = props.preview === true ? null : props
 
 	return (
 		<section className="mt-7" aria-label="Intel">
@@ -197,15 +218,23 @@ export function Intel({
 			<ul>
 				{quest.hints.map((hint) => (
 					<li key={hint.id} className="border-b border-z1 last:border-b-0">
-						{hint.revealed ? (
-							<RevealedHint
-								hint={hint}
-								decrypting={decrypting.has(hint.id)}
-								reducedMotion={reducedMotion}
-								onComplete={onDecryptComplete}
-							/>
+						{live ? (
+							hint.revealed ? (
+								<RevealedHint
+									hint={hint}
+									decrypting={live.decrypting.has(hint.id)}
+									reducedMotion={reducedMotion}
+									onComplete={live.onDecryptComplete}
+								/>
+							) : (
+								<LockedHint hint={hint} reducedMotion={reducedMotion} onReveal={live.onReveal} />
+							)
 						) : (
-							<LockedHint hint={hint} reducedMotion={reducedMotion} onReveal={onReveal} />
+							<LockedHint
+								hint={{ id: hint.id, position: hint.position, points: hint.points, revealed: false }}
+								reducedMotion={reducedMotion}
+								preview
+							/>
 						)}
 					</li>
 				))}

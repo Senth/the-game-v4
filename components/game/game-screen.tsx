@@ -5,12 +5,10 @@ import { getGame, revealHint, submitAnswer } from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { useLiveState } from "@/lib/events/use-live-state"
-import { AnswerDock, type AnswerFeedback } from "./answer-dock"
-import { GameHeader } from "./game-header"
+import type { AnswerFeedback } from "./answer-dock"
 import { gameTransitions } from "./game-transitions"
-import { Intel } from "./intel"
+import { GameView } from "./game-view"
 import { LifecycleScreen } from "./lifecycle-screen"
-import { QuestContent } from "./quest-content"
 import { useGameClock } from "./use-game-clock"
 
 export function GameScreen({
@@ -111,32 +109,20 @@ export function GameScreen({
 	if (game.lifecycleState !== "running") return <LifecycleScreen game={game} now={now} qr={qr} />
 	const pace = paceFromCounts({ start: game.start, end: game.end, solved: game.solved, total: game.total, now })
 	return (
-		<>
-			<GameHeader
-				timeLeftMs={end === null ? 0 : Math.max(0, end - now.getTime())}
-				pace={pace && { band: pace.band, label: paceLabel(pace.n) }}
-				rail={game.rail}
-				strip={game.strip}
-			/>
-			<main className="mx-auto max-w-2xl px-4 pt-5 pb-[calc(var(--spacing)*40+env(safe-area-inset-bottom))]">
-				{game.quest ? (
-					<>
-						<QuestContent quest={game.quest} />
-						<Intel quest={game.quest} onReveal={reveal} decrypting={decrypting} onDecryptComplete={finishScramble} />
-					</>
-				) : (
-					<p className="text-muted">Waiting for a quest.</p>
-				)}
-			</main>
-			{game.quest && (
-				<AnswerDock
-					answer={answer}
-					onAnswerChange={setAnswer}
-					onSubmit={submit}
-					pending={pending}
-					feedback={feedback}
-				/>
-			)}
-		</>
+		<GameView
+			timeLeftMs={end === null ? 0 : Math.max(0, end - now.getTime())}
+			pace={pace && { band: pace.band, label: paceLabel(pace.n) }}
+			rail={game.rail}
+			strip={game.strip}
+			quest={game.quest}
+			answer={answer}
+			onAnswerChange={setAnswer}
+			onSubmit={submit}
+			pending={pending}
+			feedback={feedback}
+			onReveal={reveal}
+			decrypting={decrypting}
+			onDecryptComplete={finishScramble}
+		/>
 	)
 }

@@ -7,23 +7,26 @@ export type AnswerFeedback =
 	| { id: number; kind: "correct"; points: number | null }
 	| { id: number; kind: "error"; message: string }
 
-export function AnswerDock({
-	answer,
-	onAnswerChange,
-	onSubmit,
-	pending,
-	feedback,
-}: {
-	answer: string
-	onAnswerChange: (answer: string) => void
-	onSubmit: (answer: string) => void
-	pending: boolean
-	feedback: AnswerFeedback | null
-}) {
+type AnswerDockProps =
+	| { preview: true }
+	| {
+			preview?: false
+			answer: string
+			onAnswerChange: (answer: string) => void
+			onSubmit: (answer: string) => void
+			pending: boolean
+			feedback: AnswerFeedback | null
+	  }
+
+export function AnswerDock(props: AnswerDockProps) {
+	const preview = props.preview === true
+	const answer = preview ? "" : props.answer
+	const pending = preview ? false : props.pending
+	const feedback = preview ? null : props.feedback
 	const input = useRef<HTMLInputElement>(null)
 	useEffect(() => {
-		if (feedback?.kind === "wrong") input.current?.select()
-	}, [feedback])
+		if (!preview && feedback?.kind === "wrong") input.current?.select()
+	}, [feedback, preview])
 	const warning = feedback?.kind !== "correct"
 	return (
 		<div className="fixed inset-x-0 bottom-0 z-20 border-t border-z2 bg-z1">
@@ -52,7 +55,7 @@ export function AnswerDock({
 					className="flex gap-2 px-4 pt-2 pb-[calc(var(--spacing)*6+env(safe-area-inset-bottom))]"
 					onSubmit={(event) => {
 						event.preventDefault()
-						if (!pending && answer.trim()) onSubmit(answer)
+						if (!preview && !pending && answer.trim()) props.onSubmit(answer)
 					}}
 				>
 					<div className="relative min-w-0 flex-1">
@@ -61,7 +64,8 @@ export function AnswerDock({
 							aria-label="Your answer"
 							name="answer"
 							value={answer}
-							onChange={(event) => onAnswerChange(event.target.value)}
+							onChange={preview ? undefined : (event) => props.onAnswerChange(event.target.value)}
+							disabled={preview}
 							maxLength={200}
 							placeholder="Your answer"
 							autoComplete="off"
@@ -80,7 +84,7 @@ export function AnswerDock({
 					</div>
 					<button
 						type="submit"
-						disabled={pending || !answer.trim()}
+						disabled={preview || pending || !answer.trim()}
 						aria-busy={pending}
 						className="h-12 shrink-0 rounded-md bg-accent px-5 font-cond font-bold text-white hover:bg-accent/80 focus-visible:outline-2 focus-visible:outline-link active:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
 					>
