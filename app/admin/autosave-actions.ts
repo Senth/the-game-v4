@@ -44,9 +44,8 @@ export async function saveSeasonField(
 		id.parse(seasonId)
 		if (
 			"questId" in parsed &&
-			!("hintId" in parsed) &&
 			parsed.field === "points" &&
-			!Quest.shape.points.safeParse(value).success
+			!("hintId" in parsed ? Hint.shape.points : Quest.shape.points).safeParse(value).success
 		) {
 			return { ok: false, error: "Use a whole number from 0 to 10000." }
 		}

@@ -82,6 +82,35 @@ describe("autosave actions", () => {
 		expect(publish).not.toHaveBeenCalled()
 	})
 
+	it.each([0, 10000])("saves hint penalty %j", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { ...quest, hintId: "h1", field: "points" }, value)).toEqual({ ok: true })
+		expect((await seasons.getSeason(season._id))?.arcs[0]?.quests[0]?.hints[0]?.points).toBe(value)
+	})
+
+	it.each([-3, 10001, 2.5])("rejects hint penalty %j with shared copy without writing", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { ...quest, hintId: "h1", field: "points" }, value)).toEqual({
+			ok: false,
+			error: "Use a whole number from 0 to 10000.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each([-3, 10001, 2.5])("rejects invalid hint penalty add %j without writing or publishing", async (value) => {
+		const season = await setup()
+		expect(
+			await patchSeasonList(
+				season._id,
+				{ ...quest, field: "hints" },
+				{ op: "add", hint: { text: "Second", points: value } },
+			),
+		).toEqual({ ok: false })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
 	it.each(["", "   ", "x".repeat(201)])("rejects invalid answer %j without writing or publishing", async (value) => {
 		const season = await setup()
 		expect(await patchSeasonList(season._id, { ...quest, field: "answers" }, { op: "add", value })).toEqual({

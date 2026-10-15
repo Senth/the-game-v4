@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation"
+import { HintsEditor } from "@/components/admin/hints-editor"
 import { QuestEditor } from "@/components/admin/quest-editor"
 import { QuestHeader } from "@/components/admin/quest-header"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
+import { listTeams } from "@/lib/db/teams"
+import { hintRevealers } from "@/lib/domain/hints"
 import { questLabel } from "@/lib/domain/season-tree"
 
 export default async function QuestPage({ params }: PageProps<"/admin/seasons/[seasonId]/quests/[questId]">) {
@@ -13,6 +16,8 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 	const quest = arc?.quests.find((quest) => quest.id === questId)
 	if (!season || !arc || !quest) redirect(`/admin/seasons/${seasonId}`)
 	const label = questLabel(quest)
+	const revealers = hintRevealers(await listTeams(seasonId), questId)
+	const now = Date.now()
 	return (
 		<>
 			<QuestHeader seasonId={seasonId} arcTitle={arc.title} label={label} />
@@ -36,8 +41,19 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 					}}
 					start={season.start}
 					end={season.end}
-					now={Date.now()}
-				/>
+					now={now}
+				>
+					<HintsEditor
+						arcId={arc.id}
+						questId={quest.id}
+						points={quest.points}
+						hints={quest.hints}
+						revealers={revealers}
+						start={season.start}
+						end={season.end}
+						now={now}
+					/>
+				</QuestEditor>
 			</div>
 		</>
 	)

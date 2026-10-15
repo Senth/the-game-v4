@@ -17,7 +17,7 @@ import TeamsPage from "./teams/page"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn(), listSeasons: vi.fn() }))
-vi.mock("@/lib/db/teams", () => ({ countTeams: vi.fn() }))
+vi.mock("@/lib/db/teams", () => ({ countTeams: vi.fn(), listTeams: vi.fn(async () => []) }))
 vi.mock("@/app/admin/actions", () => ({ createSeasonAction: vi.fn() }))
 vi.mock("@/app/admin/live-actions", () => ({ startSeasonNow: vi.fn(), shiftSeasonEnd: vi.fn(), endSeason: vi.fn() }))
 vi.mock("next/navigation", async (importOriginal) => ({

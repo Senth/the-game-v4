@@ -18,7 +18,7 @@ type SaveContext = {
 	drafts: Map<string, Draft>
 	update: (id: string, state: AutosaveState, retry: () => void) => void
 	remove: (id: string) => void
-	discard: (target: { arcId: string; questId?: string }) => void
+	discard: (target: { arcId: string; questId?: string; hintId?: string }) => void
 	retryAll: () => void
 }
 
@@ -58,10 +58,11 @@ export function AutosaveProvider({ seasonId, children }: { seasonId: string; chi
 				drafts.delete(id)
 				changed()
 			},
-			discard(target: { arcId: string; questId?: string }) {
+			discard(target: { arcId: string; questId?: string; hintId?: string }) {
 				for (const [id, draft] of drafts) {
 					if (draft.target.arcId !== target.arcId || (target.questId && draft.target.questId !== target.questId))
 						continue
+					if (target.hintId && draft.target.hintId !== target.hintId) continue
 					draft.saver.cancel()
 					fields.delete(id)
 					drafts.delete(id)
@@ -138,6 +139,10 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 	if (!context) throw new Error("useAutosaveField requires AutosaveProvider")
 	const { seasonId, drafts, update, remove } = context
 	const id = autosaveId(seasonId, "field", target)
+	const listId =
+		"hintId" in target
+			? autosaveId(seasonId, "list", { arcId: target.arcId, questId: target.questId, field: "hints" })
+			: null
 	const [draft] = useState(() => {
 		const retained = drafts.get(id) as FieldDraft<T> | undefined
 		if (retained) return retained
@@ -151,6 +156,13 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 			focusedSubscribers: new Set(),
 			saver: createFieldSaver<T>({
 				async save(value) {
+					const list = listId ? (drafts.get(listId) as ListDraft | undefined) : undefined
+					const queued = list?.saver.queued((op) => "hintId" in target && "hint" in op && op.hint.id === target.hintId)
+					if (queued) {
+						await list?.saver.retry()
+						if (list?.state === "failed") return { ok: false }
+						if (!(await queued.saved) || drafts.get(id) !== draft) return { ok: true }
+					}
 					const result = await saveSeasonField(seasonId, target, value)
 					if (result.ok) draft.serverValue = draft.latestServerValue
 					return result
@@ -201,8 +213,14 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 		value,
 		onChange(next: T) {
 			draft.value = next
+			const list = listId ? (drafts.get(listId) as ListDraft | undefined) : undefined
+			const queued = list?.saver.queued((op) => "hintId" in target && "hint" in op && op.hint.id === target.hintId)
+			if (queued && "hint" in queued.op) {
+				queued.op = { op: "add", hint: { ...queued.op.hint, [target.field]: next } }
+				list?.notify?.()
+			}
 			for (const notify of draft.listeners) notify()
-			saver.edit(next)
+			saver.edit(next, queued !== undefined)
 		},
 		onFocus() {
 			draft.focusedSubscribers.add(subscriber)
@@ -220,7 +238,7 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 type ListTarget = Parameters<typeof patchSeasonList>[1]
 type ListOp = Parameters<typeof patchSeasonList>[2]
 type ListItem = string | Hint
-type ListResult<T, Add> = { items: T[]; add(item: Add): void; remove(id: string): void; failed: boolean }
+type ListResult<T, Add> = { items: T[]; add(item: Add): Promise<boolean>; remove(id: string): void; failed: boolean }
 type ListDraft = Draft & {
 	items: ListItem[]
 	serverItems: string
@@ -304,15 +322,16 @@ export function useAutosaveList(target: ListTarget, serverItems: ListItem[]): Li
 	}, [serverItems, saver, draft])
 
 	function enqueue(op: ListOp) {
-		saver.enqueue(op)
+		const saved = saver.enqueue(op)
 		setItems(saver.applyQueued(draft.items, applyList))
+		return saved
 	}
 
 	return {
 		items,
 		add(item: string | HintInput) {
-			if (typeof item === "string") enqueue({ op: "add", value: item })
-			else enqueue({ op: "add", hint: { ...item, id: item.id ?? crypto.randomUUID() } })
+			if (typeof item === "string") return enqueue({ op: "add", value: item })
+			return enqueue({ op: "add", hint: { ...item, id: item.id ?? crypto.randomUUID() } })
 		},
 		remove(id: string) {
 			enqueue(target.field === "answers" ? { op: "remove", value: id } : { op: "remove", hintId: id })

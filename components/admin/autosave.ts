@@ -91,8 +91,9 @@ export function createFieldSaver<T>({
 			value = savedValue = next
 			hasValue = hasSavedValue = true
 		},
-		edit(next: T) {
+		edit(next: T, force = false) {
 			if (canceled) return
+			if (force) hasSavedValue = false
 			value = next
 			hasValue = true
 			clearTimer()
@@ -119,9 +120,10 @@ export function createListSaver<Operation>({
 	patch: (op: Operation) => Promise<{ ok: boolean }>
 	onState: (state: AutosaveState) => void
 }) {
-	const queue: Operation[] = []
+	const queue: { op: Operation; saved: Promise<boolean>; resolve: (saved: boolean) => void }[] = []
 	let state: AutosaveState = "saved"
 	let inFlight = false
+	let running: Promise<void> | undefined
 	let canceled = false
 
 	function setState(next: AutosaveState) {
@@ -135,9 +137,11 @@ export function createListSaver<Operation>({
 		inFlight = true
 		setState("saving")
 		while (queue.length > 0) {
+			const next = queue[0]
+			if (!next) break
 			let ok = false
 			try {
-				ok = (await patch(queue[0] as Operation)).ok
+				ok = (await patch(next.op)).ok
 			} catch {}
 			if (canceled) return
 			if (!ok) {
@@ -145,7 +149,7 @@ export function createListSaver<Operation>({
 				setState("failed")
 				return
 			}
-			queue.shift()
+			queue.shift()?.resolve(true)
 		}
 		inFlight = false
 		setState("saved")
@@ -154,18 +158,28 @@ export function createListSaver<Operation>({
 	return {
 		cancel() {
 			canceled = true
+			for (const item of queue) item.resolve(false)
 			queue.length = 0
 		},
+		queued(matches: (op: Operation) => boolean) {
+			return queue.find((item) => matches(item.op))
+		},
 		enqueue(op: Operation) {
-			if (canceled) return
-			queue.push(op)
-			if (state !== "failed") void drain()
+			if (canceled) return Promise.resolve(false)
+			let resolve!: (saved: boolean) => void
+			const saved = new Promise<boolean>((done) => {
+				resolve = done
+			})
+			queue.push({ op, saved, resolve })
+			if (state !== "failed" && !inFlight) running = drain()
+			return saved
 		},
 		applyQueued<T>(items: readonly T[], apply: (items: T[], op: Operation) => T[]): T[] {
-			return queue.reduce(apply, [...items])
+			return queue.reduce((current, item) => apply(current, item.op), [...items])
 		},
 		retry() {
-			if (state === "failed") return drain()
+			if (state === "failed") running = drain()
+			return running
 		},
 	}
 }

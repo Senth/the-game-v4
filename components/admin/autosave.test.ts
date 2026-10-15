@@ -217,6 +217,25 @@ function applyAnswer(items: string[], op: AnswerOp) {
 }
 
 describe("createListSaver", () => {
+	it("settles each enqueue only after its patch succeeds, including retry and cancellation", async () => {
+		const patch = vi.fn(async (_op: AnswerOp) => ({ ok: true })).mockResolvedValueOnce({ ok: false })
+		const saver = createListSaver({ patch, onState: vi.fn() })
+		const settled = vi.fn()
+		const added = saver.enqueue({ op: "add", value: "hint" })
+		void added.then(settled)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(settled).not.toHaveBeenCalled()
+		await saver.retry()
+		await expect(added).resolves.toBe(true)
+		expect(settled).toHaveBeenCalledWith(true)
+		patch.mockResolvedValueOnce({ ok: false })
+		const removed = saver.enqueue({ op: "remove", value: "hint" })
+		await vi.advanceTimersByTimeAsync(0)
+		saver.cancel()
+		await expect(removed).resolves.toBe(false)
+		await expect(saver.enqueue({ op: "add", value: "after cancellation" })).resolves.toBe(false)
+	})
+
 	it("sends operations one at a time in order and applies queued operations to local items", async () => {
 		const first = deferred<{ ok: boolean }>()
 		const patch = vi.fn(async (_op: AnswerOp) => ({ ok: true })).mockReturnValueOnce(first.promise)

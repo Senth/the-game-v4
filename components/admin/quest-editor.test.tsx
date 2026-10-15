@@ -167,6 +167,12 @@ it("shows Upload and empty Image row when the quest has no asset", () => {
 	expect(view.html).toContain("Answers")
 })
 
+it("places Hints after Admin notes and before Remove quest without adding them to the quest prop", () => {
+	const view = render({ children: <section aria-label="Hints">Hints section</section> })
+	expect(view.html.indexOf("Admin notes")).toBeLessThan(view.html.indexOf("Hints section"))
+	expect(view.html.indexOf("Hints section")).toBeLessThan(view.html.indexOf("Remove quest"))
+})
+
 function drag(files: File[] = [], types = ["Files"]) {
 	return { dataTransfer: { types, files, dropEffect: "none" }, preventDefault: vi.fn() }
 }
