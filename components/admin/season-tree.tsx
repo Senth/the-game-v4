@@ -1,6 +1,6 @@
 "use client"
 
-import { type DragOverEvent, useDndMonitor, useDroppable } from "@dnd-kit/core"
+import { type DragOverEvent, useDndContext, useDndMonitor, useDroppable } from "@dnd-kit/core"
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import Link from "next/link"
 import { useRouter, useSelectedLayoutSegments } from "next/navigation"
@@ -74,8 +74,9 @@ export function SeasonTree({
 	)
 	const [drag, setDrag] = useState<"arc" | "quest" | null>(null)
 	const [drop, setDrop] = useState<TreeMove | null>(null)
+	const [overlayReady, setOverlayReady] = useState(false)
 	const arcs = editable && drop ? applyTreeMove(moves.items, drop) : moves.items
-	const folded = editable && drag === "arc"
+	const folded = editable && drag === "arc" && overlayReady
 	const keyboardArcs = moves.items as unknown as Arc[]
 	const container = useRef<HTMLDivElement>(null)
 	const [focusQuest, setFocusQuest] = useState<string | null>(null)
@@ -119,6 +120,7 @@ export function SeasonTree({
 	function finishDrag() {
 		setDrag(null)
 		setDrop(null)
+		setOverlayReady(false)
 		moves.setDragging(false)
 	}
 	function previewDrop(event: Pick<DragOverEvent, "active" | "over">) {
@@ -129,6 +131,7 @@ export function SeasonTree({
 		if (editable || !drag) return
 		setDrag(null)
 		setDrop(null)
+		setOverlayReady(false)
 		moves.setDragging(false)
 	}, [editable, drag, moves.setDragging])
 	const confirmedArc = tree.arcs.find((arc) => arc.id === confirming)
@@ -293,7 +296,12 @@ export function SeasonTree({
 					}}
 					onDragCancel={finishDrag}
 				>
-					<TreeDragMonitor onMove={previewDrop} />
+					<TreeDragMonitor
+						onMove={previewDrop}
+						foldArcs={drag === "arc"}
+						folded={folded}
+						onOverlayReady={setOverlayReady}
+					/>
 					{contents}
 				</SortableDragLayer>
 			) : (
@@ -547,7 +555,24 @@ function EmptyArcSlot({ arcId }: { arcId: string }) {
 	return <li ref={setNodeRef} aria-hidden="true" className="h-11" />
 }
 
-function TreeDragMonitor({ onMove }: { onMove: (event: Pick<DragOverEvent, "active" | "over">) => void }) {
+function TreeDragMonitor({
+	onMove,
+	foldArcs,
+	folded,
+	onOverlayReady,
+}: {
+	onMove: (event: Pick<DragOverEvent, "active" | "over">) => void
+	foldArcs: boolean
+	folded: boolean
+	onOverlayReady: (ready: boolean) => void
+}) {
+	const { dragOverlay, measureDroppableContainers } = useDndContext()
+	useEffect(() => {
+		if (foldArcs && dragOverlay.rect) onOverlayReady(true)
+	}, [foldArcs, dragOverlay.rect, onOverlayReady])
+	useEffect(() => {
+		if (folded) measureDroppableContainers([])
+	}, [folded, measureDroppableContainers])
 	useDndMonitor({ onDragMove: onMove })
 	return null
 }

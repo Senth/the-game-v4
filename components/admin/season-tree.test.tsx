@@ -27,6 +27,8 @@ const hooks = vi.hoisted(() => ({
 	droppables: [] as string[],
 	contextItems: [] as string[],
 	dragMove: null as ((event: DragOverEvent) => void) | null,
+	overlayRect: null as { top: number; height: number } | null,
+	measureDroppableContainers: vi.fn(),
 }))
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
@@ -62,6 +64,10 @@ vi.mock("@/app/admin/tree-actions", () => ({
 	moveQuest: vi.fn(),
 }))
 vi.mock("@dnd-kit/core", () => ({
+	useDndContext: () => ({
+		dragOverlay: { rect: hooks.overlayRect },
+		measureDroppableContainers: hooks.measureDroppableContainers,
+	}),
 	useDndMonitor: ({ onDragMove }: { onDragMove: (event: DragOverEvent) => void }) => {
 		hooks.dragMove = onDragMove
 	},
@@ -194,6 +200,7 @@ beforeEach(() => {
 	hooks.states.clear()
 	hooks.segments = []
 	hooks.active = null
+	hooks.overlayRect = null
 	hooks.queue = null
 	hooks.dragMove = null
 	hooks.serverItems = null
@@ -467,9 +474,12 @@ function dragEvent(id: string, overId: string | null = null, top = 0) {
 		over: overId === null ? null : { id: overId, rect: { top: 44, height: 44 } },
 	} as DragOverEvent & DragEndEvent & DragStartEvent
 }
-function lift(id: string) {
+function lift(id: string, props: Parameters<typeof render>[0]) {
 	hooks.active = id
 	hooks.layer?.onDragStart(dragEvent(id))
+	hooks.overlayRect = { top: 300, height: 48 }
+	render(props)
+	for (const effect of hooks.effects) effect()
 }
 function key(element: ReactElement<Props> | undefined, direction: "ArrowUp" | "ArrowDown", shiftKey = false) {
 	if (!element) throw new Error("Missing keyboard target")
@@ -514,7 +524,7 @@ it.each(["menu", "page"] as const)(
 	(variant) => {
 		const props = { variant, tree: dragTree }
 		render(props)
-		lift("a1")
+		lift("a1", props)
 		const view = render(props)
 		expect(view.html).toContain("4 quests · Random")
 		expect(hooks.contextItems).toEqual(["a1", "a2", "a3"])
@@ -535,10 +545,34 @@ it.each(["menu", "page"] as const)(
 	},
 )
 
+it.each(["menu", "page"] as const)(
+	"anchors the overlay before folding and refreshes upward arc targets in %s",
+	async (variant) => {
+		const props = { variant, tree: dragTree }
+		render(props)
+		hooks.active = "a2"
+		hooks.layer?.onDragStart(dragEvent("a2"))
+		expect(render(props).html).toContain("Harbour map")
+		for (const effect of hooks.effects) effect()
+		expect(render(props).html).toContain("Harbour map")
+		hooks.overlayRect = { top: 300, height: 48 }
+		render(props)
+		for (const effect of hooks.effects) effect()
+		expect(render(props).html).not.toContain("Harbour map")
+		for (const effect of hooks.effects) effect()
+		expect(hooks.measureDroppableContainers).toHaveBeenCalled()
+		hooks.layer?.onDragOver?.(dragEvent("a2", "a1", 0))
+		render(props)
+		hooks.layer?.onDragEnd(dragEvent("a2", "a1", 0))
+		await vi.waitFor(() => expect(moveArc).toHaveBeenCalledWith({ seasonId: "s1", id: "a2", beforeId: "a1" }))
+		expect(render(props).html.indexOf(">Finale<")).toBeLessThan(render(props).html.indexOf(">Old Town<"))
+	},
+)
+
 it.each(["menu", "page"] as const)("moves an arc by pointer, sending only its target in %s", async (variant) => {
 	const props = { variant, tree: dragTree }
 	render(props)
-	lift("a1")
+	lift("a1", props)
 	render(props)
 	hooks.layer?.onDragOver?.(dragEvent("a1", "a2", 88))
 	render(props)
@@ -553,7 +587,7 @@ it.each(["menu", "page"] as const)("moves an arc by pointer, sending only its ta
 it.each(["q2", "q5", "empty:a3"])("moves a quest within, across or into empty arcs over %s", async (overId) => {
 	const props = { tree: dragTree }
 	render(props)
-	lift("q1")
+	lift("q1", props)
 	render(props)
 	expect(hooks.droppables).toContain("empty:a3")
 	hooks.layer?.onDragOver?.(dragEvent("q1", overId, overId === "q2" ? 88 : 0))
@@ -584,7 +618,7 @@ it("discards a cross-arc preview on cancel or a drop outside the tree", () => {
 	const props = { tree: dragTree }
 	for (const cancel of [true, false]) {
 		render(props)
-		lift("q1")
+		lift("q1", props)
 		render(props)
 		hooks.layer?.onDragOver?.(dragEvent("q1", "empty:a3"))
 		render(props)
@@ -600,7 +634,7 @@ it("discards a cross-arc preview on cancel or a drop outside the tree", () => {
 it("lets a pointer return a quest before its original neighbor", async () => {
 	const props = { tree: dragTree }
 	render(props)
-	lift("q1")
+	lift("q1", props)
 	render(props)
 	hooks.layer?.onDragOver?.(dragEvent("q1", "q2", 88))
 	render(props)
@@ -617,7 +651,7 @@ it("lets a pointer return a quest before its original neighbor", async () => {
 it("updates the slot when the pointer crosses the same last row's midpoint", () => {
 	const props = { tree: dragTree }
 	render(props)
-	lift("q1")
+	lift("q1", props)
 	render(props)
 	hooks.layer?.onDragOver?.(dragEvent("q1", "q4", 0))
 	const before = questLinks(render(props)).map((node) => node.props.href)

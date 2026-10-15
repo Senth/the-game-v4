@@ -21,6 +21,7 @@ import {
 	type ReactNode,
 	type RefCallback,
 	useEffect,
+	useId,
 	useRef,
 	useState,
 } from "react"
@@ -67,6 +68,7 @@ export function SortableDragLayer({
 	onDragEnd: (event: DragEndEvent) => void
 	onDragCancel: (event: DragCancelEvent) => void
 }) {
+	const id = useId()
 	const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 400, tolerance: 5 } }))
 	const reducedMotion = useReducedMotion()
 	const [active, setActive] = useState<Active | null>(null)
@@ -93,6 +95,7 @@ export function SortableDragLayer({
 
 	return (
 		<DndContext
+			id={id}
 			sensors={sensors}
 			accessibility={{
 				screenReaderInstructions: {
@@ -116,7 +119,7 @@ export function SortableDragLayer({
 			}}
 		>
 			{children}
-			<DragOverlay dropAnimation={reducedMotion ? null : undefined}>
+			<DragOverlay style={{ height: "auto" }} dropAnimation={reducedMotion ? null : undefined}>
 				{active ? <DragPreview reducedMotion={reducedMotion}>{overlay(active)}</DragPreview> : null}
 			</DragOverlay>
 		</DndContext>
@@ -162,7 +165,7 @@ export function SortableRow({
 	return (
 		<li
 			ref={setNodeRef}
-			className={`relative ${active && !isDragging ? "text-muted" : ""}`}
+			className={`relative ${active && !isDragging ? "text-muted [&_*]:text-muted" : ""}`}
 			style={{
 				transform: reducedMotion ? undefined : CSS.Transform.toString(transform),
 				transition: reducedMotion ? undefined : transition,

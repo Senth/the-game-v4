@@ -15,6 +15,7 @@ vi.mock("react", async (original) => ({
 	...(await original<typeof import("react")>()),
 	useState: (value: unknown) => [value, vi.fn()],
 	useRef: (value: unknown) => ({ current: value }),
+	useId: () => "sortable-test",
 	useEffect: (effect: EffectCallback) => {
 		const cleanup = effect()
 		if (cleanup) hooks.cleanups.push(cleanup)
@@ -107,10 +108,18 @@ it("mutes untouched rows and removes sortable transforms and transitions for red
 	const row = SortableRow({
 		id: "a",
 		keyboard: { arcs: [], item: { kind: "arc", id: "a" }, onMove: vi.fn() },
-		children: () => <button type="button">Row</button>,
+		children: () => (
+			<>
+				<button type="button">
+					<span className="text-ink">Hint text</span>
+				</button>
+				<span className="bg-z2 text-ink">Ninjas</span>
+			</>
+		),
 	})
 	const markup = renderToStaticMarkup(row)
 	expect(markup).toContain("text-muted")
+	expect(row.props.className).toContain("[&_*]:text-muted")
 	expect(markup).not.toContain("transform:")
 	expect(markup).not.toContain("transition:")
 	const layer = SortableDragLayer({
@@ -121,4 +130,15 @@ it("mutes untouched rows and removes sortable transforms and transitions for red
 		onDragCancel: vi.fn(),
 	})
 	expect(layer.props.children[1].props.dropAnimation).toBeNull()
+})
+
+it("measures only overlay content rather than an expanded arc's full source height", () => {
+	const layer = SortableDragLayer({
+		children: null,
+		overlay: () => null,
+		onDragStart: vi.fn(),
+		onDragEnd: vi.fn(),
+		onDragCancel: vi.fn(),
+	})
+	expect(layer.props.children[1].props.style).toEqual({ height: "auto" })
 })

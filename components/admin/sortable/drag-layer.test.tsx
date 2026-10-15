@@ -73,6 +73,35 @@ it("keeps the overlay absent until a pointer lift", () => {
 	expect(html).toBe("<ul></ul>")
 })
 
+it("keeps instruction identities stable across server renders and distinct across drag layers", () => {
+	const layer = (id: string) => (
+		<SortableDragLayer overlay={() => null} onDragStart={vi.fn()} onDragEnd={vi.fn()} onDragCancel={vi.fn()}>
+			<SortableContext items={[id]}>
+				<ul>
+					<SortableRow id={id} keyboard={{ arcs: [], item: { kind: "arc", id }, onMove: vi.fn() }}>
+						{(bindings) => (
+							<button type="button" {...bindings}>
+								Open {id}
+							</button>
+						)}
+					</SortableRow>
+				</ul>
+			</SortableContext>
+		</SortableDragLayer>
+	)
+	const tree = (
+		<>
+			{layer("arc")}
+			{layer("hint")}
+		</>
+	)
+	const descriptions = (html: string) => [...html.matchAll(/aria-describedby="([^"]+)"/g)].map((match) => match[1])
+	const first = descriptions(renderToStaticMarkup(tree))
+	expect(first).toHaveLength(2)
+	expect(new Set(first).size).toBe(2)
+	expect(descriptions(renderToStaticMarkup(tree))).toEqual(first)
+})
+
 const arcs = [
 	{ id: "a", quests: [] },
 	{ id: "b", quests: [] },
