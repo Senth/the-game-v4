@@ -260,6 +260,7 @@ type ListResult<T, Add> = { items: T[]; add(item: Add): Promise<boolean>; remove
 type ListDraft = Draft & {
 	target: ListTarget
 	items: ListItem[]
+	previewItems?: Hint[]
 	serverItems: string
 	state: AutosaveState
 	listeners: Set<() => void>
@@ -348,6 +349,7 @@ export function useAutosaveList(target: ListTarget, serverItems: ListItem[]): Li
 		if (serialized !== draft.serverItems) {
 			draft.serverItems = serialized
 			draft.items = serverItems
+			delete draft.previewItems
 			draft.notify()
 		}
 	}, [serverItems, draft])
@@ -407,50 +409,35 @@ export function useDraftValue<T>(target: Parameters<typeof saveSeasonField>[1] |
 	const id = autosaveId(context.seasonId, "field", target)
 	useDraftSubscriptions([id])
 	const draft = context.drafts.get(id) as FieldDraft<T> | undefined
-	useEffect(() => {
-		if (!draft) return
-		if (target.field === "assetPath") {
-			if (Object.is(serverValue, draft.serverValue)) return
-			draft.value = draft.serverValue = serverValue
-			for (const notify of draft.listeners) notify()
-		} else {
-			draft.latestServerValue = serverValue
-			syncFieldDraft(draft)
-		}
-	}, [draft, draft?.state, serverValue, target.field])
 	return draft ? draft.value : serverValue
+}
+
+export function usePreviewHints(target: ListTarget & { field: "hints" }, items: Hint[]) {
+	const context = useAutosave()
+	if (!context) throw new Error("usePreviewHints requires AutosaveProvider")
+	const { seasonId, drafts, listenersFor } = context
+	const id = autosaveId(seasonId, "list", target)
+	const previewId = autosaveId(seasonId, "field", { ...target, field: "previewHints" })
+	useEffect(() => {
+		const draft = drafts.get(id) as ListDraft | undefined
+		if (!draft) return
+		draft.previewItems = items
+		for (const notify of listenersFor(previewId)) notify()
+	}, [drafts, id, items, listenersFor, previewId])
 }
 
 export function useDraftHints(target: ListTarget & { field: "hints" }, serverItems: Hint[]): Hint[] {
 	const context = useAutosave()
 	if (!context) throw new Error("useDraftHints requires AutosaveProvider")
 	const id = autosaveId(context.seasonId, "list", target)
+	const previewId = autosaveId(context.seasonId, "field", { ...target, field: "previewHints" })
 	const draft = context.drafts.get(id) as ListDraft | undefined
 	const items = draft ? (draft.saver.applyQueued(draft.items, applyList) as Hint[]) : serverItems
 	const fields = items.map((hint) =>
 		autosaveId(context.seasonId, "field", { ...target, hintId: hint.id, field: "points" }),
 	)
-	useDraftSubscriptions([id, ...fields])
-	const penalties = serverItems.map((hint) => ({
-		points: hint.points,
-		draft: context.drafts.get(autosaveId(context.seasonId, "field", { ...target, hintId: hint.id, field: "points" })) as
-			| FieldDraft<number>
-			| undefined,
-	}))
-	useEffect(() => {
-		const serialized = JSON.stringify(serverItems)
-		if (draft && serialized !== draft.serverItems) {
-			draft.serverItems = serialized
-			draft.items = serverItems
-			draft.notify()
-		}
-		for (const { draft: field, points } of penalties) {
-			if (field) {
-				field.latestServerValue = points
-				syncFieldDraft(field)
-			}
-		}
-	}, [draft, serverItems, penalties])
+	useDraftSubscriptions([id, previewId, ...fields])
+	if (draft?.previewItems) return draft.previewItems
 	return items.map((hint, index) => {
 		const id = fields[index]
 		const field = (id ? context.drafts.get(id) : undefined) as FieldDraft<number> | undefined
@@ -479,6 +466,11 @@ export function useAssetDraft(target: AssetTarget, serverValue: string | null) {
 	useEffect(() => {
 		context.drafts.set(id, draft)
 	}, [context.drafts, id, draft])
+	useEffect(() => {
+		if (Object.is(serverValue, draft.serverValue)) return
+		draft.value = draft.serverValue = serverValue
+		for (const notify of draft.listeners) notify()
+	}, [draft, serverValue])
 	const value = useDraftValue(target, serverValue)
 	return {
 		value,

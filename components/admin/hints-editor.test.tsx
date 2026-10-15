@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { moveHint as moveHintAction, patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
 import { hintRevealers } from "@/lib/domain/hints"
 import { AutosavePointsField } from "./autosave-points-field"
-import { AutosaveProvider } from "./autosave-provider"
+import { AutosaveProvider, useDraftHints } from "./autosave-provider"
 import { HintsEditor } from "./hints-editor"
 
 type Scope = {
@@ -477,6 +477,52 @@ function add(snapshot = props) {
 		?.props.onClick?.()
 	return view(snapshot)
 }
+
+it("previews pending additions, local penalties and removals before the idle write", async () => {
+	const preview = scope()
+	const read = () => run(preview, () => useDraftHints({ arcId: "arc", questId: "quest", field: "hints" }, props.hints))
+	read()
+	const opened = add()
+	expect(read().map((hint) => hint.points)).toEqual([5, 10, 5])
+	opened.textareas[0]?.props.onChange?.({ target: { value: "Unsaved secret", valueAsNumber: Number.NaN } })
+	opened.inputs[0]?.props.onChange?.({ target: { value: "17", valueAsNumber: 17 } })
+	view()
+	expect(read().map((hint) => hint.points)).toEqual([5, 10, 17])
+	await vi.advanceTimersByTimeAsync(499)
+	expect(patchSeasonList).not.toHaveBeenCalled()
+	expect(saveSeasonField).not.toHaveBeenCalled()
+	view()
+		.buttons.find((button) => button.props.children === "Remove")
+		?.props.onClick?.()
+	view()
+	expect(read().map((hint) => hint.id)).toEqual(["h1", "h2"])
+	expect(patchSeasonList).not.toHaveBeenCalled()
+	for (const effect of preview.effects.values()) effect.cleanup?.()
+})
+
+it("previews optimistic hint moves while saving and after failure without refreshing", async () => {
+	let finish!: (result: Awaited<ReturnType<typeof moveHintAction>>) => void
+	vi.mocked(moveHintAction).mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+	)
+	const preview = scope()
+	const read = () => run(preview, () => useDraftHints({ arcId: "arc", questId: "quest", field: "hints" }, props.hints))
+	view()
+	read()
+	const layer = sortable.layer as { onDragEnd: (event: unknown) => void }
+	layer.onDragEnd({ active: { id: "h1" }, over: { id: "h2" } })
+	view()
+	expect(read().map((hint) => hint.id)).toEqual(["h2", "h1"])
+	finish({ ok: false, error: "Not saved" })
+	await vi.advanceTimersByTimeAsync(0)
+	view()
+	expect(read().map((hint) => hint.id)).toEqual(["h2", "h1"])
+	expect(moveHintAction).toHaveBeenCalledExactlyOnceWith({ seasonId: "season", id: "h1", beforeId: null })
+	for (const effect of preview.effects.values()) effect.cleanup?.()
+})
 function remove(snapshot = props) {
 	view(snapshot).buttons[0]?.props.onClick?.()
 	view(snapshot)
