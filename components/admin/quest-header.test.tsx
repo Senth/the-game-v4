@@ -31,6 +31,7 @@ it.each(["saved", "saving", "failed"] as const)("shows %s status at the right an
 		seasonId: "s1",
 		status,
 		drafts: new Map(),
+		listenersFor: () => new Set(),
 		update: vi.fn(),
 		remove: vi.fn(),
 		discard: vi.fn(),

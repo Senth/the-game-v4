@@ -56,6 +56,6 @@ it("keeps the preview beside the flexible middle pane only on desktop", () => {
 		</AdminFrame>,
 	)
 	expect(html).toContain("hidden w-92 shrink-0")
-	expect(html).toContain("border-l border-z1 px-6 pt-6 lg:block")
+	expect(html).toContain("border-l border-z1 px-5 pt-6 lg:block")
 	expect(html.indexOf("Preview slot")).toBeGreaterThan(html.indexOf("Middle pane"))
 })

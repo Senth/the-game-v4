@@ -6,6 +6,7 @@ import { LiveControls } from "@/components/admin/live-controls"
 import { AutosaveHeader, SaveStatus } from "@/components/admin/save-status"
 import { SeasonMenu } from "@/components/admin/season-menu"
 import { SeasonPhoneChrome } from "@/components/admin/season-phone-chrome"
+import { SeasonPreview } from "@/components/admin/season-preview"
 import { SeasonStatus } from "@/components/admin/season-status"
 import { SeasonMenuLinks, SeasonTabs } from "@/components/admin/season-tabs"
 import { SeasonTree } from "@/components/admin/season-tree"
@@ -75,10 +76,10 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 					</SeasonPhoneChrome>
 				}
 				preview={
-					<>
-						<h2 className="font-cond text-xs uppercase tracking-wider text-muted">Player preview</h2>
-						<p className="mt-3 font-cond text-sm text-muted">Open a quest or team to preview it.</p>
-					</>
+					<SeasonPreview
+						season={{ start: season.start, end: season.end, lengthMinutes: season.lengthMinutes, arcs: season.arcs }}
+						now={now}
+					/>
 				}
 			>
 				{children}
