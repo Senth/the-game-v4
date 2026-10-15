@@ -1,12 +1,35 @@
 "use client"
 
-import { type KeyboardEvent, useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react"
+import type { DragEndEvent } from "@dnd-kit/core"
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import { type KeyboardEvent, useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react"
+import { moveHint as saveHintMove } from "@/app/admin/autosave-actions"
 import { inputClass, labelClass } from "@/components/auth-form"
 import { worthWithAllHints } from "@/lib/domain/hints"
-import { Hint } from "@/lib/domain/schemas"
+import { type Arc, Hint } from "@/lib/domain/schemas"
 import { useAutosave, useAutosaveField, useAutosaveList } from "./autosave-provider"
 import { ConfirmDialog, primaryClass } from "./confirm-dialog"
+import { SortableDragLayer, SortableRow } from "./sortable/drag-layer"
+import { useMoveQueue } from "./sortable/use-move-queue"
 import { useSeasonClock } from "./use-season-clock"
+
+type HintMove = { id: string; beforeId: string | null }
+type SortableBindings = Parameters<Parameters<typeof SortableRow>[0]["children"]>[0]
+
+function applyHintMove(items: Hint[], { id, beforeId }: HintMove) {
+	const from = items.findIndex((hint) => hint.id === id)
+	const before = beforeId === null ? items.length : items.findIndex((hint) => hint.id === beforeId)
+	if (from < 0 || before < 0 || id === beforeId) return items
+	const to = beforeId === null ? items.length - 1 : before > from ? before - 1 : before
+	return from === to ? items : arrayMove(items, from, to)
+}
+
+function dropHintTarget(items: Hint[], id: string, overId: string): HintMove | null {
+	const from = items.findIndex((hint) => hint.id === id)
+	const over = items.findIndex((hint) => hint.id === overId)
+	if (from < 0 || over < 0 || from === over) return null
+	return { id, beforeId: items[from < over ? over + 1 : over]?.id ?? null }
+}
 
 export function HintsEditor({
 	arcId,
@@ -34,8 +57,28 @@ export function HintsEditor({
 	const questPoints = useAutosaveField({ arcId, questId, field: "points" }, points)
 	const [openId, setOpenId] = useState<string | null>(null)
 	const [newHint, setNewHint] = useState<Hint | null>(null)
+	const [createdHintId, setCreatedHintId] = useState<string | null>(null)
 	const [confirming, setConfirming] = useState<{ id: string; points: number } | null>(null)
-	const items = newHint && !list.items.some((hint) => hint.id === newHint.id) ? [...list.items, newHint] : list.items
+	const sortableItems = useMemo(
+		() => list.items.filter((hint) => hint.id !== newHint?.id || createdHintId === hint.id),
+		[list.items, newHint?.id, createdHintId],
+	)
+	const moves = useMoveQueue({ arcId, questId, field: "hints" }, sortableItems, applyHintMove, (move) =>
+		autosave ? saveHintMove({ seasonId: autosave.seasonId, ...move }) : Promise.resolve({ ok: false }),
+	)
+	const items = useMemo(
+		() => (newHint && !moves.items.some((hint) => hint.id === newHint.id) ? [...moves.items, newHint] : moves.items),
+		[moves.items, newHint],
+	)
+	useEffect(() => {
+		if (!newHint || createdHintId !== newHint.id || !moves.items.some((hint) => hint.id === newHint.id)) return
+		setNewHint(null)
+		setCreatedHintId(null)
+	}, [createdHintId, moves.items, newHint])
+	const keyboardArcs = useMemo(
+		() => [{ id: arcId, quests: [{ id: questId, hints: moves.items }] }] as unknown as Arc[],
+		[arcId, questId, moves.items],
+	)
 	const count = confirming ? (revealers[confirming.id]?.length ?? 0) : 0
 	const [penalties, setPenalties] = useState<Record<string, number>>({})
 	const updatePenalty = useCallback((id: string, value: number) => {
@@ -49,7 +92,10 @@ export function HintsEditor({
 	function remove(id: string) {
 		autosave?.discard({ arcId, questId, hintId: id })
 		if (list.items.some((hint) => hint.id === id)) list.remove(id)
-		if (newHint?.id === id) setNewHint(null)
+		if (newHint?.id === id) {
+			setNewHint(null)
+			setCreatedHintId(null)
+		}
 		if (openId === id) setOpenId(null)
 	}
 	return (
@@ -63,34 +109,61 @@ export function HintsEditor({
 					</b>
 				</p>
 			</div>
-			<ul>
-				{items.map((hint) => (
-					<HintRow
-						key={hint.id}
-						arcId={arcId}
-						questId={questId}
-						hint={hint}
-						open={openId === hint.id}
-						onOpen={() => setOpenId(hint.id)}
-						onClose={() => setOpenId(null)}
-						onPointsChange={updatePenalty}
-						revealerNames={hasStarted ? (revealers[hint.id] ?? []) : null}
-						create={hint.id === newHint?.id ? list.add : undefined}
-						onCreated={() => setNewHint((current) => (current?.id === hint.id ? null : current))}
-						onDiscard={() => remove(hint.id)}
-						onRemove={(penalty) => {
-							if (revealers[hint.id]?.length) setConfirming({ id: hint.id, points: penalty })
-							else remove(hint.id)
-						}}
-					/>
-				))}
-			</ul>
+			<SortableDragLayer
+				overlay={(active) => {
+					const hint = moves.items.find((item) => item.id === String(active.id))
+					return hint ? (
+						<>
+							<span className="min-w-0 flex-1 truncate text-sm">{hint.text || "Empty hint"}</span>
+							<span className="shrink-0 font-cond text-sm tabular-nums">−{hint.points}p</span>
+						</>
+					) : null
+				}}
+				onDragStart={() => moves.setDragging(true)}
+				onDragEnd={({ active, over }: DragEndEvent) => {
+					if (over) {
+						const target = dropHintTarget(moves.items, String(active.id), String(over.id))
+						if (target) void moves.move(target)
+					}
+					moves.setDragging(false)
+				}}
+				onDragCancel={() => moves.setDragging(false)}
+			>
+				<ul>
+					<SortableContext items={moves.items.map((hint) => hint.id)} strategy={verticalListSortingStrategy}>
+						{items.map((hint) => (
+							<HintRow
+								key={hint.id}
+								arcId={arcId}
+								questId={questId}
+								hint={hint}
+								open={openId === hint.id}
+								sortable={hint.id !== newHint?.id}
+								keyboardArcs={keyboardArcs}
+								onMove={(move) => void moves.move(move)}
+								onOpen={() => setOpenId(hint.id)}
+								onClose={() => setOpenId(null)}
+								onPointsChange={updatePenalty}
+								revealerNames={hasStarted ? (revealers[hint.id] ?? []) : null}
+								create={hint.id === newHint?.id ? list.add : undefined}
+								onCreated={() => setCreatedHintId(hint.id)}
+								onDiscard={() => remove(hint.id)}
+								onRemove={(penalty) => {
+									if (revealers[hint.id]?.length) setConfirming({ id: hint.id, points: penalty })
+									else remove(hint.id)
+								}}
+							/>
+						))}
+					</SortableContext>
+				</ul>
+			</SortableDragLayer>
 			<button
 				type="button"
 				className="mt-3 min-h-11 w-full rounded-md border border-dashed border-z2 px-4 font-cond text-sm text-link hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
 				onClick={() => {
 					const hint = { id: crypto.randomUUID(), text: "", points: 5 }
 					setNewHint(hint)
+					setCreatedHintId(null)
 					setOpenId(hint.id)
 				}}
 			>
@@ -121,6 +194,9 @@ function HintRow({
 	questId,
 	hint,
 	open,
+	sortable,
+	keyboardArcs,
+	onMove,
 	onOpen,
 	onClose,
 	onPointsChange,
@@ -134,6 +210,9 @@ function HintRow({
 	questId: string
 	hint: Hint
 	open: boolean
+	sortable: boolean
+	keyboardArcs: Arc[]
+	onMove: (move: HintMove) => void
 	onOpen: () => void
 	onClose: () => void
 	onPointsChange: (id: string, value: number) => void
@@ -244,108 +323,133 @@ function HintRow({
 		event.preventDefault()
 		close()
 	}
-	return (
-		<li className="border-b border-z1">
-			{open ? (
-				<form
-					aria-label="Edit hint"
-					className="space-y-3 py-3"
-					onKeyDown={onKeyDown}
-					onSubmit={(event) => {
-						event.preventDefault()
-						close()
-					}}
-				>
-					<textarea
-						ref={textarea}
-						aria-label="Hint text"
-						rows={3}
-						value={text.value}
-						onChange={(event) => text.onChange(event.target.value)}
-						onFocus={text.onFocus}
-						onBlur={text.onBlur}
-						aria-invalid={text.failed}
-						aria-describedby={text.failed ? `${id}-text-error` : undefined}
-						className={`w-full rounded-md border ${text.failed ? "border-warn" : "border-accent"} bg-field px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-accent`}
-					/>
-					{text.failed && (
-						<p id={`${id}-text-error`} role="alert" className="font-cond text-xs text-warn">
-							{text.error ?? "Not saved"}
-						</p>
-					)}
-					<div className="flex items-center gap-2">
-						<input
-							aria-label="Hint points"
-							type="number"
-							inputMode="numeric"
-							step={1}
-							min={0}
-							max={10000}
-							value={Number.isNaN(points.value) ? "" : points.value}
-							onChange={(event) => points.onChange(event.target.valueAsNumber)}
-							onFocus={points.onFocus}
-							onBlur={points.onBlur}
-							aria-invalid={points.failed}
-							aria-describedby={points.failed ? `${id}-points-error` : undefined}
-							className={`${inputClass
-								.replace("w-full", "w-16")
-								.replace("px-3", "px-2")
-								.replaceAll("border-z2", points.failed ? "border-warn" : "border-z2")
-								.replace(
-									"focus:border-accent",
-									points.failed ? "focus:border-warn" : "focus:border-accent",
-								)} text-right text-sm tabular-nums`}
+	function content(bindings?: SortableBindings) {
+		return (
+			<div className="border-b border-z1">
+				{open ? (
+					<form
+						aria-label="Edit hint"
+						className="space-y-3 py-3"
+						onKeyDown={onKeyDown}
+						onSubmit={(event) => {
+							event.preventDefault()
+							close()
+						}}
+					>
+						<textarea
+							ref={textarea}
+							aria-label="Hint text"
+							rows={3}
+							value={text.value}
+							onChange={(event) => text.onChange(event.target.value)}
+							onFocus={text.onFocus}
+							onBlur={text.onBlur}
+							aria-invalid={text.failed}
+							aria-describedby={text.failed ? `${id}-text-error` : undefined}
+							className={`w-full rounded-md border ${text.failed ? "border-warn" : "border-accent"} bg-field px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-accent`}
 						/>
-						<span className="text-xs text-muted">p</span>
-						<button
-							type="button"
-							className="ml-auto min-h-11 px-3 font-cond text-sm text-muted hover:underline active:text-head focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-							onClick={() => onRemove(points.value)}
-						>
-							Remove
-						</button>
-						<button type="button" className={`${primaryClass} min-w-11 px-4`} onClick={close}>
-							Done
-						</button>
-					</div>
-					{points.failed && (
-						<p id={`${id}-points-error`} role="alert" className="font-cond text-xs text-warn">
-							{points.error ?? "Not saved"}
-						</p>
-					)}
-				</form>
-			) : (
-				<button
-					ref={button}
-					type="button"
-					className="flex min-h-11 w-full items-center gap-3 py-2.5 text-left hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-					onClick={onOpen}
-				>
-					<span className={`min-w-0 flex-1 truncate text-sm ${text.value ? "text-ink" : "text-muted"}`}>
-						{text.value || "Empty hint"}
-					</span>
-					<span className="shrink-0 font-cond text-sm text-muted tabular-nums">−{points.value}p</span>
-				</button>
-			)}
-			{revealerNames !== null && (
-				<div className="pb-2.5">
-					{revealerNames.length ? (
-						<div className="flex flex-wrap items-center gap-1.5">
-							<span className="mr-1 font-cond text-xs text-muted">Revealed by</span>
-							{revealerNames.map((name) => (
-								<span
-									key={name}
-									className="inline-flex min-h-6 max-w-full items-center rounded bg-z2 px-2 font-cond text-xs text-ink break-all"
-								>
-									{name}
-								</span>
-							))}
+						{text.failed && (
+							<p id={`${id}-text-error`} role="alert" className="font-cond text-xs text-warn">
+								{text.error ?? "Not saved"}
+							</p>
+						)}
+						<div className="flex items-center gap-2">
+							<input
+								aria-label="Hint points"
+								type="number"
+								inputMode="numeric"
+								step={1}
+								min={0}
+								max={10000}
+								value={Number.isNaN(points.value) ? "" : points.value}
+								onChange={(event) => points.onChange(event.target.valueAsNumber)}
+								onFocus={points.onFocus}
+								onBlur={points.onBlur}
+								aria-invalid={points.failed}
+								aria-describedby={points.failed ? `${id}-points-error` : undefined}
+								className={`${inputClass
+									.replace("w-full", "w-16")
+									.replace("px-3", "px-2")
+									.replaceAll("border-z2", points.failed ? "border-warn" : "border-z2")
+									.replace(
+										"focus:border-accent",
+										points.failed ? "focus:border-warn" : "focus:border-accent",
+									)} text-right text-sm tabular-nums`}
+							/>
+							<span className="text-xs text-muted">p</span>
+							<button
+								type="button"
+								className="ml-auto min-h-11 px-3 font-cond text-sm text-muted hover:underline active:text-head focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+								onClick={() => onRemove(points.value)}
+							>
+								Remove
+							</button>
+							<button type="button" className={`${primaryClass} min-w-11 px-4`} onClick={close}>
+								Done
+							</button>
 						</div>
-					) : (
-						<p className="font-cond text-xs text-muted">Not revealed yet</p>
-					)}
-				</div>
-			)}
-		</li>
+						{points.failed && (
+							<p id={`${id}-points-error`} role="alert" className="font-cond text-xs text-warn">
+								{points.error ?? "Not saved"}
+							</p>
+						)}
+					</form>
+				) : (
+					<button
+						{...bindings}
+						ref={
+							bindings
+								? (element) => {
+										button.current = element
+										bindings.ref(element)
+									}
+								: button
+						}
+						type="button"
+						className={`flex min-h-11 w-full items-center gap-3 py-2.5 text-left hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""}`}
+						onClick={onOpen}
+					>
+						<span className={`min-w-0 flex-1 truncate text-sm ${text.value ? "text-ink" : "text-muted"}`}>
+							{text.value || "Empty hint"}
+						</span>
+						<span className="shrink-0 font-cond text-sm text-muted tabular-nums">−{points.value}p</span>
+					</button>
+				)}
+				{revealerNames !== null && (
+					<div className="pb-2.5">
+						{revealerNames.length ? (
+							<div className="flex flex-wrap items-center gap-1.5">
+								<span className="mr-1 font-cond text-xs text-muted">Revealed by</span>
+								{revealerNames.map((name) => (
+									<span
+										key={name}
+										className="inline-flex min-h-6 max-w-full items-center rounded bg-z2 px-2 font-cond text-xs text-ink break-all"
+									>
+										{name}
+									</span>
+								))}
+							</div>
+						) : (
+							<p className="font-cond text-xs text-muted">Not revealed yet</p>
+						)}
+					</div>
+				)}
+			</div>
+		)
+	}
+	return sortable ? (
+		<SortableRow
+			id={hint.id}
+			disabled={open}
+			keyboard={{
+				arcs: keyboardArcs,
+				item: { kind: "hint", questId, id: hint.id },
+				onMove: ({ beforeId }) => onMove({ id: hint.id, beforeId }),
+			}}
+		>
+			{(bindings) => content(bindings)}
+		</SortableRow>
+	) : (
+		<li>{content()}</li>
 	)
 }

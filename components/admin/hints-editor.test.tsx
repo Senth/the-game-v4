@@ -1,7 +1,7 @@
 import { Children, cloneElement, type EffectCallback, isValidElement, type ReactElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
+import { moveHint as moveHintAction, patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
 import { hintRevealers } from "@/lib/domain/hints"
 import { AutosavePointsField } from "./autosave-points-field"
 import { AutosaveProvider } from "./autosave-provider"
@@ -20,6 +20,7 @@ const hooks = vi.hoisted(() => ({
 	showModal: vi.fn(),
 	close: vi.fn(),
 }))
+const sortable = vi.hoisted(() => ({ rows: [] as { id: string; disabled: boolean }[], layer: null as unknown }))
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
 	useState: (initial: unknown) => {
@@ -51,6 +52,14 @@ vi.mock("react", async (importOriginal) => ({
 		if (!previous || deps.some((dep, i) => !Object.is(dep, previous.deps[i]))) scope.values[index] = { callback, deps }
 		return (scope.values[index] as { callback: unknown }).callback
 	},
+	useMemo: (factory: () => unknown, deps: unknown[]) => {
+		const scope = hooks.active
+		const index = scope.cursor++
+		const previous = scope.values[index] as { value: unknown; deps: unknown[] } | undefined
+		if (!previous || deps.some((dep, i) => !Object.is(dep, previous.deps[i])))
+			scope.values[index] = { value: factory(), deps }
+		return (scope.values[index] as { value: unknown }).value
+	},
 	useEffect: (effect: EffectCallback, deps: unknown[]) => {
 		const scope = hooks.active
 		const index = scope.cursor++
@@ -64,11 +73,48 @@ vi.mock("react", async (importOriginal) => ({
 	},
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock("@/app/admin/autosave-actions", () => ({ saveSeasonField: vi.fn(), patchSeasonList: vi.fn() }))
+vi.mock("@/app/admin/autosave-actions", () => ({
+	moveHint: vi.fn(),
+	saveSeasonField: vi.fn(),
+	patchSeasonList: vi.fn(),
+}))
 vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }))
 vi.mock("@/lib/events/live-connection", () => ({
 	createLiveConnection: () => ({ start() {}, stop() {}, setHidden() {} }),
 }))
+vi.mock("@dnd-kit/sortable", async (importOriginal) => {
+	const original = await importOriginal<typeof import("@dnd-kit/sortable")>()
+	return {
+		...original,
+		SortableContext: ({ children }: { children: ReactNode }) => children,
+	}
+})
+vi.mock("./sortable/drag-layer", async (importOriginal) => {
+	const original = await importOriginal<typeof import("./sortable/drag-layer")>()
+	return {
+		...original,
+		SortableDragLayer: (props: Parameters<typeof original.SortableDragLayer>[0]) => {
+			sortable.layer = props
+			return props.children
+		},
+		SortableRow: (props: Parameters<typeof original.SortableRow>[0]) => {
+			sortable.rows.push({ id: props.id, disabled: Boolean(props.disabled) })
+			return (
+				<li data-sortable={String(!props.disabled)}>
+					{props.children({
+						ref: () => {},
+						className: "",
+						"aria-roledescription": "sortable",
+						onKeyDown: (event) => {
+							if (!props.disabled)
+								original.reorderOnKeyDown(props.keyboard.arcs, props.keyboard.item, event, props.keyboard.onMove)
+						},
+					})}
+				</li>
+			)
+		},
+	}
+})
 
 function scope(): Scope {
 	return { values: [], cursor: 0, effects: new Map(), pending: [] }
@@ -107,7 +153,16 @@ type NodeProps = {
 	onClose?: () => void
 	onBlur?: () => void
 	onChange?: (event: { target: { value: string; valueAsNumber: number } }) => void
-	onKeyDown?: (event: { key: string; preventDefault: () => void; nativeEvent: { isComposing: boolean } }) => void
+	onKeyDown?: (event: {
+		key: string
+		preventDefault: () => void
+		nativeEvent?: { isComposing: boolean }
+		altKey?: boolean
+		shiftKey?: boolean
+		target?: unknown
+		currentTarget?: unknown
+		stopPropagation?: () => void
+	}) => void
 }
 function nodes(node: ReactNode, type: string): ReactElement<NodeProps>[] {
 	return Children.toArray(node).flatMap((child) => {
@@ -115,25 +170,47 @@ function nodes(node: ReactNode, type: string): ReactElement<NodeProps>[] {
 		return [...(child.type === type ? [child] : []), ...nodes(child.props.children, type)]
 	})
 }
-function view(snapshot = props) {
-	let section = run(editor, () => HintsEditor(snapshot))
-	const list = section.props.children[1]
-	const rowElements = Children.toArray(list.props.children).filter(isValidElement)
+function parts(section: ReactElement) {
+	const sectionChildren = (section.props as { children: ReactNode[] }).children
+	const layer = sectionChildren[1] as ReactElement<{ children: ReactNode }>
+	const list = layer.props.children as ReactElement<{ children: ReactNode }>
+	const sortableContext = Children.toArray(list.props.children)[0] as ReactElement<{ children: ReactNode }>
+	return {
+		layer,
+		list,
+		sortableContext,
+		rowElements: Children.toArray(sortableContext.props.children).filter(isValidElement),
+	}
+}
+function renderRows(rowElements: ReactElement[]) {
 	const activeIds = new Set(rowElements.map((row) => String(row.key)))
 	for (const [id, state] of rows) {
 		if (activeIds.has(id)) continue
 		for (const effect of state.effects.values()) effect.cleanup?.()
 		rows.delete(id)
 	}
-	const renderedRows = rowElements.map((row: ReactElement) => {
+	return rowElements.map((row) => {
 		const id = String(row.key)
 		if (!rows.has(id)) rows.set(id, scope())
-		const rendered = run(rows.get(id) as Scope, () => (row.type as (props: unknown) => ReactElement)(row.props))
+		let rendered = run(rows.get(id) as Scope, () => (row.type as (props: unknown) => ReactElement)(row.props))
+		if (typeof rendered.type === "function" && rendered.type.name === "SortableRow") {
+			rendered = (rendered.type as (props: unknown) => ReactElement)(rendered.props)
+		}
 		return cloneElement(rendered, { key: id })
 	})
+}
+function view(snapshot = props) {
+	let section = run(editor, () => HintsEditor(snapshot))
+	let tree = parts(section)
+	renderRows(tree.rowElements)
 	section = run(editor, () => HintsEditor(snapshot))
+	tree = parts(section)
+	sortable.rows = []
+	sortable.layer = tree.layer.props
+	const renderedRows = renderRows(tree.rowElements)
 	const children = [...section.props.children]
-	children[1] = cloneElement(list, {}, renderedRows)
+	const renderedContext = cloneElement(tree.sortableContext, {}, renderedRows)
+	children[1] = cloneElement(tree.layer, {}, cloneElement(tree.list, {}, renderedContext))
 	const dialogIndex = children.findIndex(
 		(child) => isValidElement(child) && typeof child.type === "function" && child.type.name === "ConfirmDialog",
 	)
@@ -141,14 +218,14 @@ function view(snapshot = props) {
 		const element = children[dialogIndex]
 		children[dialogIndex] = run(dialog, () => element.type(element.props))
 	}
-	const tree = cloneElement(section, {}, ...children)
+	const renderedTree = cloneElement(section, {}, ...children)
 	return {
-		tree,
-		html: renderToStaticMarkup(tree),
-		buttons: nodes(tree, "button"),
-		textareas: nodes(tree, "textarea"),
-		inputs: nodes(tree, "input"),
-		editing: nodes(tree, "form").find((node) => node.props.onKeyDown),
+		tree: renderedTree,
+		html: renderToStaticMarkup(renderedTree),
+		buttons: nodes(renderedTree, "button"),
+		textareas: nodes(renderedTree, "textarea"),
+		inputs: nodes(renderedTree, "input"),
+		editing: nodes(renderedTree, "form").find((node) => node.props.onKeyDown),
 	}
 }
 function key(key: string) {
@@ -162,6 +239,9 @@ beforeEach(() => {
 	vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: false }))
 	vi.mocked(saveSeasonField).mockReset().mockResolvedValue({ ok: true })
 	vi.mocked(patchSeasonList).mockReset().mockResolvedValue({ ok: true })
+	vi.mocked(moveHintAction).mockReset().mockResolvedValue({ ok: true })
+	sortable.rows = []
+	sortable.layer = null
 	hooks.context = run(scope(), () => AutosaveProvider({ seasonId: "season", children: null })).props.value
 	editor = scope()
 	rows = new Map()
@@ -180,6 +260,9 @@ it("rests as focusable 44 px text rows with muted penalties, no inputs and immed
 	const resting = view()
 	expect(resting.inputs).toHaveLength(0)
 	expect(resting.textareas).toHaveLength(0)
+	expect(resting.buttons).toHaveLength(3)
+	expect(resting.html).toContain('data-sortable="true"')
+	expect(resting.html).not.toContain("data-drag-handle")
 	expect(resting.html).toContain("Worth with all hints:")
 	expect(resting.html).toContain("15p")
 	expect(resting.html).toContain("−5p")
@@ -188,6 +271,56 @@ it("rests as focusable 44 px text rows with muted penalties, no inputs and immed
 		expect(button.props.className).toContain("min-h-11")
 		expect(button.props.className).toContain("focus-visible:outline-accent")
 	}
+})
+
+it("keeps the edit row fixed and moves resting hints by keyboard and drag", async () => {
+	const snapshot = {
+		...props,
+		start: new Date(props.now - 1000),
+		revealers: { h1: ["Ninjas"], h2: ["Rävarna"] },
+	}
+	const resting = view(snapshot)
+	expect(sortable.rows).toEqual([
+		{ id: "h1", disabled: false },
+		{ id: "h2", disabled: false },
+	])
+	expect(resting.html).toContain("15p")
+	const target = {}
+	const keyboard = {
+		key: "ArrowDown",
+		altKey: true,
+		shiftKey: false,
+		target,
+		currentTarget: target,
+		preventDefault: vi.fn(),
+		stopPropagation: vi.fn(),
+	}
+	resting.buttons[0]?.props.onKeyDown?.(keyboard)
+	expect(keyboard.preventDefault).toHaveBeenCalledOnce()
+	expect(moveHintAction).toHaveBeenCalledWith({ seasonId: "season", id: "h1", beforeId: null })
+	const movedByKeyboard = view(snapshot)
+	expect(movedByKeyboard.html.indexOf("Read the last letters.")).toBeLessThan(
+		movedByKeyboard.html.indexOf("Start from the bottom."),
+	)
+	expect(movedByKeyboard.html).toContain("15p")
+	await vi.advanceTimersByTimeAsync(0)
+
+	vi.mocked(moveHintAction).mockClear()
+	const layer = sortable.layer as { onDragEnd: (event: unknown) => void }
+	layer.onDragEnd({ active: { id: "h2" }, over: { id: "h1" } })
+	expect(moveHintAction).toHaveBeenCalledWith({ seasonId: "season", id: "h2", beforeId: null })
+	const movedByDrag = view(snapshot)
+	expect(movedByDrag.html.indexOf("Start from the bottom.")).toBeLessThan(
+		movedByDrag.html.indexOf("Read the last letters."),
+	)
+	expect(movedByDrag.html.indexOf("Start from the bottom.")).toBeLessThan(movedByDrag.html.indexOf("Ninjas"))
+	expect(movedByDrag.html.indexOf("Read the last letters.")).toBeLessThan(movedByDrag.html.indexOf("Rävarna"))
+	expect(movedByDrag.html).toContain("15p")
+
+	movedByDrag.buttons[0]?.props.onClick?.()
+	const editing = view(snapshot)
+	expect(sortable.rows.find((row) => row.id === "h1")).toEqual({ id: "h1", disabled: true })
+	expect(editing.html).toContain('data-sortable="false"')
 })
 
 it("gives Done horizontal padding and a minimum 44 px touch target", () => {
@@ -356,6 +489,7 @@ it("adds a focused local row, then saves exactly one client-id hint with 5 point
 	const opened = add()
 	expect(opened.textareas).toHaveLength(1)
 	expect(opened.inputs[0]?.props.value).toBe(5)
+	expect(sortable.rows).toHaveLength(2)
 	expect(hooks.focus).toHaveBeenCalled()
 	expect(patchSeasonList).not.toHaveBeenCalled()
 	opened.textareas[0]?.props.onChange?.({ target: { value: "Look up", valueAsNumber: Number.NaN } })
