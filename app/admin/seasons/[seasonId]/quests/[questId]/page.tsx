@@ -49,7 +49,9 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 						points={quest.points}
 						hints={quest.hints}
 						revealers={revealers}
-						hasStarted={season.start !== null && season.start.getTime() <= now}
+						start={season.start}
+						end={season.end}
+						now={now}
 					/>
 				</QuestEditor>
 			</div>

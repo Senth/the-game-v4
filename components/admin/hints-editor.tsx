@@ -6,6 +6,7 @@ import { worthWithAllHints } from "@/lib/domain/hints"
 import { Hint } from "@/lib/domain/schemas"
 import { useAutosave, useAutosaveField, useAutosaveList } from "./autosave-provider"
 import { ConfirmDialog, primaryClass } from "./confirm-dialog"
+import { useSeasonClock } from "./use-season-clock"
 
 export function HintsEditor({
 	arcId,
@@ -13,15 +14,21 @@ export function HintsEditor({
 	points,
 	hints,
 	revealers,
-	hasStarted,
+	start,
+	end,
+	now,
 }: {
 	arcId: string
 	questId: string
 	points: number | null
 	hints: Hint[]
 	revealers: Record<string, string[]>
-	hasStarted: boolean
+	start: Date | null
+	end: Date | null
+	now: number
 }) {
+	const currentNow = useSeasonClock(now, start, end)
+	const hasStarted = start !== null && start.getTime() <= currentNow
 	const autosave = useAutosave()
 	const list = useAutosaveList({ arcId, questId, field: "hints" }, hints)
 	const questPoints = useAutosaveField({ arcId, questId, field: "points" }, points)
@@ -144,6 +151,10 @@ function HintRow({
 	const adding = useRef(false)
 	const removed = useRef(false)
 	function edit(next: Hint) {
+		if (adding.current) {
+			if (next.text !== draft.current.text) savedText.onChange(next.text)
+			if (next.points !== draft.current.points) savedPoints.onChange(next.points)
+		}
 		draft.current = next
 		setLocal(next)
 	}
@@ -161,8 +172,6 @@ function HintRow({
 		adding.current = true
 		const added = draft.current
 		if (!(await create(added)) || removed.current) return
-		if (draft.current.text !== added.text) savedText.onChange(draft.current.text)
-		if (draft.current.points !== added.points) savedPoints.onChange(draft.current.points)
 		setCreated(true)
 		onCreated()
 	}

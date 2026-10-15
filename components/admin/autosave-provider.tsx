@@ -139,6 +139,10 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 	if (!context) throw new Error("useAutosaveField requires AutosaveProvider")
 	const { seasonId, drafts, update, remove } = context
 	const id = autosaveId(seasonId, "field", target)
+	const listId =
+		"hintId" in target
+			? autosaveId(seasonId, "list", { arcId: target.arcId, questId: target.questId, field: "hints" })
+			: null
 	const [draft] = useState(() => {
 		const retained = drafts.get(id) as FieldDraft<T> | undefined
 		if (retained) return retained
@@ -152,6 +156,13 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 			focusedSubscribers: new Set(),
 			saver: createFieldSaver<T>({
 				async save(value) {
+					const list = listId ? (drafts.get(listId) as ListDraft | undefined) : undefined
+					const queued = list?.saver.queued((op) => "hintId" in target && "hint" in op && op.hint.id === target.hintId)
+					if (queued) {
+						await list?.saver.retry()
+						if (list?.state === "failed") return { ok: false }
+						if (!(await queued.saved) || drafts.get(id) !== draft) return { ok: true }
+					}
 					const result = await saveSeasonField(seasonId, target, value)
 					if (result.ok) draft.serverValue = draft.latestServerValue
 					return result
@@ -202,6 +213,12 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 		value,
 		onChange(next: T) {
 			draft.value = next
+			const list = listId ? (drafts.get(listId) as ListDraft | undefined) : undefined
+			const queued = list?.saver.queued((op) => "hintId" in target && "hint" in op && op.hint.id === target.hintId)
+			if (queued && "hint" in queued.op) {
+				queued.op = { op: "add", hint: { ...queued.op.hint, [target.field]: next } }
+				list?.notify?.()
+			}
 			for (const notify of draft.listeners) notify()
 			saver.edit(next)
 		},

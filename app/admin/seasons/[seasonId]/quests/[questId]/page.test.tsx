@@ -80,7 +80,9 @@ it("selects the quest's own arc and passes editor fields without hints across th
 		points: quest.points,
 		hints: quest.hints,
 		revealers: hintRevealers(fixture.teams, quest.id),
-		hasStarted: true,
+		start: season.start,
+		end: season.end,
+		now: titles.props.now,
 	})
 	expect(listTeams).toHaveBeenCalledExactlyOnceWith(season._id)
 })
@@ -122,7 +124,9 @@ it.each(["unstarted", "live", "ended"])(
 		const element = await QuestPage(props)
 		const hints = element.props.children[1].props.children[1].props.children
 		expect(hints.props.revealers).toEqual(hintRevealers(fixture.teams, quest.id))
-		expect(hints.props.hasStarted).toBe(state !== "unstarted")
+		expect(hints.props.start).toEqual(state === "unstarted" ? null : expect.any(Date))
+		expect(hints.props.end).toEqual(expect.any(Date))
+		expect(hints.props.now).toEqual(expect.any(Number))
 		expect(hints.props).not.toHaveProperty("teams")
 		expect(JSON.stringify(hints.props)).not.toContain("passwordHash")
 		expect(listTeams).toHaveBeenCalledExactlyOnceWith(season._id)
@@ -148,12 +152,16 @@ it("includes Ninjas in Backwards log's first hint revealers from the dev fixture
 	const editor = element.props.children[1].props.children[1].props.children
 	const firstHint = quest.hints[0]
 	if (!firstHint) throw new Error("Fixture needs a hint")
-	expect(editor.props.hasStarted).toBe(true)
+	expect(editor.props.start).toEqual(season.start)
 	expect(editor.props.revealers[firstHint.id]).toContain("Ninjas")
 })
 
-it("hides revealer metadata for a future-scheduled season", async () => {
-	vi.mocked(getSeason).mockResolvedValue({ ...season, start: new Date(Date.now() + 60_000) })
+it("passes future season timing to derive revealer visibility on the client", async () => {
+	const start = new Date(Date.now() + 60_000)
+	vi.mocked(getSeason).mockResolvedValue({ ...season, start })
 	const element = await QuestPage(props)
-	expect(element.props.children[1].props.children[1].props.children.props.hasStarted).toBe(false)
+	const hints = element.props.children[1].props.children[1].props.children
+	expect(hints.props.start).toBe(start)
+	expect(hints.props.now).toBeLessThan(start.getTime())
+	expect(hints.props).not.toHaveProperty("hasStarted")
 })

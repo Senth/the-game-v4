@@ -90,7 +90,9 @@ const props = {
 		{ id: "h2", text: "Read the last letters.", points: 10 },
 	],
 	revealers: {} as Record<string, string[]>,
-	hasStarted: false,
+	start: null as Date | null,
+	end: null as Date | null,
+	now: Date.now(),
 }
 let editor: Scope
 let rows: Map<string, Scope>
@@ -457,22 +459,117 @@ it("keeps new hint through StrictMode effect replay", async () => {
 	expect(patchSeasonList).toHaveBeenCalledOnce()
 })
 
-it("retains failed creation and buffers edits through provider retry without adding twice", async () => {
+it("retries failed creation on edit with latest values and no duplicate add", async () => {
 	vi.mocked(patchSeasonList).mockResolvedValueOnce({ ok: false })
 	add().textareas[0]?.props.onChange?.({ target: { value: "Look up", valueAsNumber: Number.NaN } })
 	view()
 	await vi.advanceTimersByTimeAsync(500)
 	expect(view().html).toContain("Not saved")
 	view().textareas[0]?.props.onChange?.({ target: { value: "Look higher", valueAsNumber: Number.NaN } })
+	view().inputs[0]?.props.onChange?.({ target: { value: "10", valueAsNumber: 10 } })
 	view()
 	await vi.advanceTimersByTimeAsync(500)
-	expect(patchSeasonList).toHaveBeenCalledOnce()
-	expect(saveSeasonField).not.toHaveBeenCalled()
+	expect(patchSeasonList).toHaveBeenCalledTimes(2)
+	const operation = vi.mocked(patchSeasonList).mock.calls[0]?.[2]
+	if (!operation || !("hint" in operation)) throw new Error("Missing add patch")
+	expect(vi.mocked(patchSeasonList).mock.calls[1]?.[2]).toEqual({
+		op: "add",
+		hint: { id: operation.hint.id, text: "Look higher", points: 10 },
+	})
+	expect(view().textareas[0]?.props.value).toBe("Look higher")
+	expect(view().inputs[0]?.props.value).toBe(10)
 	;(hooks.context as { retryAll: () => void }).retryAll()
+	await vi.advanceTimersByTimeAsync(1000)
+	expect(patchSeasonList).toHaveBeenCalledTimes(2)
+})
+
+it("replays pending-create text and points edits after navigation unmounts the editor", async () => {
+	let finish!: (result: { ok: boolean }) => void
+	vi.mocked(patchSeasonList).mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+	)
+	add().textareas[0]?.props.onChange?.({ target: { value: "Look up", valueAsNumber: Number.NaN } })
+	view().textareas[0]?.props.onBlur?.()
+	view().textareas[0]?.props.onChange?.({ target: { value: "Keep after navigation", valueAsNumber: Number.NaN } })
+	view().inputs[0]?.props.onChange?.({ target: { value: "15", valueAsNumber: 15 } })
+	view()
+	for (const state of [editor, ...rows.values()]) {
+		for (const effect of state.effects.values()) effect.cleanup?.()
+	}
+	editor = scope()
+	rows.clear()
+	view({ ...props, questId: "another-quest", hints: [] })
+	await vi.advanceTimersByTimeAsync(1000)
+	expect(saveSeasonField).not.toHaveBeenCalled()
+	finish({ ok: true })
+	await vi.advanceTimersByTimeAsync(500)
+	const operation = vi.mocked(patchSeasonList).mock.calls[0]?.[2]
+	if (!operation || !("hint" in operation)) throw new Error("Missing add patch")
+	expect(patchSeasonList).toHaveBeenCalledOnce()
+	expect(saveSeasonField).toHaveBeenCalledWith(
+		"season",
+		{ arcId: "arc", questId: "quest", hintId: operation.hint.id, field: "text" },
+		"Keep after navigation",
+	)
+	expect(saveSeasonField).toHaveBeenCalledWith(
+		"season",
+		{ arcId: "arc", questId: "quest", hintId: operation.hint.id, field: "points" },
+		15,
+	)
+})
+
+it("keeps retrying the same create on later edits after repeated failures", async () => {
+	vi.mocked(patchSeasonList).mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: false })
+	add().textareas[0]?.props.onChange?.({ target: { value: "First", valueAsNumber: Number.NaN } })
+	view()
+	await vi.advanceTimersByTimeAsync(500)
+	view().textareas[0]?.props.onChange?.({ target: { value: "Second", valueAsNumber: Number.NaN } })
+	view()
 	await vi.advanceTimersByTimeAsync(500)
 	expect(patchSeasonList).toHaveBeenCalledTimes(2)
-	expect(saveSeasonField).toHaveBeenCalledOnce()
-	expect(view().textareas[0]?.props.value).toBe("Look higher")
+	view().textareas[0]?.props.onChange?.({ target: { value: "Third", valueAsNumber: Number.NaN } })
+	view()
+	await vi.advanceTimersByTimeAsync(500)
+	expect(patchSeasonList).toHaveBeenCalledTimes(3)
+	expect(vi.mocked(patchSeasonList).mock.calls.map((call) => call[2])).toEqual([
+		{ op: "add", hint: { id: expect.any(String), text: "First", points: 5 } },
+		{ op: "add", hint: { id: expect.any(String), text: "Second", points: 5 } },
+		{ op: "add", hint: { id: expect.any(String), text: "Third", points: 5 } },
+	])
+	expect(view().textareas[0]?.props.value).toBe("Third")
+})
+
+it("replays pending edits even when text and points return to the new-row defaults", async () => {
+	let finish!: (result: { ok: boolean }) => void
+	vi.mocked(patchSeasonList).mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+	)
+	add().textareas[0]?.props.onChange?.({ target: { value: "Look up", valueAsNumber: Number.NaN } })
+	view().inputs[0]?.props.onChange?.({ target: { value: "10", valueAsNumber: 10 } })
+	view().textareas[0]?.props.onBlur?.()
+	view().textareas[0]?.props.onChange?.({ target: { value: "", valueAsNumber: Number.NaN } })
+	view().inputs[0]?.props.onChange?.({ target: { value: "5", valueAsNumber: 5 } })
+	view()
+	finish({ ok: true })
+	await vi.advanceTimersByTimeAsync(500)
+	const operation = vi.mocked(patchSeasonList).mock.calls[0]?.[2]
+	if (!operation || !("hint" in operation)) throw new Error("Missing add patch")
+	expect(saveSeasonField).toHaveBeenCalledWith(
+		"season",
+		{ arcId: "arc", questId: "quest", hintId: operation.hint.id, field: "text" },
+		"",
+	)
+	expect(saveSeasonField).toHaveBeenCalledWith(
+		"season",
+		{ arcId: "arc", questId: "quest", hintId: operation.hint.id, field: "points" },
+		5,
+	)
 })
 
 it("removes a pending creation after add, without late field writes", async () => {
@@ -524,6 +621,23 @@ it("hides all revealer metadata before start, even if reveal history exists", ()
 	expect(view(snapshot).html).not.toContain("Not revealed yet")
 })
 
+it("shows revealer metadata when countdown reaches start without a server refresh", async () => {
+	const snapshot = {
+		...props,
+		start: new Date(props.now + 1000),
+		end: new Date(props.now + 60_000),
+		revealers: { h1: ["Ninjas"] },
+	}
+	expect(view(snapshot).html).not.toContain("Revealed by")
+	await vi.advanceTimersByTimeAsync(1000)
+	const started = view(snapshot)
+	expect(started.html).toContain("Revealed by")
+	expect(started.html).toContain("Ninjas")
+	expect(started.html).toContain("Not revealed yet")
+	expect(patchSeasonList).not.toHaveBeenCalled()
+	expect(saveSeasonField).not.toHaveBeenCalled()
+})
+
 it("renders seven neutral wrapping chips in reveal order and quiet unrevealed text", () => {
 	const names = ["Rävarna", "Team Kaos", "Fjällräv", "Byggarna", "Glada Gänget", "Lagom", "Ninjas"]
 	const teams = names.toReversed().map((name, index) => ({
@@ -536,7 +650,7 @@ it("renders seven neutral wrapping chips in reveal order and quiet unrevealed te
 			},
 		],
 	}))
-	const snapshot = { ...props, hasStarted: true, revealers: hintRevealers(teams, "quest") }
+	const snapshot = { ...props, start: new Date(props.now - 1000), revealers: hintRevealers(teams, "quest") }
 	const resting = view(snapshot)
 	const chips = nodes(resting.tree, "span").filter((node) => node.props.className?.includes("bg-z2"))
 	expect(chips.map((chip) => chip.props.children)).toEqual(names)
@@ -555,7 +669,7 @@ it("renders seven neutral wrapping chips in reveal order and quiet unrevealed te
 })
 
 it("keeps chips below Remove and Done and accepts refreshed revealers without losing local edits", () => {
-	const snapshot = { ...props, hasStarted: true, revealers: { h1: ["Rävarna"] } }
+	const snapshot = { ...props, start: new Date(props.now - 1000), revealers: { h1: ["Rävarna"] } }
 	view(snapshot).buttons[0]?.props.onClick?.()
 	const opened = view(snapshot)
 	expect(opened.html.indexOf("Done</button>")).toBeLessThan(opened.html.indexOf("Revealed by"))
