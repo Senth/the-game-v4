@@ -9,6 +9,7 @@ import { AutosaveProvider, useAutosaveField, useAutosaveList } from "./autosave-
 import { QuestEditor } from "./quest-editor"
 import { AutosaveHeader, SaveStatus } from "./save-status"
 import { SeasonTree } from "./season-tree"
+import { useMoveQueue } from "./sortable/use-move-queue"
 
 type Scope = {
 	values: unknown[]
@@ -93,6 +94,64 @@ function provider(state = scope()) {
 	hooks.context = element.props.value
 	return { state, context: element.props.value }
 }
+
+const moveFirst = (items: string[], id: string) => [id, ...items.filter((item) => item !== id)]
+
+it("registers moves with header status, holds remote order and retries online", async () => {
+	const { state: providerState } = provider()
+	const state = scope()
+	const save = vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValue({ ok: true })
+	const serverItems = ["a", "b", "c"]
+	const renderMoves = (items = serverItems) =>
+		render(state, () => useMoveQueue({ field: "test-order" }, items, moveFirst, save))
+	let moves = renderMoves()
+	moves.setDragging(true)
+	renderMoves(["b", "a", "c"])
+	expect(renderMoves().items).toEqual(serverItems)
+	await moves.move("c")
+	moves.setDragging(false)
+	expect(provider(providerState).context.status).toBe("failed")
+	moves = renderMoves(["a", "b", "c", "d"])
+	expect(moves.items).toEqual(["c", "a", "b"])
+	window.dispatchEvent(new Event("online"))
+	expect(provider(providerState).context.status).toBe("saving")
+	await vi.waitFor(() => expect(provider(providerState).context.status).toBe("saved"))
+	expect(save.mock.calls).toEqual([["c"], ["c"]])
+	expect(renderMoves(["b", "c", "a"]).failed).toBe(false)
+	expect(renderMoves(["b", "c", "a"]).items).toEqual(["b", "c", "a"])
+})
+
+it("retains failed move drafts through navigation and header retry", async () => {
+	const { context } = provider()
+	const save = vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValue({ ok: true })
+	const first = scope()
+	const renderMoves = (state: Scope) =>
+		render(state, () => useMoveQueue({ field: "test-order" }, ["a", "b", "c"], moveFirst, save))
+	await renderMoves(first).move("c")
+	unmount(first)
+	const second = scope()
+	expect(renderMoves(second).items).toEqual(["c", "a", "b"])
+	context.retryAll()
+	await vi.waitFor(() => expect(renderMoves(second).failed).toBe(false))
+	unmount(second)
+	expect(context.drafts.size).toBe(0)
+	expect(save.mock.calls).toEqual([["c"], ["c"]])
+})
+
+it("move conflicts clear failure and refresh server data without retrying", async () => {
+	const { state: providerState, context } = provider()
+	const state = scope()
+	const save = vi.fn().mockResolvedValue({ ok: false, conflict: true })
+	const renderMoves = (items: string[]) =>
+		render(state, () => useMoveQueue({ field: "test-order" }, items, moveFirst, save))
+	await renderMoves(["a", "b", "c"]).move("c")
+	expect(hooks.refresh).toHaveBeenCalledOnce()
+	expect(provider(providerState).context.status).toBe("saved")
+	expect(renderMoves(["b", "a"]).items).toEqual(["a", "b", "c"])
+	expect(renderMoves(["b", "a"]).items).toEqual(["b", "a"])
+	context.retryAll()
+	expect(save).toHaveBeenCalledOnce()
+})
 
 beforeEach(() => {
 	vi.clearAllMocks()
