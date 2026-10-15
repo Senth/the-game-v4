@@ -1,9 +1,15 @@
 import { z } from "zod"
 import { NotFoundError } from "@/lib/db/collections"
-import { RegistrationConflictError, SeasonOverlapError, SeasonStartedError, StaleWindowError } from "@/lib/db/seasons"
+import {
+	MoveConflictError,
+	RegistrationConflictError,
+	SeasonOverlapError,
+	SeasonStartedError,
+	StaleWindowError,
+} from "@/lib/db/seasons"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
 
-export type ActionResult = { ok: true } | { ok: false; error: string }
+export type ActionResult = { ok: true } | { ok: false; error: string; conflict?: true }
 
 const day = new Intl.DateTimeFormat("en-GB", {
 	timeZone: "Europe/Stockholm",
@@ -19,6 +25,7 @@ const time = new Intl.DateTimeFormat("en-GB", {
 })
 
 export function actionFailure(error: unknown, now: Date): Extract<ActionResult, { ok: false }> {
+	if (error instanceof MoveConflictError) return { ok: false, error: error.message, conflict: true }
 	if (error instanceof SeasonOverlapError) {
 		const season = error.season
 		return {
