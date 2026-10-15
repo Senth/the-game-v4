@@ -222,8 +222,10 @@ Every season field except `end` and `registrationOpen` autosaves on blur or afte
 `end` changes only through live controls.
 A server action validates values before writing.
 The `registrationOpen` field keeps its own action.
-Lists never save whole. `answers` and `hints` change by adding or removing one item.
-Before start, admins add and remove arcs and quests freely. Once live or ended, I-24 owns those changes.
+Lists never save whole. Additions and removals in `answers` and `hints` change one item at a time.
+Before start, admins add, remove and move arcs and quests freely, including quests across arcs.
+Once live or ended, I-24 owns those changes.
+A move sends one id and its target, never the whole list, and never overwrites a concurrent field edit.
 A new arc is titled "New arc" and copies `shuffleArcs` into `shuffleQuests`.
 A new quest has empty display title, internal title and content, no answers, hints or asset, and `points: null`.
 Removing an arc removes its quests.
@@ -234,7 +236,8 @@ Show "Saved", "Saving…" or "Not saved, retry". Failed saves keep the local val
 Retry, another edit to that field, or the browser coming back online resends it.
 Preview renders real game components from the current edit.
 
-Text, answers, hints and points apply immediately during play, except revealed-hint snapshots remain unchanged.
+Text, answers, hints and points apply immediately during play, including hint reordering.
+Revealed-hint snapshots remain unchanged.
 Structural edits require confirmation that names how many teams are affected:
 
 - A new quest goes into a random position after the current quest in each team's remaining order.
@@ -244,7 +247,6 @@ Structural edits require confirmation that names how many teams are affected:
   and its progress entry records `pointsEarned: 0` without `solvedAt`, keeping revealed hint snapshots.
   Score is unchanged. If no quest remains at `questIndex`, the team is completed.
 
-Reordering hints, quests across arcs, or whole arcs uses the same live-edit rules.
 Copying an arc into an unstarted season creates independent quests with new ids.
 Admin live quest stats show completion and revealers only while running; hide before start and after end.
 Hint-editor "Revealed by" chips are hidden until the season has started.

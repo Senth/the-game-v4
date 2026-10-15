@@ -1,18 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useReducedMotion } from "@/components/use-reduced-motion"
 import type { PlayerHint, PlayerQuest } from "@/lib/domain/game"
 import { createHold } from "./hold"
 import { scrambleFrame } from "./scramble"
 
-const reducedMotionQuery = "(prefers-reduced-motion: reduce)"
 const hintNumber = (position: number) => String(position).padStart(2, "0")
-
-function subscribeReducedMotion(onChange: () => void) {
-	const media = window.matchMedia(reducedMotionQuery)
-	media.addEventListener("change", onChange)
-	return () => media.removeEventListener("change", onChange)
-}
 
 function LockedHint({
 	hint,
@@ -189,11 +183,7 @@ export function Intel({
 	decrypting: ReadonlySet<string>
 	onDecryptComplete: (hintId: string) => void
 }) {
-	const reducedMotion = useSyncExternalStore(
-		subscribeReducedMotion,
-		() => window.matchMedia(reducedMotionQuery).matches,
-		() => false,
-	)
+	const reducedMotion = useReducedMotion()
 
 	return (
 		<section className="mt-7" aria-label="Intel">

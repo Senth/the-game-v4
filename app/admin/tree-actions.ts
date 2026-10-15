@@ -9,11 +9,41 @@ import {
 	removeQuest as deleteQuest,
 	addArc as insertArc,
 	addQuest as insertQuest,
+	moveArc as reorderArc,
+	moveQuest as reorderQuest,
 } from "@/lib/db/seasons"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
 import { type ActionResult, actionFailure } from "./action-result"
 
 const id = z.string().min(1)
+const MoveTarget = z.object({ seasonId: id, id, beforeId: id.nullable() }).strict()
+const QuestMoveTarget = MoveTarget.extend({ toArcId: id })
+
+export async function moveArc(target: Parameters<typeof reorderArc>[0]): Promise<ActionResult> {
+	await requireAdmin()
+	const now = new Date()
+	try {
+		await reorderArc(MoveTarget.parse(target), now)
+	} catch (error) {
+		return actionFailure(error, now)
+	}
+	publish(seasonChannel(target.seasonId))
+	publish(boardChannel)
+	return { ok: true }
+}
+
+export async function moveQuest(target: Parameters<typeof reorderQuest>[0]): Promise<ActionResult> {
+	await requireAdmin()
+	const now = new Date()
+	try {
+		await reorderQuest(QuestMoveTarget.parse(target), now)
+	} catch (error) {
+		return actionFailure(error, now)
+	}
+	publish(seasonChannel(target.seasonId))
+	publish(boardChannel)
+	return { ok: true }
+}
 
 export async function addArc(seasonId: string): Promise<{ ok: true; arcId: string } | { ok: false; error: string }> {
 	await requireAdmin()

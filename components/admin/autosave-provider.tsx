@@ -111,11 +111,18 @@ export function AutosaveProvider({ seasonId, children }: { seasonId: string; chi
 	return <AutosaveContext value={{ seasonId, status, ...registry }}>{children}</AutosaveContext>
 }
 
-function autosaveId(seasonId: string, kind: "field" | "list", target: Record<string, string>) {
-	return JSON.stringify([seasonId, kind, Object.entries(target).sort(([left], [right]) => left.localeCompare(right))])
+export function autosaveId(seasonId: string, kind: "field" | "list" | "moves", target: Record<string, string>) {
+	return JSON.stringify([
+		seasonId,
+		kind,
+		Object.entries(target)
+			.filter(([key]) => key !== "arcId" || !target.questId)
+			.sort(([left], [right]) => left.localeCompare(right)),
+	])
 }
 
 type FieldDraft<T> = Draft & {
+	target: Parameters<typeof saveSeasonField>[1]
 	value: T
 	serverValue: T
 	latestServerValue: T
@@ -163,7 +170,7 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 						if (list?.state === "failed") return { ok: false }
 						if (!(await queued.saved) || drafts.get(id) !== draft) return { ok: true }
 					}
-					const result = await saveSeasonField(seasonId, target, value)
+					const result = await saveSeasonField(seasonId, draft.target, value)
 					if (result.ok) draft.serverValue = draft.latestServerValue
 					return result
 				},
@@ -183,6 +190,10 @@ export function useAutosaveField<T>(target: Parameters<typeof saveSeasonField>[1
 	const [value, setValue] = useState(draft.value)
 	const [state, setState] = useState(draft.state)
 	const [subscriber] = useState(() => ({}))
+
+	useEffect(() => {
+		draft.target = target
+	}, [draft, target])
 
 	useEffect(() => {
 		drafts.set(id, draft)
@@ -240,6 +251,7 @@ type ListOp = Parameters<typeof patchSeasonList>[2]
 type ListItem = string | Hint
 type ListResult<T, Add> = { items: T[]; add(item: Add): Promise<boolean>; remove(id: string): void; failed: boolean }
 type ListDraft = Draft & {
+	target: ListTarget
 	items: ListItem[]
 	serverItems: string
 	state: AutosaveState
@@ -278,7 +290,7 @@ export function useAutosaveList(target: ListTarget, serverItems: ListItem[]): Li
 			state: "saved",
 			saver: createListSaver<ListOp>({
 				async patch(op) {
-					const result = await patchSeasonList(seasonId, target, op)
+					const result = await patchSeasonList(seasonId, draft.target, op)
 					if (result.ok && drafts.get(id) === draft) {
 						draft.items = applyList(draft.items, op)
 						draft.notify?.()
@@ -298,6 +310,10 @@ export function useAutosaveList(target: ListTarget, serverItems: ListItem[]): Li
 	const { saver } = draft
 	const [items, setItems] = useState(() => saver.applyQueued(draft.items, applyList))
 	const [state, setState] = useState(draft.state)
+
+	useEffect(() => {
+		draft.target = target
+	}, [draft, target])
 
 	useEffect(() => {
 		drafts.set(id, draft)

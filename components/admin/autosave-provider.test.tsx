@@ -1,14 +1,15 @@
-import type { EffectCallback } from "react"
+import { Children, type EffectCallback, isValidElement, type ReactElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
-import { addQuest, removeArc, removeQuest } from "@/app/admin/tree-actions"
+import { addQuest, moveQuest, removeArc, removeQuest } from "@/app/admin/tree-actions"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { AdminFrame } from "./admin-frame"
 import { AutosaveProvider, useAutosaveField, useAutosaveList } from "./autosave-provider"
 import { QuestEditor } from "./quest-editor"
 import { AutosaveHeader, SaveStatus } from "./save-status"
 import { SeasonTree } from "./season-tree"
+import { useMoveQueue } from "./sortable/use-move-queue"
 
 type Scope = {
 	values: unknown[]
@@ -69,6 +70,7 @@ vi.mock("@/app/admin/tree-actions", () => ({
 	removeQuest: vi.fn(),
 	addArc: vi.fn(),
 	addQuest: vi.fn(),
+	moveQuest: vi.fn(),
 }))
 vi.mock("@/lib/events/live-connection", () => ({ createLiveConnection: vi.fn(() => hooks.connection) }))
 
@@ -76,11 +78,11 @@ function scope(): Scope {
 	return { values: [], cursor: 0, effects: new Map(), pending: [] }
 }
 
-function render<T>(state: Scope, run: () => T): T {
+function render<T>(state: Scope, run: () => T, flushEffects = true): T {
 	hooks.active = state
 	state.cursor = 0
 	const result = run()
-	for (const effect of state.pending.splice(0)) effect()
+	if (flushEffects) for (const effect of state.pending.splice(0)) effect()
 	return result
 }
 
@@ -88,11 +90,84 @@ function unmount(state: Scope) {
 	for (const effect of state.effects.values()) effect.cleanup?.()
 }
 
+type TreeArcProps = {
+	children?: ReactNode
+	onAdd: () => void
+	onRemove: () => void
+	onMove: (target: { kind: "quest"; id: string; toArcId: string; beforeId: string | null }) => void
+}
+function firstTreeArc(node: ReactNode): ReactElement<TreeArcProps> | undefined {
+	for (const child of Children.toArray(node)) {
+		if (!isValidElement<TreeArcProps>(child)) continue
+		if (typeof child.props.onAdd === "function") return child
+		const nested = firstTreeArc(child.props.children)
+		if (nested) return nested
+	}
+}
+
 function provider(state = scope()) {
 	const element = render(state, () => AutosaveProvider({ seasonId: "season-1", children: null }))
 	hooks.context = element.props.value
 	return { state, context: element.props.value }
 }
+
+const moveFirst = (items: string[], id: string) => [id, ...items.filter((item) => item !== id)]
+
+it("registers moves with header status, holds remote order and retries online", async () => {
+	const { state: providerState } = provider()
+	const state = scope()
+	const save = vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValue({ ok: true })
+	const serverItems = ["a", "b", "c"]
+	const renderMoves = (items = serverItems) =>
+		render(state, () => useMoveQueue({ field: "test-order" }, items, moveFirst, save))
+	let moves = renderMoves()
+	moves.setDragging(true)
+	renderMoves(["b", "a", "c"])
+	expect(renderMoves().items).toEqual(serverItems)
+	await moves.move("c")
+	moves.setDragging(false)
+	expect(provider(providerState).context.status).toBe("failed")
+	moves = renderMoves(["a", "b", "c", "d"])
+	expect(moves.items).toEqual(["c", "a", "b"])
+	window.dispatchEvent(new Event("online"))
+	expect(provider(providerState).context.status).toBe("saving")
+	await vi.waitFor(() => expect(provider(providerState).context.status).toBe("saved"))
+	expect(save.mock.calls).toEqual([["c"], ["c"]])
+	expect(renderMoves(["b", "c", "a"]).failed).toBe(false)
+	expect(renderMoves(["b", "c", "a"]).items).toEqual(["b", "c", "a"])
+})
+
+it("retains failed move drafts through navigation and header retry", async () => {
+	const { context } = provider()
+	const save = vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValue({ ok: true })
+	const first = scope()
+	const renderMoves = (state: Scope) =>
+		render(state, () => useMoveQueue({ field: "test-order" }, ["a", "b", "c"], moveFirst, save))
+	await renderMoves(first).move("c")
+	unmount(first)
+	const second = scope()
+	expect(renderMoves(second).items).toEqual(["c", "a", "b"])
+	context.retryAll()
+	await vi.waitFor(() => expect(renderMoves(second).failed).toBe(false))
+	unmount(second)
+	expect(context.drafts.size).toBe(0)
+	expect(save.mock.calls).toEqual([["c"], ["c"]])
+})
+
+it("move conflicts clear failure and refresh server data without retrying", async () => {
+	const { state: providerState, context } = provider()
+	const state = scope()
+	const save = vi.fn().mockResolvedValue({ ok: false, conflict: true })
+	const renderMoves = (items: string[]) =>
+		render(state, () => useMoveQueue({ field: "test-order" }, items, moveFirst, save))
+	await renderMoves(["a", "b", "c"]).move("c")
+	expect(hooks.refresh).toHaveBeenCalledOnce()
+	expect(provider(providerState).context.status).toBe("saved")
+	expect(renderMoves(["b", "a"]).items).toEqual(["a", "b", "c"])
+	expect(renderMoves(["b", "a"]).items).toEqual(["b", "a"])
+	context.retryAll()
+	expect(save).toHaveBeenCalledOnce()
+})
 
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -104,6 +179,7 @@ beforeEach(() => {
 	vi.mocked(patchSeasonList).mockReset().mockResolvedValue({ ok: true })
 	vi.mocked(removeArc).mockReset().mockResolvedValue({ ok: true })
 	vi.mocked(removeQuest).mockReset().mockResolvedValue({ ok: true })
+	vi.mocked(moveQuest).mockReset().mockResolvedValue({ ok: true })
 })
 
 afterEach(() => {
@@ -353,11 +429,11 @@ it.each(["quest", "arc"] as const)(
 				arcs: [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [{ id: "quest", label: null, points: null }] }],
 			}
 			const element = render(view, () => SeasonTree({ ...props, tree, variant: "menu" }))
-			element.props.children[0][0].props.onRemove()
-			render(view, () => SeasonTree({ ...props, tree, variant: "menu" })).props.children[2].props.onConfirm()
+			firstTreeArc(element)?.props.onRemove()
+			render(view, () => SeasonTree({ ...props, tree, variant: "menu" })).props.children[1].props.onConfirm()
 		}
 		await vi.advanceTimersByTimeAsync(0)
-		expect(provider(owner.state).context.status).toBe(null)
+		expect(provider(owner.state).context.status).toBe(kind === "arc" ? "saved" : null)
 		unmount(title)
 		unmount(answers)
 		if (kind === "arc") unmount(arcTitle)
@@ -428,7 +504,7 @@ it.each(["retained layout", "unrelated tree refresh"])(
 		const props = { seasonId: "season-1", start: null, end: null, now: Date.now(), variant: "menu" as const }
 		const view = (snapshot = tree) => render(menu, () => SeasonTree({ ...props, tree: snapshot }))
 		vi.mocked(addQuest).mockResolvedValueOnce({ ok: true, questId: "new-quest" })
-		view().props.children[0][0].props.onAdd()
+		firstTreeArc(view())?.props.onAdd()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(hooks.push).toHaveBeenCalledWith("/admin/seasons/season-1/quests/new-quest")
 		const target = { arcId: "arc", questId: "new-quest", field: "displayTitle" } as const
@@ -486,7 +562,7 @@ it.each(["quest", "arc"] as const)("discards only removed %s drafts after an ext
 	unmount(arcTitle)
 	const tree = { arcs: kind === "quest" ? [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [] }] : [] }
 	render(menu, () => SeasonTree({ ...props, tree }))
-	expect(owner.context.drafts.size).toBe(kind === "quest" ? 2 : 1)
+	expect(owner.context.drafts.size).toBe(kind === "quest" ? 3 : 2)
 	expect(provider(owner.state).context.status).toBe("failed")
 	vi.mocked(saveSeasonField).mockResolvedValue({ ok: true })
 	owner.context.retryAll()
@@ -499,8 +575,137 @@ it.each(["quest", "arc"] as const)("discards only removed %s drafts after an ext
 	).toEqual(kind === "quest" ? ["Retained draft", "Arc draft"] : ["Retained draft"])
 	expect(provider(owner.state).context.status).toBe("saved")
 	unmount(survivor)
+	unmount(menu)
 	expect(provider(owner.state).context.status).toBe(null)
 })
+
+it.each(["menu", "page"] as const)(
+	"shares failed tree moves mounted before effects after %s unmounts",
+	async (leaving) => {
+		const owner = provider()
+		const menu = scope()
+		const page = scope()
+		const title = scope()
+		const tree = {
+			arcs: [
+				{ id: "arc", title: "Arc", shuffleQuests: false, quests: [{ id: "quest", label: "First", points: 10 }] },
+				{ id: "next", title: "Next arc", shuffleQuests: false, quests: [] },
+			],
+		}
+		const props = { seasonId: "season-1", tree, start: null, end: null, now: Date.now() }
+		const view = (state: Scope, variant: "menu" | "page") => render(state, () => SeasonTree({ ...props, variant }))
+		render(menu, () => SeasonTree({ ...props, variant: "menu" }), false)
+		render(page, () => SeasonTree({ ...props, variant: "page" }), false)
+		for (const state of [menu, page]) for (const effect of state.pending.splice(0)) effect()
+		const field = render(title, () => useAutosaveField({ field: "title" }, "Season"))
+		field.onChange("Local season title")
+		vi.mocked(moveQuest).mockResolvedValueOnce({ ok: false, error: "Not saved, retry" })
+		firstTreeArc(view(menu, "menu"))?.props.onMove({ kind: "quest", id: "quest", toArcId: "next", beforeId: null })
+		await vi.advanceTimersByTimeAsync(0)
+		expect(provider(owner.state).context.status).toBe("failed")
+		const remote = view(page, "page")
+		const layer = remote.props.children[0]
+		expect(layer.props.children[1].props.children[0].props.items).toEqual(["arc", "next", "quest"])
+		unmount(leaving === "menu" ? menu : page)
+		expect(provider(owner.state).context.status).toBe("failed")
+		owner.context.retryAll()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(moveQuest).toHaveBeenCalledTimes(2)
+		expect(moveQuest).toHaveBeenLastCalledWith({ seasonId: "season-1", id: "quest", toArcId: "next", beforeId: null })
+		await field.onBlur()
+		expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", { field: "title" }, "Local season title")
+		expect(provider(owner.state).context.status).toBe("saved")
+	},
+)
+
+it.each(["tree first", "editor first", "source arc removed"])(
+	"keeps open quest drafts and writes to the destination after a cross-arc move, %s",
+	async (flow) => {
+		const owner = provider()
+		const menu = scope()
+		const content = scope()
+		const answers = scope()
+		const hints = scope()
+		const hintText = scope()
+		const quest = { id: "quest", label: "Quest", points: 10 }
+		const source = { id: "arc", title: "Arc", shuffleQuests: false, quests: [quest] }
+		const destination = { id: "next", title: "Next", shuffleQuests: false, quests: [] as (typeof quest)[] }
+		const props = { seasonId: "season-1", start: null, end: null, now: Date.now(), variant: "menu" as const }
+		const view = (arcs = [source, destination]) => render(menu, () => SeasonTree({ ...props, tree: { arcs } }))
+		let arcId = "arc"
+		const field = () => render(content, () => useAutosaveField({ arcId, questId: "quest", field: "content" }, "First"))
+		const answerList = () => render(answers, () => useAutosaveList({ arcId, questId: "quest", field: "answers" }, []))
+		const hintList = () => render(hints, () => useAutosaveList({ arcId, questId: "quest", field: "hints" }, []))
+		const hintField = () =>
+			render(hintText, () => useAutosaveField({ arcId, questId: "quest", hintId: "hint", field: "text" }, "Hint"))
+		view()
+		field().onChange("Unsaved content")
+		vi.mocked(patchSeasonList).mockResolvedValue({ ok: false })
+		void answerList().add("unsaved answer")
+		void hintList().add({ id: "hint", text: "Unsaved hint", points: 5 })
+		hintField().onChange("Unsaved hint edit")
+		await vi.advanceTimersByTimeAsync(0)
+		firstTreeArc(view())?.props.onMove({ kind: "quest", id: "quest", toArcId: "next", beforeId: null })
+		await vi.advanceTimersByTimeAsync(0)
+		arcId = "next"
+		const moved = [
+			{ ...source, quests: [] },
+			{ ...destination, quests: [quest] },
+		]
+		if (flow === "editor first") {
+			field()
+			answerList()
+			hintList()
+			hintField()
+		}
+		view(flow === "source arc removed" ? moved.slice(1) : moved)
+		expect(field().value).toBe("Unsaved content")
+		expect(answerList().items).toEqual(["unsaved answer"])
+		expect(hintList().items).toEqual([{ id: "hint", text: "Unsaved hint edit", points: 5 }])
+		expect(hintField().value).toBe("Unsaved hint edit")
+		vi.mocked(patchSeasonList).mockResolvedValue({ ok: true })
+		owner.context.retryAll()
+		await field().onBlur()
+		await hintField().onBlur()
+		expect(saveSeasonField).toHaveBeenCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", field: "content" },
+			"Unsaved content",
+		)
+		expect(saveSeasonField).toHaveBeenCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", hintId: "hint", field: "text" },
+			"Unsaved hint edit",
+		)
+		expect(patchSeasonList).toHaveBeenCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", field: "answers" },
+			{ op: "add", value: "unsaved answer" },
+		)
+		expect(patchSeasonList).toHaveBeenCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", field: "hints" },
+			{ op: "add", hint: { id: "hint", text: "Unsaved hint edit", points: 5 } },
+		)
+		field().onChange("After move")
+		await field().onBlur()
+		await answerList().add("after move")
+		await hintList().add({ id: "after", text: "After move", points: 10 })
+		hintField().onChange("Hint after move")
+		await hintField().onBlur()
+		expect(saveSeasonField).toHaveBeenLastCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", hintId: "hint", field: "text" },
+			"Hint after move",
+		)
+		expect(patchSeasonList).toHaveBeenLastCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", field: "hints" },
+			{ op: "add", hint: { id: "after", text: "After move", points: 10 } },
+		)
+		expect(provider(owner.state).context.status).toBe("saved")
+	},
+)
 
 it.each(["failed before navigation", "failed unmount flush"])(
 	"retains field edits after %s and remount",

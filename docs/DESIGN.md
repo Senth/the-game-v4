@@ -62,7 +62,12 @@ Code fences use Shiki; the authoring textarea can use the platform monospace fon
 - Hint, quest and arc rows rest as text. Enter editing on tap so a long press never begins inside an input.
 - Drag state uses H1's lifted row and dashed slot. Use `@dnd-kit` with delayed `PointerSensor`
   and custom `KeyboardSensor` rather than another drag implementation.
+  Untouched rows turn `muted`; only the lifted row and slot have emphasis.
+  On Android, vibrate for 10 ms on lift where supported.
+  A failed move uses the header's "Not saved, retry". The row stays where it was dropped.
 - Keyboard reordering uses Alt+↑/↓ for the focused row and Alt+Shift+↑/↓ for a quest's neighboring arc.
+  Alt+↑/↓ stops at the list edge.
+  Alt+Shift+↑ puts the quest last in the previous arc; Alt+Shift+↓ puts it first in the next arc.
 - Honor `prefers-reduced-motion`. A hint still requires its full hold, but its fill does not animate.
 - Autosave state belongs in the header, not a Save bar. Use the exact states defined in PROJECT.md.
   Show it only on pages with an autosave field. Place it at the phone header's right edge.
@@ -148,6 +153,26 @@ Done, Enter or Escape close it.
 Add and remove controls show only before start. Removing a quest is a quiet link at the bottom of its page.
 Removing an arc with quests, or any quest, confirms in End game's `<dialog>` style.
 Desktop tree rows are 44 px tall. D1's 36 px rows are superseded.
+After start, long presses on quest and arc rows do nothing; taps still open them.
+Drag states follow these accepted variants on phone and desktop:
+
+- Arc lift, variant B:
+  - [Phone](https://artifacts.senth.org/b-arcs-fold-phone-9f074c.png)
+  - [Desktop](https://artifacts.senth.org/b-arcs-fold-desktop-618ac5.png)
+- Quest crossing arcs, variant C:
+  - [Phone](https://artifacts.senth.org/c-quest-slot-only-phone-baea6e.png)
+  - [Desktop](https://artifacts.senth.org/c-quest-slot-only-desktop-747b64.png)
+- Empty arc drop, variant E:
+  - [Phone](https://artifacts.senth.org/e-quest-into-empty-arc-phone-e4231b.png)
+  - [Desktop](https://artifacts.senth.org/e-quest-into-empty-arc-desktop-059da9.png)
+
+While an arc is lifted by pointer, every arc folds to one header row with its title and `N quests · Random|Ordered`.
+Empty headers use `No quests · Random|Ordered`.
+Hide `+ Quest` and `+ Arc` links while folded; keyboard arc moves do not fold.
+A quest crossing arcs shows only H1's dashed slot, without a target-arc highlight; `+ Quest` links stay visible.
+An empty arc accepts a drop, with the slot as its only row.
+In C and E, mute source-arc rows too; Lighthouse's `ink` text in the mocks is superseded.
+
 While live, show completion bars and "N/M done". Tap expands Completed by chips, hints with revealers,
 and "Edit quest ›". The same live block appears above the desktop form.
 PROJECT.md owns the visibility window for these stats.
@@ -212,6 +237,7 @@ read first hint text, second penalty, third who revealed it; must not show input
 
 Each resting row is one truncated line with its penalty right-aligned. Use the lifted row and dashed slot
 for dragging, with no handle. "Worth with all hints" updates immediately when penalties change.
+Desktop uses the same dashed slot; D1's accent drop line is superseded.
 Revealed by chips follow PROJECT.md's visibility rule, including on desktop.
 
 ## H2: hint edit mode

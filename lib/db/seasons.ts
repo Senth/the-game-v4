@@ -1,4 +1,4 @@
-import type { Filter, UpdateFilter } from "mongodb"
+import type { Document, Filter, UpdateFilter } from "mongodb"
 import { z } from "zod"
 import { overlappingSeason, scheduleWindow, seasonStatus } from "@/lib/domain/admin-seasons"
 import { hasEnded, normalizeAnswer, registrationConflict } from "@/lib/domain/game"
@@ -103,6 +103,152 @@ export async function removeQuest(seasonId: string, arcId: string, questId: stri
 	const before = await writeSeasonTree(seasonId, now, filter, { $pull: { [path]: { id: questId } } }, arrayFilters)
 	const assetPath = before.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)?.assetPath
 	return assetPath == null ? [] : [assetPath]
+}
+
+export type MoveTarget = { seasonId: string; id: string; beforeId: string | null }
+
+export class MoveConflictError extends Error {
+	name = "MoveConflictError"
+
+	constructor() {
+		super("Not saved, retry")
+	}
+}
+
+function moveItems(input: string, source: string | Document, id: string, beforeId: string | null): Document | string {
+	if (beforeId === id) return input
+	const remaining = { $filter: { input, as: "item", cond: { $ne: ["$$item.id", { $literal: id }] } } }
+	return {
+		$let: {
+			vars: {
+				moved: { $first: { $filter: { input: source, as: "item", cond: { $eq: ["$$item.id", { $literal: id }] } } } },
+			},
+			in:
+				beforeId === null
+					? { $concatArrays: [remaining, ["$$moved"]] }
+					: {
+							$reduce: {
+								input: remaining,
+								initialValue: [],
+								in: {
+									$concatArrays: [
+										"$$value",
+										{ $cond: [{ $eq: ["$$this.id", { $literal: beforeId }] }, ["$$moved", "$$this"], ["$$this"]] },
+									],
+								},
+							},
+						},
+		},
+	}
+}
+
+async function writeMove(
+	seasonId: string,
+	filter: Filter<Season>,
+	arcs: Document | string,
+	now: Date | null,
+): Promise<void> {
+	const { seasons } = await collections()
+	const target = { ...filter, _id: seasonId }
+	const result = await seasons.updateOne(
+		{ ...target, ...(now ? { $or: [{ start: null }, { start: { $gt: now } }] } : {}) },
+		[{ $set: { arcs } }],
+	)
+	if (result.matchedCount === 0) {
+		if (now && (await seasons.findOne(target))) throw new SeasonStartedError()
+		throw new MoveConflictError()
+	}
+}
+
+export async function moveArc({ seasonId, id, beforeId }: MoveTarget, now: Date): Promise<void> {
+	await writeMove(
+		seasonId,
+		{ "arcs.id": id, ...(beforeId === null ? {} : { arcs: { $elemMatch: { id: beforeId } } }) },
+		moveItems("$arcs", "$arcs", id, beforeId),
+		now,
+	)
+}
+
+export async function moveQuest(
+	{ seasonId, id, toArcId, beforeId }: MoveTarget & { toArcId: string },
+	now: Date,
+): Promise<void> {
+	const quests = { $reduce: { input: "$arcs", initialValue: [], in: { $concatArrays: ["$$value", "$$this.quests"] } } }
+	await writeMove(
+		seasonId,
+		{
+			"arcs.quests.id": id,
+			arcs: { $elemMatch: { id: toArcId, ...(beforeId === null ? {} : { "quests.id": beforeId }) } },
+		},
+		{
+			$map: {
+				input: "$arcs",
+				as: "arc",
+				in: {
+					$mergeObjects: [
+						"$$arc",
+						{
+							quests: {
+								$cond: [
+									{ $eq: ["$$arc.id", { $literal: toArcId }] },
+									moveItems("$$arc.quests", quests, id, beforeId),
+									{ $filter: { input: "$$arc.quests", as: "quest", cond: { $ne: ["$$quest.id", { $literal: id }] } } },
+								],
+							},
+						},
+					],
+				},
+			},
+		},
+		now,
+	)
+}
+
+export async function moveHint({ seasonId, id, beforeId }: MoveTarget): Promise<void> {
+	await writeMove(
+		seasonId,
+		{
+			arcs: {
+				$elemMatch: {
+					quests: {
+						$elemMatch: { "hints.id": id, ...(beforeId === null ? {} : { hints: { $elemMatch: { id: beforeId } } }) },
+					},
+				},
+			},
+		},
+		{
+			$map: {
+				input: "$arcs",
+				as: "arc",
+				in: {
+					$mergeObjects: [
+						"$$arc",
+						{
+							quests: {
+								$map: {
+									input: "$$arc.quests",
+									as: "quest",
+									in: {
+										$cond: [
+											{ $in: [{ $literal: id }, "$$quest.hints.id"] },
+											{
+												$mergeObjects: [
+													"$$quest",
+													{ hints: moveItems("$$quest.hints", "$$quest.hints", id, beforeId) },
+												],
+											},
+											"$$quest",
+										],
+									},
+								},
+							},
+						},
+					],
+				},
+			},
+		},
+		null,
+	)
 }
 
 const SeasonWindow = Season.pick({ start: true, end: true })

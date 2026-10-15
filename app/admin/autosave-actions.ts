@@ -7,6 +7,7 @@ import {
 	getSeason,
 	patchSeasonList as patchList,
 	RegistrationConflictError,
+	moveHint as reorderHint,
 	type SeasonFieldTarget,
 	setSeasonField,
 	setSeasonLength,
@@ -31,6 +32,20 @@ const FieldTarget = z.union([
 	z.object({ arcId: id, questId: id, hintId: id, field: Hint.omit({ id: true }).keyof() }).strict(),
 ])
 const ListTarget = z.object({ arcId: id, questId: id, field: z.enum(["answers", "hints"]) }).strict()
+const HintMoveTarget = z.object({ seasonId: id, id, beforeId: id.nullable() }).strict()
+
+export async function moveHint(target: Parameters<typeof reorderHint>[0]): Promise<ActionResult> {
+	await requireAdmin()
+	const now = new Date()
+	try {
+		await reorderHint(HintMoveTarget.parse(target))
+	} catch (error) {
+		return actionFailure(error, now)
+	}
+	publish(seasonChannel(target.seasonId))
+	publish(boardChannel)
+	return { ok: true }
+}
 
 export async function saveSeasonField(
 	seasonId: string,
