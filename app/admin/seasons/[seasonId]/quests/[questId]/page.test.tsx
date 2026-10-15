@@ -1,6 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest"
 import { HintsEditor } from "@/components/admin/hints-editor"
 import { QuestEditor } from "@/components/admin/quest-editor"
+import { QuestPreview } from "@/components/admin/quest-preview"
+import { QuestViewToggle } from "@/components/admin/quest-view-toggle"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 import { listTeams } from "@/lib/db/teams"
@@ -50,12 +52,14 @@ it("selects the quest's own arc and passes editor fields without hints across th
 	const before = Date.now()
 	const element = await QuestPage(props)
 	const header = element.props.children[0]
-	const content = element.props.children[1]
+	const toggle = element.props.children[1]
+	const content = toggle.props.children
 	const titles = content.props.children[1]
 	expect(getSeason).toHaveBeenCalledWith(season._id)
 	expect(header.props).toEqual({ seasonId: season._id, arcTitle: arc.title, label: quest.internalTitle })
+	expect(toggle.key).toBe(quest.id)
+	expect(toggle.type).toBe(QuestViewToggle)
 	expect(content.props.className).toBe("px-4 py-5 lg:px-8 lg:py-6")
-	expect(titles.key).toBe(quest.id)
 	expect(titles.type).toBe(QuestEditor)
 	expect(titles.props.quest).toEqual({
 		id: quest.id,
@@ -84,6 +88,18 @@ it("selects the quest's own arc and passes editor fields without hints across th
 		end: season.end,
 		now: titles.props.now,
 	})
+	expect(toggle.props.preview.type).toBe(QuestPreview)
+	expect(toggle.props.preview.props).toEqual({
+		season: {
+			start: season.start,
+			end: season.end,
+			lengthMinutes: season.lengthMinutes,
+			arcs: season.arcs,
+		},
+		arcId: arc.id,
+		quest,
+		now: titles.props.now,
+	})
 	expect(listTeams).toHaveBeenCalledExactlyOnceWith(season._id)
 })
 
@@ -98,7 +114,7 @@ it.each([
 	})
 	const element = await QuestPage(props)
 	const header = element.props.children[0]
-	const heading = element.props.children[1].props.children[0]
+	const heading = element.props.children[1].props.children.props.children[0]
 	expect(header.props.label).toBe(label)
 	expect(heading.props.children).toBe(label ?? "Untitled quest")
 	expect(heading.props.className).toContain("hidden truncate font-head text-2xl lg:block")
@@ -122,7 +138,7 @@ it.each(["unstarted", "live", "ended"])(
 			end: state === "ended" ? new Date(Date.now() - 1) : new Date(Date.now() + 60_000),
 		})
 		const element = await QuestPage(props)
-		const hints = element.props.children[1].props.children[1].props.children
+		const hints = element.props.children[1].props.children.props.children[1].props.children
 		expect(hints.props.revealers).toEqual(hintRevealers(fixture.teams, quest.id))
 		expect(hints.props.start).toEqual(state === "unstarted" ? null : expect.any(Date))
 		expect(hints.props.end).toEqual(expect.any(Date))
@@ -140,7 +156,7 @@ it("contains an accepted unbroken 100-character desktop heading without shorteni
 		arcs: [{ ...arc, quests: [{ ...quest, internalTitle: "", displayTitle }] }],
 	})
 	const element = await QuestPage(props)
-	const content = element.props.children[1]
+	const content = element.props.children[1].props.children
 	const heading = content.props.children[0]
 	expect(heading.props.children).toBe(displayTitle)
 	expect(heading.props.className.split(" ")).toContain("truncate")
@@ -149,7 +165,7 @@ it("contains an accepted unbroken 100-character desktop heading without shorteni
 
 it("includes Ninjas in Backwards log's first hint revealers from the dev fixture", async () => {
 	const element = await QuestPage(props)
-	const editor = element.props.children[1].props.children[1].props.children
+	const editor = element.props.children[1].props.children.props.children[1].props.children
 	const firstHint = quest.hints[0]
 	if (!firstHint) throw new Error("Fixture needs a hint")
 	expect(editor.props.start).toEqual(season.start)
@@ -160,7 +176,7 @@ it("passes future season timing to derive revealer visibility on the client", as
 	const start = new Date(Date.now() + 60_000)
 	vi.mocked(getSeason).mockResolvedValue({ ...season, start })
 	const element = await QuestPage(props)
-	const hints = element.props.children[1].props.children[1].props.children
+	const hints = element.props.children[1].props.children.props.children[1].props.children
 	expect(hints.props.start).toBe(start)
 	expect(hints.props.now).toBeLessThan(start.getTime())
 	expect(hints.props).not.toHaveProperty("hasStarted")
