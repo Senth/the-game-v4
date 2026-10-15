@@ -20,6 +20,7 @@ after the hosted previews expire. [DESIGN.md](../DESIGN.md) owns surface briefs 
 
 - D1's "Seasons /" breadcrumb gives way to the seasons menu.
 - D1's 36 px desktop tree rows are superseded by 44 px rows.
+- D1's accent drop line is superseded by H1's dashed slot on desktop.
 - D1's "Saved" label moves from the form heading row to the top bar.
 - G2's "2 quests behind pace" becomes "2 behind". Use the general header wording from PROJECT.md.
 - M2 and D1's always-open hint inputs are superseded by H1 resting/drag rows and H2 tap-to-edit.
