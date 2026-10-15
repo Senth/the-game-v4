@@ -190,6 +190,12 @@ it("rests as focusable 44 px text rows with muted penalties, no inputs and immed
 	}
 })
 
+it("gives Done horizontal padding and a minimum 44 px touch target", () => {
+	view().buttons[0]?.props.onClick?.()
+	const done = view().buttons.find((button) => button.props.children === "Done")
+	expect(done?.props.className?.split(" ")).toEqual(expect.arrayContaining(["h-11", "min-w-11", "px-4"]))
+})
+
 it("opens only one row, focuses textarea and flushes previous row when another opens", () => {
 	view().buttons[0]?.props.onClick?.()
 	const first = view()

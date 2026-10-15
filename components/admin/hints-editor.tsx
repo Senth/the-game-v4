@@ -304,7 +304,7 @@ function HintRow({
 						>
 							Remove
 						</button>
-						<button type="button" className={primaryClass} onClick={close}>
+						<button type="button" className={`${primaryClass} min-w-11 px-4`} onClick={close}>
 							Done
 						</button>
 					</div>
