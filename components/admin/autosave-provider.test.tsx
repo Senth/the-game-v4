@@ -78,11 +78,11 @@ function scope(): Scope {
 	return { values: [], cursor: 0, effects: new Map(), pending: [] }
 }
 
-function render<T>(state: Scope, run: () => T): T {
+function render<T>(state: Scope, run: () => T, flushEffects = true): T {
 	hooks.active = state
 	state.cursor = 0
 	const result = run()
-	for (const effect of state.pending.splice(0)) effect()
+	if (flushEffects) for (const effect of state.pending.splice(0)) effect()
 	return result
 }
 
@@ -579,38 +579,133 @@ it.each(["quest", "arc"] as const)("discards only removed %s drafts after an ext
 	expect(provider(owner.state).context.status).toBe(null)
 })
 
-it("shares failed tree moves across both variants and retries through header without losing field edits", async () => {
-	const owner = provider()
-	const menu = scope()
-	const page = scope()
-	const title = scope()
-	const tree = {
-		arcs: [
-			{ id: "arc", title: "Arc", shuffleQuests: false, quests: [{ id: "quest", label: "First", points: 10 }] },
-			{ id: "next", title: "Next arc", shuffleQuests: false, quests: [] },
-		],
-	}
-	const props = { seasonId: "season-1", tree, start: null, end: null, now: Date.now() }
-	const view = (state: Scope, variant: "menu" | "page") => render(state, () => SeasonTree({ ...props, variant }))
-	view(menu, "menu")
-	view(page, "page")
-	const field = render(title, () => useAutosaveField({ field: "title" }, "Season"))
-	field.onChange("Local season title")
-	vi.mocked(moveQuest).mockResolvedValueOnce({ ok: false, error: "Not saved, retry" })
-	firstTreeArc(view(menu, "menu"))?.props.onMove({ kind: "quest", id: "quest", toArcId: "next", beforeId: null })
-	await vi.advanceTimersByTimeAsync(0)
-	expect(provider(owner.state).context.status).toBe("failed")
-	const remote = view(page, "page")
-	const layer = remote.props.children[0]
-	expect(layer.props.children[1].props.children[0].props.items).toEqual(["arc", "next", "quest"])
-	owner.context.retryAll()
-	await vi.advanceTimersByTimeAsync(0)
-	expect(moveQuest).toHaveBeenCalledTimes(2)
-	expect(moveQuest).toHaveBeenLastCalledWith({ seasonId: "season-1", id: "quest", toArcId: "next", beforeId: null })
-	await field.onBlur()
-	expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", { field: "title" }, "Local season title")
-	expect(provider(owner.state).context.status).toBe("saved")
-})
+it.each(["menu", "page"] as const)(
+	"shares failed tree moves mounted before effects after %s unmounts",
+	async (leaving) => {
+		const owner = provider()
+		const menu = scope()
+		const page = scope()
+		const title = scope()
+		const tree = {
+			arcs: [
+				{ id: "arc", title: "Arc", shuffleQuests: false, quests: [{ id: "quest", label: "First", points: 10 }] },
+				{ id: "next", title: "Next arc", shuffleQuests: false, quests: [] },
+			],
+		}
+		const props = { seasonId: "season-1", tree, start: null, end: null, now: Date.now() }
+		const view = (state: Scope, variant: "menu" | "page") => render(state, () => SeasonTree({ ...props, variant }))
+		render(menu, () => SeasonTree({ ...props, variant: "menu" }), false)
+		render(page, () => SeasonTree({ ...props, variant: "page" }), false)
+		for (const state of [menu, page]) for (const effect of state.pending.splice(0)) effect()
+		const field = render(title, () => useAutosaveField({ field: "title" }, "Season"))
+		field.onChange("Local season title")
+		vi.mocked(moveQuest).mockResolvedValueOnce({ ok: false, error: "Not saved, retry" })
+		firstTreeArc(view(menu, "menu"))?.props.onMove({ kind: "quest", id: "quest", toArcId: "next", beforeId: null })
+		await vi.advanceTimersByTimeAsync(0)
+		expect(provider(owner.state).context.status).toBe("failed")
+		const remote = view(page, "page")
+		const layer = remote.props.children[0]
+		expect(layer.props.children[1].props.children[0].props.items).toEqual(["arc", "next", "quest"])
+		unmount(leaving === "menu" ? menu : page)
+		expect(provider(owner.state).context.status).toBe("failed")
+		owner.context.retryAll()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(moveQuest).toHaveBeenCalledTimes(2)
+		expect(moveQuest).toHaveBeenLastCalledWith({ seasonId: "season-1", id: "quest", toArcId: "next", beforeId: null })
+		await field.onBlur()
+		expect(saveSeasonField).toHaveBeenLastCalledWith("season-1", { field: "title" }, "Local season title")
+		expect(provider(owner.state).context.status).toBe("saved")
+	},
+)
+
+it.each(["tree first", "editor first", "source arc removed"])(
+	"keeps open quest drafts and writes to the destination after a cross-arc move, %s",
+	async (flow) => {
+		const owner = provider()
+		const menu = scope()
+		const content = scope()
+		const answers = scope()
+		const hints = scope()
+		const hintText = scope()
+		const quest = { id: "quest", label: "Quest", points: 10 }
+		const source = { id: "arc", title: "Arc", shuffleQuests: false, quests: [quest] }
+		const destination = { id: "next", title: "Next", shuffleQuests: false, quests: [] as (typeof quest)[] }
+		const props = { seasonId: "season-1", start: null, end: null, now: Date.now(), variant: "menu" as const }
+		const view = (arcs = [source, destination]) => render(menu, () => SeasonTree({ ...props, tree: { arcs } }))
+		let arcId = "arc"
+		const field = () => render(content, () => useAutosaveField({ arcId, questId: "quest", field: "content" }, "First"))
+		const answerList = () => render(answers, () => useAutosaveList({ arcId, questId: "quest", field: "answers" }, []))
+		const hintList = () => render(hints, () => useAutosaveList({ arcId, questId: "quest", field: "hints" }, []))
+		const hintField = () =>
+			render(hintText, () => useAutosaveField({ arcId, questId: "quest", hintId: "hint", field: "text" }, "Hint"))
+		view()
+		field().onChange("Unsaved content")
+		vi.mocked(patchSeasonList).mockResolvedValue({ ok: false })
+		void answerList().add("unsaved answer")
+		void hintList().add({ id: "hint", text: "Unsaved hint", points: 5 })
+		hintField().onChange("Unsaved hint edit")
+		await vi.advanceTimersByTimeAsync(0)
+		firstTreeArc(view())?.props.onMove({ kind: "quest", id: "quest", toArcId: "next", beforeId: null })
+		await vi.advanceTimersByTimeAsync(0)
+		arcId = "next"
+		const moved = [
+			{ ...source, quests: [] },
+			{ ...destination, quests: [quest] },
+		]
+		if (flow === "editor first") {
+			field()
+			answerList()
+			hintList()
+			hintField()
+		}
+		view(flow === "source arc removed" ? moved.slice(1) : moved)
+		expect(field().value).toBe("Unsaved content")
+		expect(answerList().items).toEqual(["unsaved answer"])
+		expect(hintList().items).toEqual([{ id: "hint", text: "Unsaved hint edit", points: 5 }])
+		expect(hintField().value).toBe("Unsaved hint edit")
+		vi.mocked(patchSeasonList).mockResolvedValue({ ok: true })
+		owner.context.retryAll()
+		await field().onBlur()
+		await hintField().onBlur()
+		expect(saveSeasonField).toHaveBeenCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", field: "content" },
+			"Unsaved content",
+		)
+		expect(saveSeasonField).toHaveBeenCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", hintId: "hint", field: "text" },
+			"Unsaved hint edit",
+		)
+		expect(patchSeasonList).toHaveBeenCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", field: "answers" },
+			{ op: "add", value: "unsaved answer" },
+		)
+		expect(patchSeasonList).toHaveBeenCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", field: "hints" },
+			{ op: "add", hint: { id: "hint", text: "Unsaved hint edit", points: 5 } },
+		)
+		field().onChange("After move")
+		await field().onBlur()
+		await answerList().add("after move")
+		await hintList().add({ id: "after", text: "After move", points: 10 })
+		hintField().onChange("Hint after move")
+		await hintField().onBlur()
+		expect(saveSeasonField).toHaveBeenLastCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", hintId: "hint", field: "text" },
+			"Hint after move",
+		)
+		expect(patchSeasonList).toHaveBeenLastCalledWith(
+			"season-1",
+			{ arcId: "next", questId: "quest", field: "hints" },
+			{ op: "add", hint: { id: "after", text: "After move", points: 10 } },
+		)
+		expect(provider(owner.state).context.status).toBe("saved")
+	},
+)
 
 it.each(["failed before navigation", "failed unmount flush"])(
 	"retains field edits after %s and remount",

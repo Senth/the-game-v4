@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { useAutosave } from "../autosave-provider"
+import { autosaveId, useAutosave } from "../autosave-provider"
 import { createMoveQueue } from "./move-queue"
 
 type MoveDraft<Items, Move> = {
@@ -21,7 +21,7 @@ export function useMoveQueue<Items, Move>(
 	if (!context) throw new Error("useMoveQueue requires AutosaveProvider")
 	const { seasonId, drafts, update, remove } = context
 	const router = useRouter()
-	const id = JSON.stringify([seasonId, "moves", Object.entries(target).sort(([a], [b]) => a.localeCompare(b))])
+	const id = autosaveId(seasonId, "moves", target)
 	const [draft] = useState(() => {
 		const retained = drafts.get(id) as MoveDraft<Items, Move> | undefined
 		if (retained) return retained
@@ -43,6 +43,7 @@ export function useMoveQueue<Items, Move>(
 				},
 			}),
 		}
+		drafts.set(id, draft)
 		return draft
 	})
 	const { saver } = draft
