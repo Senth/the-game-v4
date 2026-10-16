@@ -16,6 +16,8 @@ export function ConfirmDialog({
 	body,
 	confirmLabel,
 	disabled = false,
+	closeOnConfirm = true,
+	error,
 	onConfirm,
 	onClose,
 }: {
@@ -24,6 +26,8 @@ export function ConfirmDialog({
 	body: string
 	confirmLabel: string
 	disabled?: boolean
+	closeOnConfirm?: boolean
+	error?: string | null
 	onConfirm: () => void
 	onClose: () => void
 }) {
@@ -54,6 +58,11 @@ export function ConfirmDialog({
 			<p id={bodyId} className="mt-2 font-body text-sm">
 				{body}
 			</p>
+			{error && (
+				<p role="alert" className="mt-2 font-cond text-xs text-warn">
+					{error}
+				</p>
+			)}
 			<div className="mt-5 grid grid-cols-2 gap-2">
 				<button
 					ref={cancel}
@@ -68,7 +77,7 @@ export function ConfirmDialog({
 					className={primaryClass.replaceAll("accent", "pace-3")}
 					disabled={disabled}
 					onClick={() => {
-						dialog.current?.close()
+						if (closeOnConfirm) dialog.current?.close()
 						onConfirm()
 					}}
 				>

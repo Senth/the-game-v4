@@ -7,12 +7,17 @@ import { inputClass } from "@/components/auth-form"
 import { ArcRail } from "@/components/game/arc-rail"
 import type { AdminTeamRow } from "@/lib/domain/admin-teams"
 
-export function TeamRow({ seasonId, row }: { seasonId: string; row: AdminTeamRow }) {
-	return (
-		<Link
-			href={`/admin/seasons/${seasonId}/teams/${row.id}`}
-			className="block min-h-11 px-4 py-3 hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-		>
+export function TeamRow({
+	seasonId,
+	row,
+	summary = false,
+}: {
+	seasonId: string
+	row: AdminTeamRow
+	summary?: boolean
+}) {
+	const content = (
+		<>
 			<div className="flex items-baseline gap-2 font-cond">
 				{row.rank !== null && <span className="w-5 shrink-0 text-xs text-muted">{row.rank}</span>}
 				<span className="min-w-0 flex-1 truncate">{row.name}</span>
@@ -20,9 +25,11 @@ export function TeamRow({ seasonId, row }: { seasonId: string; row: AdminTeamRow
 					{row.hintLoss ? `−${row.hintLoss}p hints` : "no hints"}
 				</span>
 				<span className="w-12 shrink-0 text-right text-head font-bold tabular-nums">{row.score}p</span>
-				<span aria-hidden="true" className="ml-1 shrink-0 text-muted">
-					›
-				</span>
+				{!summary && (
+					<span aria-hidden="true" className="ml-1 shrink-0 text-muted">
+						›
+					</span>
+				)}
 			</div>
 			<div className={`mt-1.5 ${row.rank !== null ? "pl-7" : ""}`}>
 				<ArcRail rail={row.rail} size="small" />
@@ -39,6 +46,16 @@ export function TeamRow({ seasonId, row }: { seasonId: string; row: AdminTeamRow
 					)}
 				</p>
 			)}
+		</>
+	)
+	return summary ? (
+		<div className="px-4 py-3">{content}</div>
+	) : (
+		<Link
+			href={`/admin/seasons/${seasonId}/teams/${row.id}`}
+			className="block min-h-11 px-4 py-3 hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+		>
+			{content}
 		</Link>
 	)
 }

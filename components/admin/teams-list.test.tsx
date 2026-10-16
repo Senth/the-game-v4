@@ -93,6 +93,14 @@ it("hides rank and status before start and quiets no hints", () => {
 	expect(html).toContain('text-muted">no hints</span>')
 })
 
+it("reuses row content as a noninteractive summary without a chevron", () => {
+	const html = renderToStaticMarkup(<TeamRow seasonId="season" row={row} summary />)
+	expect(html).toContain("64p")
+	expect(html).toContain("−25p hints")
+	expect(html).toContain("Backwards log")
+	expect(html).not.toMatch(/<a|›|hover:|focus-visible:/)
+})
+
 it.each([
 	[{ kind: "finished" }, "Finished every quest"],
 	[{ kind: "stopped", quest: "The vault" }, "Stopped on <span"],
