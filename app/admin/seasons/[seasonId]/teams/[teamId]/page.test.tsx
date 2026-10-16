@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { DeleteTeamButton } from "@/components/admin/delete-team-button"
 import { TeamHeader } from "@/components/admin/team-header"
+import { TeamHistory } from "@/components/admin/team-history"
 import { TeamPreview } from "@/components/admin/team-preview"
-import { TeamRow } from "@/components/admin/teams-list"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
-import { adminTeamRows } from "@/lib/domain/admin-teams"
+import { teamHistory } from "@/lib/domain/team-history"
 import { buildFixture } from "@/scripts/fixture"
 import TeamPage from "./page"
 
@@ -65,17 +65,13 @@ it("redirects missing season without reading teams", async () => {
 	expect(listSeasonTeams).not.toHaveBeenCalled()
 })
 
-it("composes phone header, ranked safe summary and separated delete control", async () => {
+it("composes header, safe history, delete control and phone-only preview in reading order", async () => {
 	const page = await TeamPage(props)
 	const [header, summary, footer, preview] = page.props.children
 	expect(header.type).toBe(TeamHeader)
 	expect(header.props).toEqual({ seasonId: season._id, name: "Ninjas" })
-	expect(summary.type).toBe(TeamRow)
-	expect(summary.props).toEqual({
-		seasonId: season._id,
-		row: adminTeamRows(season, teams, now).find((row) => row.id === team._id),
-		summary: true,
-	})
+	expect(summary.type).toBe(TeamHistory)
+	expect(summary.props).toEqual({ history: teamHistory(season, team, now) })
 	expect(footer.props.className).toContain("border-t")
 	expect(footer.props.children.type).toBe(DeleteTeamButton)
 	expect(footer.props.children.props).toEqual({ seasonId: season._id, teamId: team._id, name: "Ninjas" })
