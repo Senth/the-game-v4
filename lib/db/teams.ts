@@ -30,6 +30,16 @@ export async function listTeams(seasonId: string | null): Promise<Team[]> {
 	return (await collections()).teams.find({ seasonId }).toArray()
 }
 
+export async function listSeasonTeams(seasonId: string): Promise<Omit<Team, "passwordHash">[]> {
+	return (await collections()).teams
+		.find<Omit<Team, "passwordHash">>({ seasonId }, { projection: { passwordHash: 0 } })
+		.toArray()
+}
+
+export async function deleteTeam(id: string): Promise<boolean> {
+	return (await (await collections()).teams.deleteOne({ _id: id })).deletedCount === 1
+}
+
 export async function fillQuestOrders(
 	season: Season,
 	teams: readonly Team[],

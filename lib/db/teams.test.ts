@@ -6,8 +6,10 @@ import { NotFoundError } from "./collections"
 import {
 	countTeams,
 	createTeam,
+	deleteTeam,
 	fillQuestOrders,
 	getTeam,
+	listSeasonTeams,
 	listTeams,
 	listTeamsByName,
 	revealHint,
@@ -31,6 +33,29 @@ function team(name: string, seasonId: string | null): Omit<Team, "_id"> {
 }
 
 describe("teams", () => {
+	it("lists only the season's teams without password hashes", async () => {
+		const first = await createTeam(team("Safe first", "safe-list"))
+		const second = await createTeam(team("Owls", "safe-list"))
+		await createTeam(team("Foxes", "other-list"))
+		const rows = await listSeasonTeams("safe-list")
+		expect(rows.map((row) => row._id).sort()).toEqual([first._id, second._id].sort())
+		for (const row of rows) {
+			expect(row).not.toHaveProperty("passwordHash")
+			expect({ ...row, passwordHash: first.passwordHash }).toEqual(row._id === first._id ? first : second)
+		}
+		expect(await listSeasonTeams("empty-list")).toEqual([])
+		expect(await getTeam(first._id)).toEqual(first)
+	})
+
+	it("deletes only the requested team and reports a missing team", async () => {
+		const removed = await createTeam(team("Delete first", "delete"))
+		const kept = await createTeam(team("Owls", "delete"))
+		expect(await deleteTeam(removed._id)).toBe(true)
+		expect(await getTeam(removed._id)).toBeNull()
+		expect(await getTeam(kept._id)).toEqual(kept)
+		expect(await deleteTeam(removed._id)).toBe(false)
+	})
+
 	it("creates, gets and lists teams by season", async () => {
 		const tigers = await createTeam(team("Tigers", "spring"))
 		await createTeam(team("Owls", "spring"))
