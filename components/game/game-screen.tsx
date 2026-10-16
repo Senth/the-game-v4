@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { type ReactNode, useCallback, useState, useTransition } from "react"
 import { getGame, revealHint, submitAnswer } from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
@@ -22,7 +23,16 @@ export function GameScreen({
 	initialNow: number
 	qr?: ReactNode
 }) {
-	const [game, setGame] = useLiveState(getGame, channels, initial)
+	const router = useRouter()
+	const [game, setGame] = useLiveState(
+		async () => {
+			const next = await getGame()
+			if (next.lifecycleState === "waiting" || next.lifecycleState === "countdown") router.refresh()
+			return next
+		},
+		channels,
+		initial,
+	)
 	const [previous, setPrevious] = useState(initial)
 	const now = useGameClock(game, initialNow, getGame, setGame)
 	const [answer, setAnswer] = useState("")

@@ -36,6 +36,7 @@ vi.mock("react", async (importOriginal) => {
 })
 
 vi.mock("@/app/actions", () => ({ getGame: vi.fn(), submitAnswer: vi.fn(), revealHint: vi.fn() }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("@/lib/auth/guards", () => ({ requireTeam: vi.fn() }))
 vi.mock("@/components/team-qr", () => ({ TeamQr: () => <div>Test /join/token</div> }))
 

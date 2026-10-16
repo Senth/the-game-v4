@@ -11,7 +11,7 @@ const lagom = teams.find((team) => team.name === "Lagom")
 if (!ninjas || !lagom) throw new Error("Missing history fixture")
 
 it("renders Ninjas score, pace, authored arcs, current quest and snapshot hints without rank or controls", () => {
-	const html = renderToStaticMarkup(<TeamHistory history={teamHistory(season, ninjas, now)} />)
+	const html = renderToStaticMarkup(<TeamHistory season={season} team={ninjas} now={now.getTime()} />)
 	expect(html).toContain("64p")
 	expect(html).toContain("5 / 12")
 	expect(html).toContain("−11p from hints")
@@ -36,8 +36,9 @@ it.each([
 	[season.start, false, "Game ended", "text-muted"],
 	[season.start, true, "Finished", "text-pace-ok"],
 ] as const)("renders lifecycle state %s %s as %s", (start, completed, label, color) => {
-	const history = teamHistory({ ...season, start, end: now }, { ...ninjas, completed }, now)
-	const html = renderToStaticMarkup(<TeamHistory history={history} />)
+	const html = renderToStaticMarkup(
+		<TeamHistory season={{ ...season, start, end: now }} team={{ ...ninjas, completed }} now={now.getTime()} />,
+	)
 	expect(html).toContain(`${color}">${label}`)
 	expect(html).not.toContain(">Now<")
 	expect(html).not.toContain("bg-accent/10")
@@ -50,9 +51,12 @@ it.each([
 })
 
 it("keeps removed and deleted hint snapshots, with solved and skipped removed rows", () => {
-	const history = teamHistory(season, lagom, now)
-	history.removed.push({ questId: "removed-solved", solved: true, pointsEarned: 12, hints: [] })
-	const html = renderToStaticMarkup(<TeamHistory history={history} />)
+	const team = {
+		...lagom,
+		progress: [...lagom.progress, { questId: "removed-solved", solvedAt: now, pointsEarned: 12, hintsRevealed: [] }],
+	}
+	const history = teamHistory(season, team, now)
+	const html = renderToStaticMarkup(<TeamHistory season={season} team={team} now={now.getTime()} />)
 	expect(html.indexOf("Removed during play")).toBeGreaterThan(html.indexOf("Finale"))
 	expect(html.match(/Removed quest/g)).toHaveLength(2)
 	expect(html).toContain('aria-label="Skipped"')
@@ -70,12 +74,15 @@ it("keeps removed and deleted hint snapshots, with solved and skipped removed ro
 })
 
 it("keeps 200-character hint text in one truncated grid cell with fixed label and penalty", () => {
-	const history = teamHistory(season, ninjas, now)
 	const text = "W".repeat(200)
-	const quest = history.arcs[0]?.quests[0]
-	if (!quest) throw new Error("Missing history quest")
-	quest.hints = [{ label: "H1", text, points: 5 }]
-	const html = renderToStaticMarkup(<TeamHistory history={history} />)
+	const team = {
+		...ninjas,
+		progress: ninjas.progress.map((progress) => ({
+			...progress,
+			hintsRevealed: progress.hintsRevealed.map((hint) => ({ ...hint, text })),
+		})),
+	}
+	const html = renderToStaticMarkup(<TeamHistory season={season} team={team} now={now.getTime()} />)
 	expect(html).toContain("grid-cols-[1rem_minmax(0,1fr)_auto]")
 	expect(html).toContain("flex gap-2 text-xs leading-5 min-w-0")
 	expect(html).toContain('shrink-0">H1</span>')
@@ -84,11 +91,14 @@ it("keeps 200-character hint text in one truncated grid cell with fixed label an
 })
 
 it("quiets zero hint loss and untitled drafts", () => {
-	const history = teamHistory(season, { ...ninjas, progress: [] }, now)
-	const quest = history.arcs[0]?.quests[0]
+	const draft = structuredClone(season)
+	const quest = draft.arcs[0]?.quests[0]
 	if (!quest) throw new Error("Missing history quest")
-	quest.label = null
-	const html = renderToStaticMarkup(<TeamHistory history={history} />)
+	quest.internalTitle = ""
+	quest.displayTitle = ""
+	const html = renderToStaticMarkup(
+		<TeamHistory season={draft} team={{ ...ninjas, progress: [] }} now={now.getTime()} />,
+	)
 	expect(html).toContain('text-muted">No hints')
 	expect(html).toContain("Untitled quest")
 	expect(html).not.toContain("−0p from hints")

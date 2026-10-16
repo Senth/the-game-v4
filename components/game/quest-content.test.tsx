@@ -39,6 +39,16 @@ describe("QuestContent", () => {
 		expect(html).toContain('<div class="clue">Raw clue</div>')
 	})
 
+	it.each([false, true])("makes authored forms, inputs and buttons inert only in team preview=%s", (preview) => {
+		const content = '<form action="/leave-admin"><input name="clue" /><button type="submit">Try clue</button></form>'
+		const html = renderToStaticMarkup(<QuestContent quest={{ ...quest, content }} preview={preview} />)
+		expect(html).toContain('<form action="/leave-admin">')
+		expect(html).toContain('<input name="clue"/>')
+		expect(html).toContain('<button type="submit">Try clue</button>')
+		if (preview) expect(html).toMatch(/^<section inert="">/)
+		else expect(html).not.toContain('inert=""')
+	})
+
 	it.each(["javascript", "", "unknown-language"])("renders a plain pre before lazy highlighting for %s", (language) => {
 		const html = renderToStaticMarkup(
 			<QuestContent quest={{ ...quest, content: `\`\`\`${language}\nconst clue = "<log>"\n\`\`\`` }} />,

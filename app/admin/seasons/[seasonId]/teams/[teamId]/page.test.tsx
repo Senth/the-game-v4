@@ -7,7 +7,6 @@ import { TeamPreview } from "@/components/admin/team-preview"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
-import { teamHistory } from "@/lib/domain/team-history"
 import { buildFixture } from "@/scripts/fixture"
 import TeamPage from "./page"
 
@@ -76,7 +75,7 @@ it("composes header, safe history, reset, delete control and phone-only preview 
 	expect(header.type).toBe(TeamHeader)
 	expect(header.props).toEqual({ seasonId: season._id, name: "Ninjas" })
 	expect(summary.type).toBe(TeamHistory)
-	expect(summary.props).toEqual({ history: teamHistory(season, team, now) })
+	expect(summary.props).toEqual({ season, team, now: now.getTime() })
 	expect(reset.type).toBe(ResetPassword)
 	expect(reset.key).toBe(team._id)
 	expect(reset.props).toEqual({ seasonId: season._id, teamId: team._id })

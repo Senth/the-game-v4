@@ -7,7 +7,6 @@ import { TeamPreview } from "@/components/admin/team-preview"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
-import { teamHistory } from "@/lib/domain/team-history"
 
 export default async function TeamPage({ params }: PageProps<"/admin/seasons/[seasonId]/teams/[teamId]">) {
 	await requireAdmin()
@@ -21,7 +20,7 @@ export default async function TeamPage({ params }: PageProps<"/admin/seasons/[se
 	return (
 		<>
 			<TeamHeader seasonId={seasonId} name={team.name} />
-			<TeamHistory history={teamHistory(season, team, new Date(now))} />
+			<TeamHistory season={season} team={team} now={now} />
 			<ResetPassword key={teamId} seasonId={seasonId} teamId={teamId} />
 			<div className="mx-4 mt-6 border-t border-z1 py-6">
 				<DeleteTeamButton key={teamId} seasonId={seasonId} teamId={teamId} name={team.name} />

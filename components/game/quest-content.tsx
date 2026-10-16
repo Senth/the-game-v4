@@ -73,7 +73,7 @@ export function QuestContent({
 	const pdf = quest.assetPath?.toLowerCase().endsWith(".pdf")
 	const PdfLink = preview ? "span" : "a"
 	return (
-		<section>
+		<section inert={preview}>
 			<h1 className="mb-4 font-head text-2xl font-medium text-head">{quest.displayTitle}</h1>
 			{quest.assetPath &&
 				(pdf ? (

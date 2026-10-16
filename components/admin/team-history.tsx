@@ -1,5 +1,8 @@
+"use client"
+
 import { Children } from "react"
-import type { teamHistory } from "@/lib/domain/team-history"
+import { teamHistory } from "@/lib/domain/team-history"
+import { useSeasonClock } from "./use-season-clock"
 
 const paceColors = {
 	"pace-ok": "text-pace-ok",
@@ -8,7 +11,17 @@ const paceColors = {
 	"pace-3": "text-pace-3",
 }
 
-export function TeamHistory({ history }: { history: ReturnType<typeof teamHistory> }) {
+export function TeamHistory({
+	season,
+	team,
+	now,
+}: {
+	season: Parameters<typeof teamHistory>[0]
+	team: Parameters<typeof teamHistory>[1]
+	now: number
+}) {
+	const clock = useSeasonClock(now, season.start, season.end)
+	const history = teamHistory(season, team, new Date(clock))
 	const { stats } = history
 	const state = stats.state
 	const stateLabel =
