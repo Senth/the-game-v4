@@ -242,7 +242,7 @@ it.each(["direct", "via placeholder"])(
 		}
 		const layout = scope()
 		let preview = scope()
-		const frame = () => render(layout, () => SeasonPreview({ season, now }))
+		const frame = () => render(layout, () => SeasonPreview({ season, teams: [], now }))
 		const timeLeft = () => {
 			const element = frame() as ReactElement<Parameters<typeof QuestPreview>[0]>
 			const result = render(preview, () => QuestPreview(element.props))

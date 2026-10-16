@@ -6,7 +6,7 @@ import { beforeEach, expect, it, vi } from "vitest"
 import { requireAdmin } from "@/lib/auth/guards"
 import { sessionOptions } from "@/lib/auth/session"
 import { getSeason, listSeasons } from "@/lib/db/seasons"
-import { countTeams } from "@/lib/db/teams"
+import { listSeasonTeams } from "@/lib/db/teams"
 import { proxy } from "@/proxy"
 import { buildFixture } from "@/scripts/fixture"
 import SeasonLayout from "./layout"
@@ -18,7 +18,6 @@ import TeamsPage from "./teams/page"
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn(), listSeasons: vi.fn() }))
 vi.mock("@/lib/db/teams", () => ({
-	countTeams: vi.fn(),
 	listTeams: vi.fn(async () => []),
 	listSeasonTeams: vi.fn(async () => []),
 }))
@@ -42,7 +41,7 @@ beforeEach(() => {
 	vi.mocked(requireAdmin).mockReset().mockResolvedValue({ _id: "admin", name: "admin", passwordHash: "hash" })
 	vi.mocked(getSeason).mockResolvedValue(season)
 	vi.mocked(listSeasons).mockResolvedValue([other, season])
-	vi.mocked(countTeams).mockResolvedValue(10)
+	vi.mocked(listSeasonTeams).mockResolvedValue(fixture.teams)
 	vi.mocked(useSelectedLayoutSegment).mockReturnValue(null)
 	vi.mocked(useSelectedLayoutSegments).mockReturnValue([])
 })
@@ -65,7 +64,7 @@ it("requires admin access before reading season or team data", async () => {
 	).rejects.toThrow("Unauthorized")
 	expect(getSeason).not.toHaveBeenCalled()
 	expect(listSeasons).not.toHaveBeenCalled()
-	expect(countTeams).not.toHaveBeenCalled()
+	expect(listSeasonTeams).not.toHaveBeenCalled()
 })
 
 it("returns the Next.js 404 interrupt for an unknown season", async () => {
@@ -75,7 +74,7 @@ it("returns the Next.js 404 interrupt for an unknown season", async () => {
 	).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
 	expect(getSeason).toHaveBeenCalledWith("unknown")
 	expect(listSeasons).not.toHaveBeenCalled()
-	expect(countTeams).not.toHaveBeenCalled()
+	expect(listSeasonTeams).not.toHaveBeenCalled()
 })
 
 it("renders both frames with this season expanded, real team count, quiet preview and the quest tree", async () => {
@@ -86,7 +85,7 @@ it("renders both frames with this season expanded, real team count, quiet previe
 		}),
 	)
 	expect(getSeason).toHaveBeenCalledWith(season._id)
-	expect(countTeams).toHaveBeenCalledWith(season._id)
+	expect(listSeasonTeams).toHaveBeenCalledWith(season._id)
 	expect(html).toContain(season.title)
 	expect(html).toContain("▾")
 	expect(html).toContain("▸")
@@ -151,11 +150,25 @@ it("supplies the shared refresh owner with server clock timing for team routes",
 	expect(page.props.now).toEqual(expect.any(Number))
 })
 
+it("loads safe teams into the client preview and shows the selected team in the desktop pane", async () => {
+	vi.mocked(getSeason).mockResolvedValue(fixture.season)
+	vi.mocked(useSelectedLayoutSegments).mockReturnValue(["teams", "team-ninjas"])
+	const page = await SeasonLayout({ children: <p>Team history</p>, params: settingsProps.params })
+	const preview = page.props.children.props.preview
+	expect(preview.props.teams).toEqual(fixture.teams)
+	expect(JSON.stringify(preview.props)).not.toContain("passwordHash")
+	const html = renderToStaticMarkup(page)
+	expect(html).toContain("What Ninjas see now")
+	expect(html).toContain("hidden w-92")
+	expect(html).toContain("Team history")
+})
+
 it.each([
 	["teams", TeamsPage, "Teams"],
 	["settings", SettingsPage, "Season settings"],
 ] as const)("renders %s inside the shared shell", async (segment, Page, heading) => {
 	vi.mocked(useSelectedLayoutSegment).mockReturnValue(segment)
+	if (segment === "teams") vi.mocked(listSeasonTeams).mockResolvedValue([])
 	const html = renderToStaticMarkup(
 		await SeasonLayout({ children: await Page(settingsProps), params: Promise.resolve({ seasonId: season._id }) }),
 	)

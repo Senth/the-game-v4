@@ -1,15 +1,18 @@
 "use client"
 
 import { useSelectedLayoutSegments } from "next/navigation"
-import type { Season } from "@/lib/domain/schemas"
+import type { Season, Team } from "@/lib/domain/schemas"
 import { QuestPreview } from "./quest-preview"
+import { TeamPreview } from "./team-preview"
 import { useSeasonClock } from "./use-season-clock"
 
 export function SeasonPreview({
 	season,
+	teams,
 	now,
 }: {
 	season: Pick<Season, "start" | "end" | "lengthMinutes" | "arcs">
+	teams: Omit<Team, "passwordHash">[]
 	now: number
 }) {
 	const [segment, questId] = useSelectedLayoutSegments()
@@ -17,6 +20,8 @@ export function SeasonPreview({
 	const arc =
 		segment === "quests" ? season.arcs.find((arc) => arc.quests.some((quest) => quest.id === questId)) : undefined
 	const quest = arc?.quests.find((quest) => quest.id === questId)
+	const team = segment === "teams" ? teams.find((team) => team._id === questId) : undefined
+	if (team) return <TeamPreview key={team._id} season={season} team={team} teams={teams} now={clock} />
 	return arc && quest ? (
 		<QuestPreview key={quest.id} season={season} arcId={arc.id} quest={quest} now={clock} frame />
 	) : (

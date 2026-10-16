@@ -10,10 +10,12 @@ export function LifecycleScreen({
 	game,
 	now,
 	qr,
+	preview = false,
 }: {
 	game: Exclude<PlayerGame, { lifecycleState: "running" }>
 	now: Date
 	qr?: ReactNode
+	preview?: boolean
 }) {
 	const [mounted, setMounted] = useState(false)
 	useEffect(() => setMounted(true), [])
@@ -30,7 +32,7 @@ export function LifecycleScreen({
 		})
 	}
 	return (
-		<main className="flex min-h-dvh flex-col px-4">
+		<main className={`flex ${preview ? "h-full" : "min-h-dvh"} flex-col px-4`}>
 			<div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
 				<div className="text-center">
 					<h1 className="font-head text-2xl font-medium text-head text-balance">{view.sentence}</h1>
@@ -43,22 +45,28 @@ export function LifecycleScreen({
 							<p className="mt-3 font-cond text-3xl font-bold text-head">
 								{value.place} <span className="text-lg font-medium text-muted">of {value.teamCount}</span>
 							</p>
-							<Link
-								href="/standings"
-								className="mt-3 inline-flex h-11 items-center px-3 font-cond text-link hover:underline active:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-							>
-								Standings ›
-							</Link>
+							{preview ? (
+								<span className="mt-3 inline-flex h-11 items-center px-3 font-cond text-link">Standings ›</span>
+							) : (
+								<Link
+									href="/standings"
+									className="mt-3 inline-flex h-11 items-center px-3 font-cond text-link hover:underline active:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+								>
+									Standings ›
+								</Link>
+							)}
 						</>
 					)}
 				</div>
-				{qr && (game.lifecycleState === "waiting" || game.lifecycleState === "countdown") && (
+				{!preview && qr && (game.lifecycleState === "waiting" || game.lifecycleState === "countdown") && (
 					<div className="mt-12">{qr}</div>
 				)}
 			</div>
-			<footer className="pb-4 text-center text-sm">
-				<LogOutButton />
-			</footer>
+			{!preview && (
+				<footer className="pb-4 text-center text-sm">
+					<LogOutButton />
+				</footer>
+			)}
 		</main>
 	)
 }

@@ -24,6 +24,22 @@ const quest: PlayerQuest = {
 const rail: RailArc[] = [{ arcId: "arc-one", segments: [{ questId: "quest-one", state: "current" }] }]
 
 describe("GameView preview", () => {
+	it("renders team preview links as plain readable content without disabling frame scrolling", () => {
+		const html = renderToStaticMarkup(
+			<GameView
+				timeLeftMs={60_000}
+				pace={null}
+				rail={rail}
+				quest={{ ...quest, assetPath: "/assets/clue.pdf", content: '[Linked clue](/clue) <a href="/raw">Raw clue</a>' }}
+				preview="team"
+			/>,
+		)
+		expect(html).toContain("Linked clue")
+		expect(html).toContain("Raw clue")
+		expect(html).toContain("Open PDF")
+		expect(html).not.toContain("<a")
+	})
+
 	it("renders player content with inert dock controls and no standings link", () => {
 		const html = renderToStaticMarkup(
 			<GameView

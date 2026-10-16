@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { DeleteTeamButton } from "@/components/admin/delete-team-button"
 import { TeamHeader } from "@/components/admin/team-header"
+import { TeamPreview } from "@/components/admin/team-preview"
 import { TeamRow } from "@/components/admin/teams-list"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
@@ -25,7 +26,7 @@ beforeEach(() => {
 	vi.useFakeTimers()
 	vi.setSystemTime(now)
 	vi.mocked(getSeason).mockResolvedValue(season)
-	vi.mocked(listSeasonTeams).mockResolvedValue(teams.map((team) => ({ ...team, passwordHash: "secret-password-hash" })))
+	vi.mocked(listSeasonTeams).mockResolvedValue(teams)
 })
 afterEach(() => vi.useRealTimers())
 
@@ -66,7 +67,7 @@ it("redirects missing season without reading teams", async () => {
 
 it("composes phone header, ranked safe summary and separated delete control", async () => {
 	const page = await TeamPage(props)
-	const [header, summary, footer] = page.props.children
+	const [header, summary, footer, preview] = page.props.children
 	expect(header.type).toBe(TeamHeader)
 	expect(header.props).toEqual({ seasonId: season._id, name: "Ninjas" })
 	expect(summary.type).toBe(TeamRow)
@@ -78,5 +79,8 @@ it("composes phone header, ranked safe summary and separated delete control", as
 	expect(footer.props.className).toContain("border-t")
 	expect(footer.props.children.type).toBe(DeleteTeamButton)
 	expect(footer.props.children.props).toEqual({ seasonId: season._id, teamId: team._id, name: "Ninjas" })
+	expect(preview.props.className).toContain("lg:hidden")
+	expect(preview.props.children.type).toBe(TeamPreview)
+	expect(preview.props.children.props).toEqual({ season, team, teams, now: now.getTime() })
 	expect(JSON.stringify(page)).not.toContain("passwordHash")
 })

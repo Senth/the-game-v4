@@ -13,7 +13,7 @@ type GameViewProps = {
 	strip?: StripEntry[]
 	quest: PlayerQuest | null
 } & (
-	| { preview: true }
+	| { preview: true | "team" }
 	| {
 			preview?: false
 			answer: string
@@ -28,22 +28,22 @@ type GameViewProps = {
 )
 
 export function GameView(props: GameViewProps) {
-	const preview = props.preview === true
-	const live = preview ? null : props
+	const live = props.preview ? null : props
 	const { timeLeftMs, pace, rail, strip, quest } = props
 
 	return (
 		<>
 			<GameHeader
 				timeLeftMs={timeLeftMs}
-				pace={preview ? null : pace}
+				pace={props.preview === true ? null : pace}
 				rail={rail}
-				strip={preview ? undefined : strip}
+				strip={props.preview === true ? undefined : strip}
+				preview={props.preview === "team"}
 			/>
 			<main className="mx-auto max-w-2xl px-4 pt-5 pb-[calc(var(--spacing)*40+env(safe-area-inset-bottom))]">
 				{quest ? (
 					<>
-						<QuestContent quest={quest} />
+						<QuestContent quest={quest} preview={props.preview === "team"} />
 						{live ? (
 							<Intel
 								quest={quest}
@@ -52,7 +52,7 @@ export function GameView(props: GameViewProps) {
 								onDecryptComplete={live.onDecryptComplete}
 							/>
 						) : (
-							<Intel quest={quest} preview />
+							<Intel quest={quest} preview={props.preview === "team" ? "team" : true} />
 						)}
 					</>
 				) : (

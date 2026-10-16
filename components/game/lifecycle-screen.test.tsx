@@ -32,6 +32,18 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe("LifecycleScreen", () => {
+	it.each<LifecycleGame>([
+		{ lifecycleState: "waiting" },
+		{ lifecycleState: "countdown", start: new Date(now.getTime() + 60_000) },
+		{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 },
+		{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 },
+	])("keeps $lifecycleState previews inert even with a QR slot", (game) => {
+		const html = renderToStaticMarkup(<LifecycleScreen game={game} now={now} qr={<div>Test QR slot</div>} preview />)
+		expect(html).not.toContain("Test QR slot")
+		expect(html).not.toContain("Log out")
+		expect(html).not.toContain("<a")
+		expect(html).not.toContain("<footer")
+	})
 	it.each<[LifecycleGame, string, string | null, boolean]>([
 		[{ lifecycleState: "waiting" }, "The game hasn&#x27;t been scheduled yet.", null, true],
 		[{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000) }, "The game starts in", "4:32", true],

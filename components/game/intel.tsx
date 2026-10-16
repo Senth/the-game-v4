@@ -140,7 +140,7 @@ function RevealedHint({
 	hint: Extract<PlayerHint, { revealed: true }>
 	decrypting: boolean
 	reducedMotion: boolean
-	onComplete: (hintId: string) => void
+	onComplete?: (hintId: string) => void
 }) {
 	const [frame, setFrame] = useState(() =>
 		decrypting && !reducedMotion ? scrambleFrame(hint.text, 0, Math.random) : hint.text,
@@ -148,7 +148,7 @@ function RevealedHint({
 	useEffect(() => {
 		if (!decrypting) return
 		if (reducedMotion) {
-			onComplete(hint.id)
+			onComplete?.(hint.id)
 			return
 		}
 		const start = performance.now()
@@ -161,7 +161,7 @@ function RevealedHint({
 				timer = setTimeout(() => {
 					animationFrame = requestAnimationFrame(step)
 				}, 45)
-			else onComplete(hint.id)
+			else onComplete?.(hint.id)
 		}
 		setFrame(scrambleFrame(hint.text, 0, Math.random))
 		animationFrame = requestAnimationFrame(step)
@@ -192,7 +192,7 @@ function RevealedHint({
 type IntelProps =
 	| {
 			quest: Pick<PlayerQuest, "worth" | "points" | "hints">
-			preview: true
+			preview: true | "team"
 	  }
 	| {
 			quest: Pick<PlayerQuest, "worth" | "points" | "hints">
@@ -204,7 +204,7 @@ type IntelProps =
 
 export function Intel({ quest, ...props }: IntelProps) {
 	const reducedMotion = useReducedMotion()
-	const live = props.preview === true ? null : props
+	const live = props.preview ? null : props
 
 	return (
 		<section className="mt-7" aria-label="Intel">
@@ -218,22 +218,19 @@ export function Intel({ quest, ...props }: IntelProps) {
 			<ul>
 				{quest.hints.map((hint) => (
 					<li key={hint.id} className="border-b border-z1 last:border-b-0">
-						{live ? (
-							hint.revealed ? (
-								<RevealedHint
-									hint={hint}
-									decrypting={live.decrypting.has(hint.id)}
-									reducedMotion={reducedMotion}
-									onComplete={live.onDecryptComplete}
-								/>
-							) : (
-								<LockedHint hint={hint} reducedMotion={reducedMotion} onReveal={live.onReveal} />
-							)
+						{hint.revealed && (live || props.preview === "team") ? (
+							<RevealedHint
+								hint={hint}
+								decrypting={live?.decrypting.has(hint.id) ?? false}
+								reducedMotion={reducedMotion}
+								onComplete={live?.onDecryptComplete}
+							/>
 						) : (
 							<LockedHint
 								hint={{ id: hint.id, position: hint.position, points: hint.points, revealed: false }}
 								reducedMotion={reducedMotion}
-								preview
+								preview={!live}
+								onReveal={live?.onReveal}
 							/>
 						)}
 					</li>
