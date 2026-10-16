@@ -2,8 +2,13 @@ import { Children, type EffectCallback, isValidElement, type ReactElement, type 
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
+import TeamPage from "@/app/admin/seasons/[seasonId]/teams/[teamId]/page"
+import TeamsPage from "@/app/admin/seasons/[seasonId]/teams/page"
 import { addQuest, moveQuest, removeArc, removeQuest } from "@/app/admin/tree-actions"
+import { getSeason } from "@/lib/db/seasons"
+import { listSeasonTeams } from "@/lib/db/teams"
 import { createLiveConnection } from "@/lib/events/live-connection"
+import { buildFixture } from "@/scripts/fixture"
 import { AdminFrame } from "./admin-frame"
 import {
 	AutosaveProvider,
@@ -83,6 +88,10 @@ vi.mock("@/app/admin/tree-actions", () => ({
 	moveQuest: vi.fn(),
 }))
 vi.mock("@/lib/events/live-connection", () => ({ createLiveConnection: vi.fn(() => hooks.connection) }))
+vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
+vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn() }))
+vi.mock("@/lib/db/teams", () => ({ listSeasonTeams: vi.fn() }))
+vi.mock("@/app/admin/team-actions", () => ({ createTeamAction: vi.fn(), deleteTeamAction: vi.fn() }))
 
 function scope(): Scope {
 	return { values: [], cursor: 0, effects: new Map(), pending: [] }
@@ -115,13 +124,65 @@ function firstTreeArc(node: ReactNode): ReactElement<TreeArcProps> | undefined {
 	}
 }
 
-function provider(state = scope()) {
-	const element = render(state, () => AutosaveProvider({ seasonId: "season-1", children: null }))
+function provider(state = scope(), timing = { start: null as Date | null, end: null as Date | null, now: Date.now() }) {
+	const element = render(state, () => AutosaveProvider({ seasonId: "season-1", ...timing, children: null }))
 	hooks.context = element.props.value
 	return { state, context: element.props.value }
 }
 
 const moveFirst = (items: string[], id: string) => [id, ...items.filter((item) => item !== id)]
+
+it.each(["list", "summary"])(
+	"refreshes server-derived team %s at clock boundaries without SSE events",
+	async (surface) => {
+		const now = Date.now()
+		const fixture = buildFixture(new Date(now))
+		const season = { ...fixture.season, start: new Date(now + 2000), end: new Date(now + 4000) }
+		vi.mocked(getSeason).mockResolvedValue(season)
+		vi.mocked(listSeasonTeams).mockResolvedValue(fixture.teams)
+		const teamId = fixture.teams.find((team) => team.name === "Ninjas")?._id
+		if (!teamId) throw new Error("Missing Ninjas fixture")
+		const load = () => {
+			const props = { params: Promise.resolve({ seasonId: season._id, teamId }), searchParams: Promise.resolve({}) }
+			return surface === "list" ? TeamsPage(props) : TeamPage(props)
+		}
+		const state = scope()
+		const timing = { start: season.start, end: season.end, now }
+		const tick = () => provider(state, timing)
+		let page = await load()
+		const markup = () => render(scope(), () => renderToStaticMarkup(page))
+		let html = markup()
+		expect(html).not.toContain('aria-current="step"')
+		expect(html).not.toContain("w-5 shrink-0 text-xs text-muted")
+		expect(html).not.toContain("On <span")
+		tick()
+		expect(hooks.refresh).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(2000)
+		tick()
+		expect(hooks.refresh).toHaveBeenCalledTimes(1)
+		page = await load()
+		html = markup()
+		expect(html).toContain('aria-current="step"')
+		expect(html).toContain("w-5 shrink-0 text-xs text-muted")
+		expect(html).toContain("On <span")
+		timing.now = Date.now()
+		tick()
+		await vi.advanceTimersByTimeAsync(1000)
+		tick()
+		expect(hooks.refresh).toHaveBeenCalledTimes(1)
+		await vi.advanceTimersByTimeAsync(1000)
+		tick()
+		expect(hooks.refresh).toHaveBeenCalledTimes(2)
+		page = await load()
+		html = markup()
+		expect(html).not.toContain('aria-current="step"')
+		expect(html).not.toContain("On <span")
+		expect(html).toContain("Stopped on <span")
+		expect(hooks.connection.start).toHaveBeenCalledOnce()
+		expect(vi.getTimerCount()).toBe(0)
+		unmount(state)
+	},
+)
 
 it("keeps divergent preview snapshots read-only while the editor owns server synchronization", () => {
 	provider()

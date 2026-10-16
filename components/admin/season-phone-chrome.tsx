@@ -1,8 +1,9 @@
 "use client"
 
-import { useSelectedLayoutSegment } from "next/navigation"
+import { useSelectedLayoutSegments } from "next/navigation"
 import type { ReactNode } from "react"
 
 export function SeasonPhoneChrome({ children }: { children: ReactNode }) {
-	return useSelectedLayoutSegment() === "quests" ? null : children
+	const [section, detail] = useSelectedLayoutSegments()
+	return section === "quests" || (section === "teams" && detail) ? null : children
 }

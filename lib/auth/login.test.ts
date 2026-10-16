@@ -41,7 +41,8 @@ describe("authenticate", () => {
 		await team("Ninjas", "ninjas", "newer")
 
 		expect(await authenticate(" Ninjas ", "ninjas", now)).toEqual({ kind: "team", id: open })
-		expect(await authenticate("ninjas", "ninjas", now)).toBeNull()
+		expect(await authenticate("ninjas", "ninjas", now)).toEqual({ kind: "team", id: open })
+		expect(await authenticate("NINJAS", "ninjas", now)).toEqual({ kind: "team", id: open })
 	})
 
 	it("picks the most recently started season when none is in the open season", async () => {

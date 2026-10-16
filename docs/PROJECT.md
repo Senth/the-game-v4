@@ -39,7 +39,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `start` | `Date \| null` | Scheduled or actual start; null before scheduling |
 | `end` | `Date \| null` | Scheduled or actual end; adjusted by live controls |
 | `shuffleArcs` | `boolean` | Shuffle arc order when building each team's order |
-| `registrationOpen` | `boolean` | New teams join this season; a stored season without it counts as closed |
+| `registrationOpen` | `boolean` | Teams may self-register for this season; a stored season without it counts as closed |
 | `arcs` | `Arc[]` | Arcs in authored order |
 
 A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
@@ -83,7 +83,9 @@ History survives advancement to the next quest. Deleting or editing a hint never
 Reordering hints preserves their ids and snapshots. Deleted hints remain in the team's history and score.
 Create a unique index on `teams` for `{seasonId, name}` and a `{name}` index for login.
 The per-season unique index uses case-insensitive collation (strength 2).
-Admin creation and self-registration both remain.
+Admins may add a team to a season at any time, regardless of `registrationOpen`.
+Use the same name and password rules as [self-registration](#lifecycle-and-season-lookup).
+Admins may delete a team at any time. Deletion publishes `team:<id>`, `season:<id>` and `board`.
 
 ### admins and sessions
 
@@ -101,7 +103,7 @@ Public paths are `/login`, `/logout`, `/register`, `/board`, `/api/events`, `/as
 Guard all server actions except public login, register and public `getBoard`.
 Use `requireAdmin` or `requireTeam` for guarded actions.
 The single login form tries admin then team in one request and returns one generic error on failure.
-Team login keeps the teams whose name and password match.
+Team login matches names ignoring case, like the per-season unique index, and keeps teams whose password matches.
 It picks the one in the registration-open season, else the latest season whose start has passed,
 else an unscheduled or future-scheduled season, else no season.
 Admins land on `/admin`, teams on `/`. Deleting a team invalidates its sessions.
@@ -170,6 +172,9 @@ score = score + pointsEarned
 Neither quest earnings nor team score has a floor. Intel shows current worth and full quest worth.
 Past `pointsEarned` records preserve what the team earned; live quest-point edits affect subsequent solves.
 Hint edits affect only future reveals. Solves use the stored penalties, even if the hints were edited or deleted.
+
+Team hint loss sums the penalty points in every revealed-hint snapshot, including the current unsolved quest.
+M3 and M4 both show this total. It can exceed penalties charged against score, since penalties charge only on solve.
 
 ### Pace
 

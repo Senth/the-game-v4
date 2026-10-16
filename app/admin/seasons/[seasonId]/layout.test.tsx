@@ -17,7 +17,12 @@ import TeamsPage from "./teams/page"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn(), listSeasons: vi.fn() }))
-vi.mock("@/lib/db/teams", () => ({ countTeams: vi.fn(), listTeams: vi.fn(async () => []) }))
+vi.mock("@/lib/db/teams", () => ({
+	countTeams: vi.fn(),
+	listTeams: vi.fn(async () => []),
+	listSeasonTeams: vi.fn(async () => []),
+}))
+vi.mock("@/app/admin/team-actions", () => ({ createTeamAction: vi.fn() }))
 vi.mock("@/app/admin/actions", () => ({ createSeasonAction: vi.fn() }))
 vi.mock("@/app/admin/live-actions", () => ({ startSeasonNow: vi.fn(), shiftSeasonEnd: vi.fn(), endSeason: vi.fn() }))
 vi.mock("next/navigation", async (importOriginal) => ({
@@ -138,6 +143,14 @@ it("passes season timing and real team count to live controls on every season pa
 	expect(html.lastIndexOf("+5 min")).toBeLessThan(html.indexOf('aria-label="Season sections"'))
 })
 
+it("supplies the shared refresh owner with server clock timing for team routes", async () => {
+	const scheduled = { ...season, start: new Date(Date.now() + 2000), end: new Date(Date.now() + 4000) }
+	vi.mocked(getSeason).mockResolvedValue(scheduled)
+	const page = await SeasonLayout({ children: <p>Teams</p>, params: settingsProps.params })
+	expect(page.props).toMatchObject({ seasonId: season._id, start: scheduled.start, end: scheduled.end })
+	expect(page.props.now).toEqual(expect.any(Number))
+})
+
 it.each([
 	["teams", TeamsPage, "Teams"],
 	["settings", SettingsPage, "Season settings"],
@@ -146,12 +159,16 @@ it.each([
 	const html = renderToStaticMarkup(
 		await SeasonLayout({ children: await Page(settingsProps), params: Promise.resolve({ seasonId: season._id }) }),
 	)
-	expect(html).toMatch(new RegExp(`<h2[^>]*>${heading}</h2>`))
 	if (segment === "settings") {
+		expect(html).toMatch(new RegExp(`<h2[^>]*>${heading}</h2>`))
 		expect(html).toContain('class="space-y-5 px-4 py-5 lg:px-8 lg:py-6"')
 		expect(html).toContain(">Title</label>")
 		expect(html).toContain(`value="${season.title}"`)
-	} else expect(renderToStaticMarkup(await TeamsPage())).toMatch(/^<h2[^>]*>Teams<\/h2>$/)
+	} else {
+		expect(html).toContain("No teams yet.")
+		expect(html).toContain('placeholder="Team name"')
+		expect(html).toMatch(/<h2 class="[^"]*hidden[^"]*lg:block">Teams<\/h2>/)
+	}
 	const activeLinks = html.match(/<a\b[^>]*aria-current="page"[^>]*>/g) ?? []
 	expect(activeLinks.some((link) => link.includes(`href="/admin/seasons/${season._id}/${segment}"`))).toBe(true)
 	expect(html).toContain("Player preview")

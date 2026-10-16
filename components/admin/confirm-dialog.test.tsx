@@ -1,5 +1,6 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react"
 import { createPortal } from "react-dom"
+import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { ConfirmDialog } from "./confirm-dialog"
 
@@ -35,7 +36,7 @@ function buttons(node: ReactNode): ReactElement<ButtonProps>[] {
 	})
 }
 
-function render() {
+function render(props: Partial<Parameters<typeof ConfirmDialog>[0]> = {}) {
 	const onConfirm = vi.fn()
 	const onClose = vi.fn()
 	hooks.refIndex = 0
@@ -47,6 +48,7 @@ function render() {
 		confirmLabel: "Remove quest",
 		onConfirm,
 		onClose,
+		...props,
 	})
 	if (!isValidElement<DialogProps>(dialog)) throw new Error("Missing confirmation dialog")
 	return { dialog, buttons: buttons(dialog), onConfirm, onClose }
@@ -93,4 +95,15 @@ it("closes and confirms only when confirm is clicked", () => {
 	expect(hooks.close).toHaveBeenCalledOnce()
 	expect(view.onConfirm).toHaveBeenCalledOnce()
 	expect(view.onClose).not.toHaveBeenCalled()
+})
+
+it("keeps async confirmation open and announces failure inside dialog", () => {
+	const view = render({ closeOnConfirm: false, error: "Not saved, retry" })
+	view.buttons[1]?.props.onClick()
+	expect(hooks.close).not.toHaveBeenCalled()
+	expect(view.onConfirm).toHaveBeenCalledOnce()
+	const html = renderToStaticMarkup(view.dialog)
+	expect(html).toContain('role="alert"')
+	expect(html).toContain("Not saved, retry")
+	expect(html.indexOf('role="alert"')).toBeLessThan(html.indexOf("</dialog>"))
 })
