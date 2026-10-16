@@ -10,10 +10,13 @@ type CreateTeamResult = { ok: true; team: Team } | { ok: false; error: "invalid-
 
 export type RegisterResult = CreateTeamResult | { ok: false; error: "closed" }
 
+export function passwordError(password: string) {
+	return password.length < 4 ? "invalid-password" : null
+}
+
 function credentialsError(name: string, password: string) {
 	if (name.trim().length < 1 || name.trim().length > 30) return "invalid-name"
-	if (password.length < 4) return "invalid-password"
-	return null
+	return passwordError(password)
 }
 
 export async function registerTeam(name: string, password: string, now = new Date()): Promise<RegisterResult> {
