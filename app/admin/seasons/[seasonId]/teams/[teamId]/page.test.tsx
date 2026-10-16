@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { DeleteTeamButton } from "@/components/admin/delete-team-button"
+import { ResetPassword } from "@/components/admin/reset-password"
 import { TeamHeader } from "@/components/admin/team-header"
 import { TeamHistory } from "@/components/admin/team-history"
 import { TeamPreview } from "@/components/admin/team-preview"
@@ -13,7 +14,11 @@ import TeamPage from "./page"
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn() }))
 vi.mock("@/lib/db/teams", () => ({ listSeasonTeams: vi.fn() }))
-vi.mock("@/app/admin/team-actions", () => ({ createTeamAction: vi.fn(), deleteTeamAction: vi.fn() }))
+vi.mock("@/app/admin/team-actions", () => ({
+	createTeamAction: vi.fn(),
+	deleteTeamAction: vi.fn(),
+	resetTeamPasswordAction: vi.fn(),
+}))
 
 const now = new Date("2026-10-11T17:00:00Z")
 const { season, teams } = buildFixture(now)
@@ -65,13 +70,16 @@ it("redirects missing season without reading teams", async () => {
 	expect(listSeasonTeams).not.toHaveBeenCalled()
 })
 
-it("composes header, safe history, delete control and phone-only preview in reading order", async () => {
+it("composes header, safe history, reset, delete control and phone-only preview in reading order", async () => {
 	const page = await TeamPage(props)
-	const [header, summary, footer, preview] = page.props.children
+	const [header, summary, reset, footer, preview] = page.props.children
 	expect(header.type).toBe(TeamHeader)
 	expect(header.props).toEqual({ seasonId: season._id, name: "Ninjas" })
 	expect(summary.type).toBe(TeamHistory)
 	expect(summary.props).toEqual({ history: teamHistory(season, team, now) })
+	expect(reset.type).toBe(ResetPassword)
+	expect(reset.key).toBe(team._id)
+	expect(reset.props).toEqual({ seasonId: season._id, teamId: team._id })
 	expect(footer.props.className).toContain("border-t")
 	expect(footer.props.children.type).toBe(DeleteTeamButton)
 	expect(footer.props.children.props).toEqual({ seasonId: season._id, teamId: team._id, name: "Ninjas" })

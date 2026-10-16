@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { DeleteTeamButton } from "@/components/admin/delete-team-button"
+import { ResetPassword } from "@/components/admin/reset-password"
 import { TeamHeader } from "@/components/admin/team-header"
 import { TeamHistory } from "@/components/admin/team-history"
 import { TeamPreview } from "@/components/admin/team-preview"
@@ -21,6 +22,7 @@ export default async function TeamPage({ params }: PageProps<"/admin/seasons/[se
 		<>
 			<TeamHeader seasonId={seasonId} name={team.name} />
 			<TeamHistory history={teamHistory(season, team, new Date(now))} />
+			<ResetPassword key={teamId} seasonId={seasonId} teamId={teamId} />
 			<div className="mx-4 mt-6 border-t border-z1 py-6">
 				<DeleteTeamButton key={teamId} seasonId={seasonId} teamId={teamId} name={team.name} />
 			</div>
