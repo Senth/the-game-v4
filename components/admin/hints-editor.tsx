@@ -7,7 +7,7 @@ import { moveHint as saveHintMove } from "@/app/admin/autosave-actions"
 import { inputClass, labelClass } from "@/components/auth-form"
 import { worthWithAllHints } from "@/lib/domain/hints"
 import { type Arc, Hint } from "@/lib/domain/schemas"
-import { useAutosave, useAutosaveField, useAutosaveList } from "./autosave-provider"
+import { useAutosave, useAutosaveField, useAutosaveList, usePreviewHints } from "./autosave-provider"
 import { ConfirmDialog, primaryClass } from "./confirm-dialog"
 import { SortableDragLayer, SortableRow } from "./sortable/drag-layer"
 import { useMoveQueue } from "./sortable/use-move-queue"
@@ -84,6 +84,11 @@ export function HintsEditor({
 	const updatePenalty = useCallback((id: string, value: number) => {
 		setPenalties((current) => (Object.is(current[id], value) ? current : { ...current, [id]: value }))
 	}, [])
+	const previewHints = useMemo(
+		() => items.map((hint) => ({ ...hint, points: penalties[hint.id] ?? hint.points })),
+		[items, penalties],
+	)
+	usePreviewHints({ arcId, questId, field: "hints" }, previewHints)
 	const total = worthWithAllHints(
 		questPoints.value,
 		items.map((hint) => penalties[hint.id] ?? hint.points),

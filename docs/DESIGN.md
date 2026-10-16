@@ -86,6 +86,17 @@ Desktop reuses the mobile quests, teams and team-history components in its middl
 Desktop phone frame and mobile Edit/Preview render the real player components, not a second rendering system.
 With a team open, the desktop preview shows that team's current quest.
 
+### Quest preview
+
+The quest preview header shows the season clock and authored-order rail, with the previewed quest current.
+It shows no pace or standings strip. The clock uses `text-muted` without a team.
+While running, the clock shows time left. Before start, including unscheduled seasons, it shows the full `lengthMinutes`.
+After end, it shows `0:00`.
+Hints stay locked and inert. The answer dock remains visible, with its input and Send disabled.
+Lifecycle screens never appear in the quest preview.
+On phone, Edit/Preview stays sticky under the quest header, with 44 px buttons.
+Opening another quest resets the toggle to Edit.
+
 ## G2: player game
 
 Mock: [HTML](mocks/G2-game.html), [PNG](mocks/G2-game.png).

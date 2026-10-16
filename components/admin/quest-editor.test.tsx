@@ -1,4 +1,13 @@
-import { Children, cloneElement, type EffectCallback, isValidElement, type ReactElement, type ReactNode } from "react"
+import {
+	Children,
+	cloneElement,
+	type EffectCallback,
+	isValidElement,
+	type ReactElement,
+	type ReactNode,
+	useEffect,
+	useState,
+} from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { uploadQuestAsset } from "@/app/admin/asset-actions"
@@ -46,7 +55,16 @@ vi.mock("react", async (importOriginal) => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: hooks.push }) }))
 vi.mock("@/app/admin/tree-actions", () => ({ removeQuest: vi.fn() }))
 vi.mock("@/app/admin/asset-actions", () => ({ uploadQuestAsset: vi.fn(), removeQuestAsset: vi.fn() }))
-vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn(), useAutosaveList: vi.fn(), useAutosave: () => null }))
+vi.mock("./autosave-provider", () => ({
+	useAutosaveField: vi.fn(),
+	useAutosaveList: vi.fn(),
+	useAutosave: () => null,
+	useAssetDraft: (_target: unknown, serverValue: string | null) => {
+		const [value, onChange] = useState(serverValue)
+		useEffect(() => onChange(serverValue), [serverValue])
+		return { value, onChange }
+	},
+}))
 vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }))
 
 const now = new Date("2026-10-12T17:00:00Z").getTime()

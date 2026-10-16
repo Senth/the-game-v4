@@ -234,7 +234,7 @@ A field accepts a value from another tab only when it is unfocused and has no un
 Otherwise, its local value stays and its next save wins.
 Show "Saved", "Saving…" or "Not saved, retry". Failed saves keep the local value.
 Retry, another edit to that field, or the browser coming back online resends it.
-Preview renders real game components from the current edit.
+Preview renders real game components from the current edit, following unsaved changes before autosave completes.
 
 Text, answers, hints and points apply immediately during play, including hint reordering.
 Revealed-hint snapshots remain unchanged.

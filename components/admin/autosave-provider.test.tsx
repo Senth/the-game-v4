@@ -5,9 +5,18 @@ import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
 import { addQuest, moveQuest, removeArc, removeQuest } from "@/app/admin/tree-actions"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { AdminFrame } from "./admin-frame"
-import { AutosaveProvider, useAutosaveField, useAutosaveList } from "./autosave-provider"
+import {
+	AutosaveProvider,
+	useAssetDraft,
+	useAutosaveField,
+	useAutosaveList,
+	useDraftHints,
+	useDraftValue,
+} from "./autosave-provider"
 import { QuestEditor } from "./quest-editor"
+import { QuestPreview } from "./quest-preview"
 import { AutosaveHeader, SaveStatus } from "./save-status"
+import { SeasonPreview } from "./season-preview"
 import { SeasonTree } from "./season-tree"
 import { useMoveQueue } from "./sortable/use-move-queue"
 
@@ -24,6 +33,7 @@ const hooks = vi.hoisted(() => ({
 	refresh: vi.fn(),
 	push: vi.fn(),
 	connection: { start: vi.fn(), stop: vi.fn(), setHidden: vi.fn() },
+	segments: [] as string[],
 }))
 
 vi.mock("react", async (importOriginal) => ({
@@ -62,7 +72,7 @@ vi.mock("react", async (importOriginal) => ({
 }))
 vi.mock("next/navigation", () => ({
 	useRouter: () => ({ refresh: hooks.refresh, push: hooks.push }),
-	useSelectedLayoutSegments: () => [],
+	useSelectedLayoutSegments: () => hooks.segments,
 }))
 vi.mock("@/app/admin/autosave-actions", () => ({ saveSeasonField: vi.fn(), patchSeasonList: vi.fn() }))
 vi.mock("@/app/admin/tree-actions", () => ({
@@ -112,6 +122,156 @@ function provider(state = scope()) {
 }
 
 const moveFirst = (items: string[], id: string) => [id, ...items.filter((item) => item !== id)]
+
+it("keeps divergent preview snapshots read-only while the editor owns server synchronization", () => {
+	provider()
+	const editor = scope()
+	const penalty = scope()
+	const desktop = scope()
+	const phone = scope()
+	const target = { arcId: "arc", questId: "quest", field: "hints" } as const
+	const stale = [{ id: "hint", text: "Hidden", points: 5 }]
+	const fresh = [{ id: "hint", text: "Updated hidden", points: 12 }]
+	const list = (items: typeof stale) => render(editor, () => useAutosaveList(target, items))
+	const points = (value: number) =>
+		render(penalty, () => useAutosaveField({ ...target, hintId: "hint", field: "points" }, value))
+	list(stale)
+	points(5)
+	const read = (state: Scope, items: typeof stale) => render(state, () => useDraftHints(target, items))
+	read(desktop, stale)
+	read(phone, fresh)
+	list(fresh)
+	points(12)
+	read(desktop, stale)
+	read(phone, fresh)
+	const notifications = [desktop.values[0], phone.values[0]]
+	for (let sweep = 0; sweep < 6; sweep++) {
+		expect(read(desktop, stale)).toEqual(fresh)
+		expect(read(phone, fresh)).toEqual(fresh)
+	}
+	expect([desktop.values[0], phone.values[0]]).toEqual(notifications)
+	expect(list(fresh).items).toEqual(fresh)
+	expect(points(12).value).toBe(12)
+	expect(saveSeasonField).not.toHaveBeenCalled()
+	expect(patchSeasonList).not.toHaveBeenCalled()
+})
+
+it.each(["direct", "via placeholder"])(
+	"keeps elapsed preview time across delayed quest navigation %s",
+	async (route) => {
+		provider()
+		const now = Date.now()
+		const quest = {
+			id: "first",
+			displayTitle: "First",
+			content: "",
+			assetPath: null,
+			points: 20,
+			hints: [],
+			internalTitle: "",
+			adminNotes: "",
+			answers: [],
+		}
+		const next = { ...quest, id: "next", displayTitle: "Next" }
+		const season = {
+			start: new Date(now - 60_000),
+			end: new Date(now + 60_000),
+			lengthMinutes: 2,
+			arcs: [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [quest, next] }],
+		}
+		const layout = scope()
+		let preview = scope()
+		const frame = () => render(layout, () => SeasonPreview({ season, now }))
+		const timeLeft = () => {
+			const element = frame() as ReactElement<Parameters<typeof QuestPreview>[0]>
+			const result = render(preview, () => QuestPreview(element.props))
+			return result.props.children[1].props.children.props.children.props.children.props.timeLeftMs
+		}
+		hooks.segments = ["quests", "first"]
+		expect(timeLeft()).toBe(60_000)
+		await vi.advanceTimersByTimeAsync(30_000)
+		expect(timeLeft()).toBe(30_000)
+		unmount(preview)
+		if (route === "via placeholder") {
+			hooks.segments = ["settings"]
+			frame()
+			await vi.advanceTimersByTimeAsync(10_000)
+		}
+		hooks.segments = ["quests", "next"]
+		preview = scope()
+		expect(timeLeft()).toBe(route === "direct" ? 30_000 : 20_000)
+		unmount(preview)
+		unmount(layout)
+	},
+)
+
+it("keeps a read-only draft subscribed through save and editor unmount until refresh", async () => {
+	const { context } = provider()
+	const editor = scope()
+	const preview = scope()
+	const target = { arcId: "arc", questId: "quest", field: "content" } as const
+	const read = (value = "Old") => render(preview, () => useDraftValue(target, value))
+	expect(read()).toBe("Old")
+	const field = render(editor, () => useAutosaveField(target, "Old"))
+	const notifications = preview.values[0] as number
+	field.onChange("Live draft")
+	expect(preview.values[0]).toBeGreaterThan(notifications)
+	expect(read()).toBe("Live draft")
+	expect(saveSeasonField).not.toHaveBeenCalled()
+	await field.onBlur()
+	unmount(editor)
+	await vi.advanceTimersByTimeAsync(0)
+	expect(context.drafts.size).toBe(1)
+	expect(read()).toBe("Live draft")
+	const refreshedEditor = scope()
+	render(refreshedEditor, () => useAutosaveField(target, "Refreshed"))
+	expect(read("Refreshed")).toBe("Refreshed")
+	unmount(refreshedEditor)
+	unmount(preview)
+	expect(context.drafts.size).toBe(0)
+})
+
+it("reads optimistic hint lists and penalties before saving and after editor unmount", async () => {
+	provider()
+	const editor = scope()
+	const penalty = scope()
+	const preview = scope()
+	const target = { arcId: "arc", questId: "quest", field: "hints" } as const
+	const hints = [{ id: "hint", text: "Hidden", points: 5 }]
+	const read = (value = hints) => render(preview, () => useDraftHints(target, value))
+	expect(read()).toEqual(hints)
+	const list = render(editor, () => useAutosaveList(target, hints))
+	const field = render(penalty, () => useAutosaveField({ ...target, hintId: "hint", field: "points" }, 5))
+	field.onChange(12)
+	expect(read()[0]?.points).toBe(12)
+	void list.add({ id: "new", text: "New hidden", points: 8 })
+	expect(read().map((hint) => hint.points)).toEqual([12, 8])
+	await field.onBlur()
+	unmount(editor)
+	unmount(penalty)
+	await vi.advanceTimersByTimeAsync(0)
+	expect(read().map((hint) => hint.points)).toEqual([12, 8])
+	const refreshed = [{ id: "hint", text: "Hidden", points: 15 }]
+	render(scope(), () => useAutosaveList(target, refreshed))
+	render(scope(), () => useAutosaveField({ ...target, hintId: "hint", field: "points" }, 15))
+	expect(read(refreshed).map((hint) => hint.points)).toEqual([15])
+})
+
+it("shares asset action results without autosaving and accepts refreshed assets", () => {
+	const { state } = provider()
+	const editor = scope()
+	const preview = scope()
+	const target = { arcId: "arc", questId: "quest", field: "assetPath" } as const
+	const read = (value: string | null = null) => render(preview, () => useDraftValue(target, value))
+	expect(read()).toBeNull()
+	const asset = render(editor, () => useAssetDraft(target, null))
+	asset.onChange("/assets/uploaded.png")
+	expect(read()).toBe("/assets/uploaded.png")
+	expect(provider(state).context.status).toBeNull()
+	render(editor, () => useAssetDraft(target, "/assets/replaced.pdf"))
+	expect(read("/assets/replaced.pdf")).toBe("/assets/replaced.pdf")
+	expect(saveSeasonField).not.toHaveBeenCalled()
+})
 
 it("registers moves with header status, holds remote order and retries online", async () => {
 	const { state: providerState } = provider()
@@ -173,6 +333,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	vi.useFakeTimers()
 	hooks.context = null
+	hooks.segments = []
 	vi.stubGlobal("window", new EventTarget())
 	vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: false }))
 	vi.mocked(saveSeasonField).mockReset().mockResolvedValue({ ok: true })

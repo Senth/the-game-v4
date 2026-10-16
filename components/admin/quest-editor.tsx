@@ -1,13 +1,13 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { type ReactNode, useEffect, useRef, useState } from "react"
+import { type ReactNode, useRef, useState } from "react"
 import { removeQuest } from "@/app/admin/tree-actions"
 import type { Quest } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
 import { AnswerChips } from "./answer-chips"
 import { AutosavePointsField } from "./autosave-points-field"
-import { useAutosave } from "./autosave-provider"
+import { useAssetDraft, useAutosave } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { AutosaveTextarea } from "./autosave-textarea"
 import { ConfirmDialog } from "./confirm-dialog"
@@ -38,11 +38,13 @@ export function QuestEditor({
 	const [confirming, setConfirming] = useState(false)
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
-	const [assetPath, setAssetPath] = useState(quest.assetPath)
+	const { value: assetPath, onChange: setAssetPath } = useAssetDraft(
+		{ arcId, questId: quest.id, field: "assetPath" },
+		quest.assetPath,
+	)
 	const asset = useRef<QuestAssetHandle>(null)
 	const dragDepth = useRef(0)
 	const [dragging, setDragging] = useState(false)
-	useEffect(() => setAssetPath(quest.assetPath), [quest.assetPath])
 
 	async function remove() {
 		if (pending || !editable) return

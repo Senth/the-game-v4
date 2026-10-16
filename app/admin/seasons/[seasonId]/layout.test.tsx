@@ -1,5 +1,5 @@
 import { sealData } from "iron-session"
-import { useSelectedLayoutSegment } from "next/navigation"
+import { useSelectedLayoutSegment, useSelectedLayoutSegments } from "next/navigation"
 import { NextRequest } from "next/server"
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, expect, it, vi } from "vitest"
@@ -23,7 +23,7 @@ vi.mock("@/app/admin/live-actions", () => ({ startSeasonNow: vi.fn(), shiftSeaso
 vi.mock("next/navigation", async (importOriginal) => ({
 	...(await importOriginal<typeof import("next/navigation")>()),
 	useSelectedLayoutSegment: vi.fn(),
-	useSelectedLayoutSegments: () => [],
+	useSelectedLayoutSegments: vi.fn(() => []),
 	useRouter: () => ({ refresh: vi.fn() }),
 }))
 
@@ -39,6 +39,7 @@ beforeEach(() => {
 	vi.mocked(listSeasons).mockResolvedValue([other, season])
 	vi.mocked(countTeams).mockResolvedValue(10)
 	vi.mocked(useSelectedLayoutSegment).mockReturnValue(null)
+	vi.mocked(useSelectedLayoutSegments).mockReturnValue([])
 })
 
 it.each([
@@ -171,6 +172,7 @@ it("replaces season phone chrome on a quest while retaining the desktop tree and
 	vi.mocked(useSelectedLayoutSegment).mockReturnValue("quests")
 	const quest = season.arcs[0]?.quests[0]
 	if (!quest) throw new Error("Fixture needs a quest")
+	vi.mocked(useSelectedLayoutSegments).mockReturnValue(["quests", quest.id])
 	const html = renderToStaticMarkup(
 		await SeasonLayout({
 			children: await QuestPage({
@@ -188,6 +190,10 @@ it("replaces season phone chrome on a quest while retaining the desktop tree and
 	expect(html).toContain("Internal title")
 	expect(html).toContain("Season settings")
 	expect(html).toContain("Player preview")
+	expect(html).not.toContain("Open a quest or team to preview it.")
+	expect(html).toContain("h-[700px] w-[327px]")
+	expect(html).toContain("scale-[0.82]")
+	expect(html).toContain('aria-label="Your answer" disabled=""')
 })
 
 it.each(["", "/teams", "/settings"])(
