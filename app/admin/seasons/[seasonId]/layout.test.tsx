@@ -17,7 +17,12 @@ import TeamsPage from "./teams/page"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn(), listSeasons: vi.fn() }))
-vi.mock("@/lib/db/teams", () => ({ countTeams: vi.fn(), listTeams: vi.fn(async () => []) }))
+vi.mock("@/lib/db/teams", () => ({
+	countTeams: vi.fn(),
+	listTeams: vi.fn(async () => []),
+	listSeasonTeams: vi.fn(async () => []),
+}))
+vi.mock("@/app/admin/team-actions", () => ({ createTeamAction: vi.fn() }))
 vi.mock("@/app/admin/actions", () => ({ createSeasonAction: vi.fn() }))
 vi.mock("@/app/admin/live-actions", () => ({ startSeasonNow: vi.fn(), shiftSeasonEnd: vi.fn(), endSeason: vi.fn() }))
 vi.mock("next/navigation", async (importOriginal) => ({
@@ -146,12 +151,16 @@ it.each([
 	const html = renderToStaticMarkup(
 		await SeasonLayout({ children: await Page(settingsProps), params: Promise.resolve({ seasonId: season._id }) }),
 	)
-	expect(html).toMatch(new RegExp(`<h2[^>]*>${heading}</h2>`))
 	if (segment === "settings") {
+		expect(html).toMatch(new RegExp(`<h2[^>]*>${heading}</h2>`))
 		expect(html).toContain('class="space-y-5 px-4 py-5 lg:px-8 lg:py-6"')
 		expect(html).toContain(">Title</label>")
 		expect(html).toContain(`value="${season.title}"`)
-	} else expect(renderToStaticMarkup(await TeamsPage())).toMatch(/^<h2[^>]*>Teams<\/h2>$/)
+	} else {
+		expect(html).toContain("No teams yet.")
+		expect(html).toContain('placeholder="Team name"')
+		expect(html).not.toMatch(/<h2[^>]*>Teams<\/h2>/)
+	}
 	const activeLinks = html.match(/<a\b[^>]*aria-current="page"[^>]*>/g) ?? []
 	expect(activeLinks.some((link) => link.includes(`href="/admin/seasons/${season._id}/${segment}"`))).toBe(true)
 	expect(html).toContain("Player preview")
