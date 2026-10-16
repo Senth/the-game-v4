@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation"
 import { createContext, type ReactNode, useContext, useEffect, useEffectEvent, useState } from "react"
 import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
+import { seasonStatus } from "@/lib/domain/admin-seasons"
 import type { Hint, HintInput } from "@/lib/domain/schemas"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { type AutosaveState, createFieldSaver, createListSaver } from "./autosave"
+import { useSeasonClock } from "./use-season-clock"
 
 type Draft = {
 	target: Record<string, string>
@@ -29,9 +31,27 @@ export function useAutosave() {
 	return useContext(AutosaveContext)
 }
 
-export function AutosaveProvider({ seasonId, children }: { seasonId: string; children: ReactNode }) {
+export function AutosaveProvider({
+	seasonId,
+	start,
+	end,
+	now,
+	children,
+}: {
+	seasonId: string
+	start: Date | null
+	end: Date | null
+	now: number
+	children: ReactNode
+}) {
 	const router = useRouter()
 	const refresh = useEffectEvent(() => router.refresh())
+	const currentNow = useSeasonClock(now, start, end)
+	const initialStatus = seasonStatus({ start, end }, new Date(now))
+	const currentStatus = seasonStatus({ start, end }, new Date(currentNow))
+	useEffect(() => {
+		if (currentStatus !== initialStatus) refresh()
+	}, [currentStatus, initialStatus])
 	const [status, setStatus] = useState<SaveContext["status"]>(null)
 	const [registry] = useState(() => {
 		const fields = new Map<string, { state: AutosaveState; retry: () => void }>()

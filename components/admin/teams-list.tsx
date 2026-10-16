@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { unstable_rethrow } from "next/navigation"
 import { useActionState, useId, useState } from "react"
 import { type CreateTeamState, createTeamAction } from "@/app/admin/team-actions"
 import { inputClass } from "@/components/auth-form"
@@ -64,12 +65,17 @@ export function AddTeamForm({ seasonId }: { seasonId: string }) {
 	const [name, setName] = useState("")
 	const [password, setPassword] = useState("")
 	const [state, action, pending] = useActionState<CreateTeamState, FormData>(async (previous, data) => {
-		const result = await createTeamAction(seasonId, previous, data)
-		if (result.ok) {
-			setName("")
-			setPassword("")
+		try {
+			const result = await createTeamAction(seasonId, previous, data)
+			if (result.ok) {
+				setName("")
+				setPassword("")
+			}
+			return result
+		} catch (error) {
+			unstable_rethrow(error)
+			return { ok: false, error: "Not saved, retry" }
 		}
-		return result
 	}, {})
 	const id = useId()
 	return (

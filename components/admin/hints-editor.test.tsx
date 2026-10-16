@@ -242,7 +242,9 @@ beforeEach(() => {
 	vi.mocked(moveHintAction).mockReset().mockResolvedValue({ ok: true })
 	sortable.rows = []
 	sortable.layer = null
-	hooks.context = run(scope(), () => AutosaveProvider({ seasonId: "season", children: null })).props.value
+	hooks.context = run(scope(), () =>
+		AutosaveProvider({ seasonId: "season", start: null, end: null, now: Date.now(), children: null }),
+	).props.value
 	editor = scope()
 	rows = new Map()
 	questPoints = scope()
@@ -403,7 +405,9 @@ it("shows missing and negative Worth, preserves long one-line text and keeps pen
 	expect(view({ ...props, points: null }).html).toContain("–")
 	editor = scope()
 	rows.clear()
-	hooks.context = run(scope(), () => AutosaveProvider({ seasonId: "other", children: null })).props.value
+	hooks.context = run(scope(), () =>
+		AutosaveProvider({ seasonId: "other", start: null, end: null, now: Date.now(), children: null }),
+	).props.value
 	const long = view({
 		...props,
 		points: 5,

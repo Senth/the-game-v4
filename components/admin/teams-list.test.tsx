@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation"
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, expect, it, vi } from "vitest"
 import { type CreateTeamState, createTeamAction } from "@/app/admin/team-actions"
@@ -175,4 +176,33 @@ it("disables both inputs and submit while adding", () => {
 	expect(password.props.disabled).toBe(true)
 	expect(submit.props.disabled).toBe(true)
 	expect(submit.props.children).toBe("Adding…")
+})
+
+it("retains credentials after a transport rejection and allows a successful retry", async () => {
+	form().name.props.onChange({ target: { value: "New team" } })
+	form().password.props.onChange({ target: { value: "secret" } })
+	const data = new FormData()
+	data.set("name", "New team")
+	data.set("password", "secret")
+	vi.mocked(createTeamAction).mockRejectedValueOnce(new TypeError("Failed to fetch"))
+	await expect(form().element.props.action(data)).resolves.toBeUndefined()
+	const failed = form()
+	expect(failed.name.props.value).toBe("New team")
+	expect(failed.password.props.value).toBe("secret")
+	expect(failed.submit.props.disabled).toBe(false)
+	expect(renderToStaticMarkup(failed.element)).toContain('role="alert"')
+	expect(renderToStaticMarkup(failed.element)).toContain("Not saved, retry")
+	await failed.element.props.action(data)
+	expect(createTeamAction).toHaveBeenCalledTimes(2)
+	expect(createTeamAction).toHaveBeenLastCalledWith("season", { ok: false, error: "Not saved, retry" }, data)
+	expect(form().name.props.value).toBe("")
+	expect(form().password.props.value).toBe("")
+	expect(renderToStaticMarkup(form().element)).not.toContain('role="alert"')
+})
+
+it("preserves Next.js redirects instead of treating them as transport failures", async () => {
+	vi.mocked(createTeamAction).mockImplementationOnce(async () => redirect("/login"))
+	await expect(form().element.props.action(new FormData())).rejects.toMatchObject({
+		digest: "NEXT_REDIRECT;replace;/login;307;",
+	})
 })

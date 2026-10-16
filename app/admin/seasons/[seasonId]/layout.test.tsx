@@ -143,6 +143,14 @@ it("passes season timing and real team count to live controls on every season pa
 	expect(html.lastIndexOf("+5 min")).toBeLessThan(html.indexOf('aria-label="Season sections"'))
 })
 
+it("supplies the shared refresh owner with server clock timing for team routes", async () => {
+	const scheduled = { ...season, start: new Date(Date.now() + 2000), end: new Date(Date.now() + 4000) }
+	vi.mocked(getSeason).mockResolvedValue(scheduled)
+	const page = await SeasonLayout({ children: <p>Teams</p>, params: settingsProps.params })
+	expect(page.props).toMatchObject({ seasonId: season._id, start: scheduled.start, end: scheduled.end })
+	expect(page.props.now).toEqual(expect.any(Number))
+})
+
 it.each([
 	["teams", TeamsPage, "Teams"],
 	["settings", SettingsPage, "Season settings"],
