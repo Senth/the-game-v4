@@ -28,6 +28,10 @@ after the hosted previews expire. [DESIGN.md](../DESIGN.md) owns surface briefs 
   Keep M2's Revealed by chips, hidden until the season starts.
 - M4 is the revised admin3 version: hint text lines below each quest title, points in the right column.
   Do not use the earlier admin2 M4.
+- M4 lacks Reset password. Accepted variant B opens the field from a quiet link:
+  [phone](https://artifacts.senth.org/b-expanding-link-phone-aed874.png),
+  [desktop](https://artifacts.senth.org/b-expanding-link-desktop-21b10e.png).
+  [DESIGN.md's M4 rules](../DESIGN.md#m4-admin-team-history) own copy, states, action order and preview corrections.
 - The mock-only color aliases and one-off colors are not additions to DESIGN.md's application palette.
 - Some mock controls are visibly shorter than 44 px; implementation must provide 44 px touch targets.
 - Some mock regions combine background and border; implementation follows DESIGN.md's single-separator rule.

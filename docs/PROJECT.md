@@ -85,6 +85,9 @@ Create a unique index on `teams` for `{seasonId, name}` and a `{name}` index for
 The per-season unique index uses case-insensitive collation (strength 2).
 Admins may add a team to a season at any time, regardless of `registrationOpen`.
 Use the same name and password rules as [self-registration](#lifecycle-and-season-lookup).
+Admins may set a new team password at any time, using the self-registration password rule.
+Logged-in sessions stay valid. Old QR join links stop working because they sign the password hash.
+A reset publishes `team:<id>` so waiting and countdown screens refetch their QR code.
 Admins may delete a team at any time. Deletion publishes `team:<id>`, `season:<id>` and `board`.
 
 ### admins and sessions
