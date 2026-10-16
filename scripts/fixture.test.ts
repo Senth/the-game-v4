@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { rankTeams } from "@/lib/domain/game"
 import { Admin, Season, Team } from "@/lib/domain/schemas"
 import { hintPenalty } from "@/lib/domain/scoring"
 import { buildFixture } from "./fixture"
@@ -45,6 +46,7 @@ describe("buildFixture", () => {
 
 	it("matches the S1 standings with scores that follow the scoring formula", () => {
 		expect(teams.map((team) => [team.name, team.questIndex, team.score])).toEqual(standings)
+		expect(rankTeams(teams).map((team) => team.name)).toEqual(standings.map(([name]) => name))
 		for (const team of teams) {
 			const solved = team.progress.filter((entry) => entry.solvedAt)
 			expect(solved).toHaveLength(team.questIndex)
@@ -60,6 +62,26 @@ describe("buildFixture", () => {
 				}
 			}
 		}
+	})
+
+	it("keeps Lagom's skipped quest and charged deleted hint in history", () => {
+		const lagom = teams.find((team) => team.name === "Lagom")
+		if (!lagom) throw new Error("fixture")
+		const removed = lagom.progress.filter((entry) => !quests.has(entry.questId))
+		expect(removed).toHaveLength(1)
+		expect(removed[0]).toMatchObject({ pointsEarned: 0, hintsRevealed: [{ points: 5 }] })
+		expect(removed[0]?.solvedAt).toBeUndefined()
+		expect(lagom.questOrder).not.toContain(removed[0]?.questId)
+		expect(removed[0]?.hintsRevealed[0]?.text).toBeTruthy()
+
+		const solved = lagom.progress.find((entry) => entry.questId === "backwards-log")
+		expect(solved?.solvedAt).toBeInstanceOf(Date)
+		expect(solved?.hintsRevealed).toEqual([
+			expect.objectContaining({ hintId: "backwards-log-deleted-hint", text: "Start from the bottom.", points: 5 }),
+		])
+		expect(quests.get("backwards-log")?.hints.map((hint) => hint.id)).not.toContain(solved?.hintsRevealed[0]?.hintId)
+		expect(solved?.pointsEarned).toBe(15)
+		expect(lagom.score).toBe(70)
 	})
 
 	it("keeps Ninjas mid-game on Backwards log, two behind pace", () => {
