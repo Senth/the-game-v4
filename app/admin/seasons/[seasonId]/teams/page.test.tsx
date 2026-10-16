@@ -40,7 +40,8 @@ it("returns 404 for a missing season without loading teams", async () => {
 })
 
 it("loads season-scoped teams and passes only derived rows at the current time to the client", async () => {
-	const element = await TeamsPage(props)
+	const page = await TeamsPage(props)
+	const element = page.props.children[1]
 	expect(getSeason).toHaveBeenCalledWith(season._id)
 	expect(listSeasonTeams).toHaveBeenCalledWith(season._id)
 	expect(element.type).toBe(TeamsList)
@@ -48,4 +49,14 @@ it("loads season-scoped teams and passes only derived rows at the current time t
 	expect(element.props.rows).toHaveLength(10)
 	expect(JSON.stringify(element.props)).not.toContain("passwordHash")
 	expect(JSON.stringify(element.props)).not.toContain("secret-password-hash")
+})
+
+it("shows Teams above the list only on desktop", async () => {
+	const page = await TeamsPage(props)
+	const heading = page.props.children[0]
+	expect(heading.type).toBe("h2")
+	expect(heading.props.children).toBe("Teams")
+	expect(heading.props.className.split(" ")).toEqual(
+		expect.arrayContaining(["hidden", "lg:block", "font-head", "text-2xl", "text-head"]),
+	)
 })

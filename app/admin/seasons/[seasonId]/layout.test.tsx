@@ -167,7 +167,7 @@ it.each([
 	} else {
 		expect(html).toContain("No teams yet.")
 		expect(html).toContain('placeholder="Team name"')
-		expect(html).not.toMatch(/<h2[^>]*>Teams<\/h2>/)
+		expect(html).toMatch(/<h2 class="[^"]*hidden[^"]*lg:block">Teams<\/h2>/)
 	}
 	const activeLinks = html.match(/<a\b[^>]*aria-current="page"[^>]*>/g) ?? []
 	expect(activeLinks.some((link) => link.includes(`href="/admin/seasons/${season._id}/${segment}"`))).toBe(true)

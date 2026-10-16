@@ -11,5 +11,10 @@ export default async function TeamsPage({ params }: PageProps<"/admin/seasons/[s
 	const season = await getSeason(seasonId)
 	if (!season) notFound()
 	const teams = await listSeasonTeams(seasonId)
-	return <TeamsList seasonId={seasonId} rows={adminTeamRows(season, teams, new Date(Date.now()))} />
+	return (
+		<>
+			<h2 className="mb-4 hidden truncate px-4 pt-6 font-head text-2xl text-head lg:block">Teams</h2>
+			<TeamsList seasonId={seasonId} rows={adminTeamRows(season, teams, new Date(Date.now()))} />
+		</>
+	)
 }
