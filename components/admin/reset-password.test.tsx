@@ -10,6 +10,7 @@ const hooks = vi.hoisted(() => ({
 	cursor: 0,
 	result: {} as CreateTeamState,
 	pending: false,
+	effects: [] as (() => void)[],
 }))
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
@@ -24,6 +25,8 @@ vi.mock("react", async (importOriginal) => ({
 		]
 	},
 	useId: () => "reset-password",
+	useRef: () => ({ current: null }),
+	useEffect: (effect: () => void) => hooks.effects.push(effect),
 	useActionState: (reducer: (state: CreateTeamState, data: FormData) => Promise<CreateTeamState>) => [
 		hooks.result,
 		async (data: FormData) => {
@@ -65,6 +68,7 @@ beforeEach(() => {
 	hooks.values.length = 0
 	hooks.result = {}
 	hooks.pending = false
+	hooks.effects.length = 0
 	vi.mocked(resetTeamPasswordAction).mockResolvedValue({ ok: true })
 })
 
@@ -93,6 +97,41 @@ it("opens a labelled visible password field, helper and secondary controls", () 
 	expect(submit.props.children).toBe("Set password")
 	expect(submit.props.className).toContain("border-z2")
 	expect(submit.props.className).not.toContain("bg-accent")
+})
+
+it("lets short passwords reach server validation and renders its inline error", async () => {
+	open().input.props.onChange({ target: { value: "abc" } })
+	const current = form()
+	expect(current.element.props.noValidate).toBe(true)
+	const data = new FormData()
+	data.set("password", "abc")
+	vi.mocked(resetTeamPasswordAction).mockResolvedValueOnce({
+		ok: false,
+		error: "Passwords need at least 4 characters.",
+	})
+	await current.element.props.action(data)
+	expect(resetTeamPasswordAction).toHaveBeenCalledWith("season", "ninjas", {}, data)
+	const failed = form()
+	expect(failed.input.props.value).toBe("abc")
+	expect(failed.input.props["aria-invalid"]).toBe(true)
+	expect(failed.input.props["aria-describedby"]).toContain("reset-password-error")
+	expect(renderToStaticMarkup(failed.element)).toContain(
+		'role="alert" class="mt-2 font-cond text-sm text-warn">Passwords need at least 4 characters.',
+	)
+})
+
+it("focuses newly opened input so immediate Escape closes without saving", () => {
+	const current = open()
+	const focus = vi.fn()
+	current.input.props.ref.current = { focus }
+	hooks.effects.at(-1)?.()
+	expect(focus).toHaveBeenCalledOnce()
+	const preventDefault = vi.fn()
+	current.element.props.onKeyDown({ key: "Escape", preventDefault })
+	expect(preventDefault).toHaveBeenCalledOnce()
+	expect(renderToStaticMarkup(control())).not.toContain("<input")
+	expect(resetTeamPasswordAction).not.toHaveBeenCalled()
+	expect(open().input.props.value).toBe("")
 })
 
 it.each(["Cancel", "Escape"])(

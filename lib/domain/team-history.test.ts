@@ -82,10 +82,10 @@ describe("teamHistory", () => {
 						status: "current",
 						pointsEarned: 0,
 						hints: [
-							{ label: "H1", text: "First snapshot", points: 1 },
-							{ label: "H2", text: "Second snapshot", points: 4 },
-							{ label: "H?", text: "Deleted earlier", points: 2 },
-							{ label: "H?", text: "Deleted later", points: 3 },
+							{ hintId: "h1", label: "H1", text: "First snapshot", points: 1 },
+							{ hintId: "h2", label: "H2", text: "Second snapshot", points: 4 },
+							{ hintId: "deleted-early", label: "H?", text: "Deleted earlier", points: 2 },
+							{ hintId: "deleted-late", label: "H?", text: "Deleted later", points: 3 },
 						],
 					},
 					{
@@ -93,7 +93,7 @@ describe("teamHistory", () => {
 						label: "Display q2",
 						status: "solved",
 						pointsEarned: 25,
-						hints: [{ label: "H1", text: "Solved snapshot", points: 5 }],
+						hints: [{ hintId: "h1", label: "H1", text: "Solved snapshot", points: 5 }],
 					},
 				],
 			},
@@ -155,7 +155,7 @@ describe("teamHistory", () => {
 				questId: "removed-skipped",
 				solved: false,
 				pointsEarned: 0,
-				hints: [{ label: "H?", text: "Skipped snapshot", points: 5 }],
+				hints: [{ hintId: "old", label: "H?", text: "Skipped snapshot", points: 5 }],
 			},
 			{ questId: "removed-solved", solved: true, pointsEarned: -3, hints: [] },
 		])

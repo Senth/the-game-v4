@@ -1,6 +1,6 @@
 "use client"
 
-import { Children } from "react"
+import { Fragment } from "react"
 import { teamHistory } from "@/lib/domain/team-history"
 import { useSeasonClock } from "./use-season-clock"
 
@@ -126,20 +126,18 @@ export function TeamHistory({
 										<span className="text-muted">Skipped · 0p</span>
 									) : null}
 								</span>
-								{Children.toArray(
-									quest.hints.map((hint) => (
-										<>
-											<span aria-hidden="true" />
-											<span className="flex gap-2 text-xs leading-5 min-w-0">
-												<span className="font-cond text-muted shrink-0">{hint.label}</span>
-												<span className="text-ink/80 truncate">{hint.text}</span>
-											</span>
-											<span className="font-cond text-xs text-warn text-right tabular-nums leading-5 whitespace-nowrap">
-												−{hint.points}p
-											</span>
-										</>
-									)),
-								)}
+								{quest.hints.map((hint) => (
+									<Fragment key={hint.hintId}>
+										<span aria-hidden="true" />
+										<span className="flex gap-2 text-xs leading-5 min-w-0">
+											<span className="font-cond text-muted shrink-0">{hint.label}</span>
+											<span className="text-ink/80 truncate">{hint.text}</span>
+										</span>
+										<span className="font-cond text-xs text-warn text-right tabular-nums leading-5 whitespace-nowrap">
+											−{hint.points}p
+										</span>
+									</Fragment>
+								))}
 							</li>
 						))}
 					</ol>

@@ -1,7 +1,7 @@
 "use client"
 
 import { unstable_rethrow } from "next/navigation"
-import { useActionState, useId, useState } from "react"
+import { useActionState, useEffect, useId, useRef, useState } from "react"
 import { type CreateTeamState, resetTeamPasswordAction } from "@/app/admin/team-actions"
 import { inputClass } from "@/components/auth-form"
 import { outlineClass } from "./confirm-dialog"
@@ -30,6 +30,10 @@ function ResetPasswordForm({
 		}
 	}, {})
 	const id = useId()
+	const input = useRef<HTMLInputElement>(null)
+	useEffect(() => {
+		input.current?.focus()
+	}, [])
 	function cancel() {
 		if (pending) return
 		setPassword("")
@@ -38,6 +42,7 @@ function ResetPasswordForm({
 	return (
 		<form
 			action={action}
+			noValidate
 			onKeyDown={(event) => {
 				if (event.key === "Escape") {
 					event.preventDefault()
@@ -49,6 +54,7 @@ function ResetPasswordForm({
 				Reset password
 			</label>
 			<input
+				ref={input}
 				id={id}
 				name="password"
 				type="text"

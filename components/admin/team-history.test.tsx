@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { expect, it } from "vitest"
+import { expect, it, vi } from "vitest"
 import { teamHistory } from "@/lib/domain/team-history"
 import { buildFixture } from "@/scripts/fixture"
 import { TeamHistory } from "./team-history"
@@ -9,6 +9,16 @@ const { season, teams } = buildFixture(now)
 const ninjas = teams.find((team) => team.name === "Ninjas")
 const lagom = teams.find((team) => team.name === "Lagom")
 if (!ninjas || !lagom) throw new Error("Missing history fixture")
+
+it.each([ninjas, lagom])("renders $name hint fragments without React key errors", (team) => {
+	const error = vi.spyOn(console, "error").mockImplementation(() => {})
+	try {
+		renderToStaticMarkup(<TeamHistory season={season} team={team} now={now.getTime()} />)
+		expect(error).not.toHaveBeenCalled()
+	} finally {
+		error.mockRestore()
+	}
+})
 
 it("renders Ninjas score, pace, authored arcs, current quest and snapshot hints without rank or controls", () => {
 	const html = renderToStaticMarkup(<TeamHistory season={season} team={ninjas} now={now.getTime()} />)

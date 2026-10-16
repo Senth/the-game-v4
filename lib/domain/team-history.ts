@@ -18,6 +18,7 @@ function historyHints(progress: TeamQuestProgress | undefined, quest?: Quest) {
 			return a.position - b.position
 		})
 		.map(({ snapshot, position }) => ({
+			hintId: snapshot.hintId,
 			label: position === -1 ? "H?" : `H${position + 1}`,
 			text: snapshot.text,
 			points: snapshot.points,
