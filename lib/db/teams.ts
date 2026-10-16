@@ -54,7 +54,7 @@ export async function countTeams(seasonId: string): Promise<number> {
 }
 
 export async function listTeamsByName(name: string): Promise<Team[]> {
-	return (await collections()).teams.find({ name }).toArray()
+	return (await collections()).teams.find({ name }, { collation: { locale: "en", strength: 2 } }).toArray()
 }
 
 export async function setTeamField<F extends TeamField>(teamId: string, field: F, value: Team[F]): Promise<void> {

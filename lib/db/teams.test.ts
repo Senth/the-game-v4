@@ -32,20 +32,21 @@ function team(name: string, seasonId: string | null): Omit<Team, "_id"> {
 
 describe("teams", () => {
 	it("creates, gets and lists teams by season", async () => {
-		const ninjas = await createTeam(team("Ninjas", "spring"))
+		const tigers = await createTeam(team("Tigers", "spring"))
 		await createTeam(team("Owls", "spring"))
 		await createTeam(team("Foxes", "autumn"))
 
-		expect(await getTeam(ninjas._id)).toEqual(ninjas)
-		expect((await listTeams("spring")).map((t) => t.name).sort()).toEqual(["Ninjas", "Owls"])
+		expect(await getTeam(tigers._id)).toEqual(tigers)
+		expect((await listTeams("spring")).map((t) => t.name).sort()).toEqual(["Owls", "Tigers"])
 	})
 
-	it("lists teams by exact name across seasons", async () => {
-		await createTeam(team("Herons", "spring"))
-		await createTeam(team("Herons", "autumn"))
-		await createTeam(team("herons", "summer"))
+	it("lists teams by case-insensitive name across seasons", async () => {
+		await createTeam(team("Ninjas", "login-spring"))
+		await createTeam(team("Ninjas", "login-autumn"))
 
-		expect((await listTeamsByName("Herons")).map((t) => t.seasonId).sort()).toEqual(["autumn", "spring"])
+		for (const name of ["ninjas", "NINJAS"]) {
+			expect((await listTeamsByName(name)).map((t) => t.seasonId).sort()).toEqual(["login-autumn", "login-spring"])
+		}
 	})
 
 	it("counts only teams assigned to the requested season", async () => {
