@@ -237,7 +237,29 @@ read first rank and points, second the rail, third hint loss; must not look like
 
 Add a team inline with name and password. Rows show rank, name, points, rail, current quest,
 and hint loss such as "−15p hints" or "no hints". Open a row for team detail.
-The desktop middle pane uses the same list. Team deletion requires confirmation.
+The desktop middle pane uses the same list.
+[PROJECT.md](PROJECT.md#answers-hints-and-score) defines hint loss.
+Its [teams section](PROJECT.md#teams) owns adding and deleting teams.
+Use `muted` for "no hints" and `warn` for a loss.
+
+Status lines depend on team and season state:
+
+- Running: `On <quest>`.
+- Finished: "Finished every quest".
+- Ended, unfinished: `Stopped on <quest>`.
+- Before start: no status line. Hide ranks and sort by name.
+
+Use the admin quest label: internal title, else display title. The current rail segment is blue only while running.
+
+Delete team is a red-outline button at the bottom of the team page, never on a list row.
+It opens a native `<dialog>` with this copy:
+
+- Title: `Delete <name>?`.
+- Body: `Its score and quest history are deleted. Every phone logged in as <name> is logged out.`
+- Buttons: "Cancel" and red "Delete team".
+
+Until #22 adds M4, show the team's row as a summary above Delete team.
+The desktop right pane keeps its placeholder during this interim view.
 
 ## H1: hints at rest and mid-drag
 
@@ -274,6 +296,8 @@ Each quest has a status marker, title and points earned or "Now" in the right co
 Each revealed hint gets its own line below the title: H1/H2 label, truncated text, penalty at right.
 Hint lines never wrap. Mobile ends with the live phone preview; desktop puts that preview in its right pane.
 Keep Reset password secondary. Use the revised admin3 mock, not the earlier M4 design.
+Delete team stays last, below the history and Reset password. Use [M3's delete control and confirmation](#m3-admin-teams).
+Use [PROJECT.md's hint-loss total](PROJECT.md#answers-hints-and-score).
 
 ## Unmocked surfaces
 
