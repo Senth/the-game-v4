@@ -46,6 +46,48 @@ export async function listSeasons(): Promise<Season[]> {
 	return (await collections()).seasons.find().toArray()
 }
 
+export class CopyTargetStartedError extends Error {
+	name = "CopyTargetStartedError"
+
+	constructor(title: string) {
+		super(`${title} has started. Pick another season.`)
+	}
+}
+
+async function writeCopy(seasonId: string, filter: Filter<Season>, update: UpdateFilter<Season>): Promise<void> {
+	const { seasons } = await collections()
+	const now = new Date()
+	const result = await seasons.updateOne(
+		{ ...filter, _id: seasonId, $or: [{ start: null }, { start: { $gt: now } }] },
+		update,
+	)
+	if (result.matchedCount === 0) {
+		const season = await seasons.findOne({ _id: seasonId })
+		if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
+		if (season.start && season.start <= now) throw new CopyTargetStartedError(season.title)
+		throw new NotFoundError(`Arc ${filter["arcs.id"]} not found`)
+	}
+}
+
+export async function copyArcToSeason(seasonId: string, arc: Arc): Promise<void> {
+	await writeCopy(seasonId, {}, { $push: { arcs: Arc.parse(arc) } })
+}
+
+export async function copyQuestToSeason(
+	seasonId: string,
+	target: { arcId: string } | { newArc: Pick<Arc, "title" | "shuffleQuests"> },
+	quest: Quest,
+): Promise<string> {
+	const parsed = Quest.parse(quest)
+	if ("newArc" in target) {
+		const arc = { ...newArc(target.newArc.shuffleQuests), ...target.newArc, quests: [parsed] }
+		await copyArcToSeason(seasonId, arc)
+		return arc.id
+	}
+	await writeCopy(seasonId, { "arcs.id": target.arcId }, { $push: { "arcs.$.quests": parsed } })
+	return target.arcId
+}
+
 export class SeasonStartedError extends Error {
 	name = "SeasonStartedError"
 
