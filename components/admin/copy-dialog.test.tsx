@@ -16,6 +16,11 @@ vi.mock("react", async (importOriginal) => ({
 		if (!hooks.state.has(index)) hooks.state.set(index, initial)
 		return [hooks.state.get(index), (value: unknown) => hooks.state.set(index, value)]
 	},
+	useRef: (initial: unknown) => {
+		const index = hooks.cursor++
+		if (!hooks.state.has(index)) hooks.state.set(index, { current: initial })
+		return hooks.state.get(index)
+	},
 	useEffect: (effect: () => void) => hooks.effects.push(effect),
 }))
 vi.mock("@/app/admin/copy-actions", () => ({ copyArc: vi.fn(), copyQuest: vi.fn(), getCopyDestinations: vi.fn() }))
@@ -57,11 +62,13 @@ type DialogProps = {
 	error?: string | null
 	result?: { label: string; href: string }
 	onConfirm: () => void
+	onClose: () => void
 }
 type ElementProps = {
 	children?: ReactNode
 	value?: string
 	checked?: boolean
+	disabled?: boolean
 	onChange?: (event: { target: { value: string } }) => void
 }
 
@@ -176,6 +183,35 @@ it("keeps dialog open after copy error so another destination can be selected", 
 	expect(changed.html).toContain('checked="" value="summer"')
 })
 
+it("ignores a copy response after the dialog closes and reopens", async () => {
+	let finishOld!: (value: Awaited<ReturnType<typeof copyArc>>) => void
+	let finishCurrent!: (value: Awaited<ReturnType<typeof copyArc>>) => void
+	vi.mocked(copyArc)
+		.mockReturnValueOnce(new Promise((resolve) => (finishOld = resolve)))
+		.mockReturnValueOnce(new Promise((resolve) => (finishCurrent = resolve)))
+	const opened = render()
+	opened.runEffects()
+	await vi.waitFor(() => expect(render().props.disabled).toBe(false))
+	const pending = (render().props.onConfirm as () => Promise<void>)()
+	expect(render().props.disabled).toBe(true)
+	;(render().props.onClose as () => void)()
+	render({ open: false })
+	const reopened = render()
+	reopened.runEffects()
+	await vi.waitFor(() => expect(render().props.disabled).toBe(false))
+	const current = (render().props.onConfirm as () => Promise<void>)()
+	expect(render().props.disabled).toBe(true)
+	finishOld({ ok: true, seasonId: "spring", arcId: "stale" })
+	await pending
+	expect(render().props.title).toBe("Copy Lighthouse")
+	expect(render().props.body).not.toContain("Lighthouse is now")
+	expect(render().props.disabled).toBe(true)
+	expect(render().props.error).toBeNull()
+	finishCurrent({ ok: true, seasonId: "spring", arcId: "current" })
+	await current
+	expect(render().props.title).toBe("Copied to Spring Hunt 2027")
+})
+
 it("shows copied result and destination route", async () => {
 	const view = render()
 	view.runEffects()
@@ -219,6 +255,42 @@ it("shows nested destination arcs and pluralized quest summary", async () => {
 	expect(render(props).props.body).toBe("Fog horn morse is now the last quest in Market.")
 })
 
+it("locks quest targets during copy and reports the submitted arc", async () => {
+	const props = {
+		mode: "quest",
+		quest: { id: "quest-1", label: "Fog horn morse", hintCount: 3 },
+		sourceArc: { id: "arc-1", title: "Lighthouse" },
+	}
+	let finish!: (value: Awaited<ReturnType<typeof copyQuest>>) => void
+	vi.mocked(copyQuest).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+	const opened = render(props)
+	opened.runEffects()
+	await vi.waitFor(() => expect(render(props).props.disabled).toBe(false))
+	find(
+		render(props).props.body,
+		(element) => element.type === "input" && element.props.value === "market",
+	)?.props.onChange?.({
+		target: { value: "market" },
+	})
+	const pending = (render(props).props.onConfirm as () => Promise<void>)()
+	const pendingView = render(props)
+	expect(pendingView.props.disabled).toBe(true)
+	expect(
+		find(pendingView.props.body, (element) => element.type === "input" && element.props.value === "harbour")?.props
+			.disabled,
+	).toBe(true)
+	find(
+		pendingView.props.body,
+		(element) => element.type === "input" && element.props.value === "harbour",
+	)?.props.onChange?.({
+		target: { value: "harbour" },
+	})
+	finish({ ok: true, seasonId: "spring", arcId: "market", questId: "copied-quest" })
+	await pending
+	expect(copyQuest).toHaveBeenCalledWith("source", "quest-1", { seasonId: "spring", arcId: "market" })
+	expect(render(props).props.body).toBe("Fog horn morse is now the last quest in Market.")
+})
+
 it("selects New arc for an arc-less first season and opens copied quest", async () => {
 	const props = {
 		mode: "quest",
@@ -227,7 +299,7 @@ it("selects New arc for an arc-less first season and opens copied quest", async 
 	}
 	vi.mocked(getCopyDestinations).mockResolvedValueOnce({
 		ok: true,
-		destinations: [{ ...destinations[0]!, arcs: [] }],
+		destinations: destinations.slice(0, 1).map((destination) => ({ ...destination, arcs: [] })),
 	})
 	const view = render(props)
 	view.runEffects()

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { copyArc, copyQuest, getCopyDestinations } from "@/app/admin/copy-actions"
 import { formatSeasonDay } from "@/lib/domain/admin-seasons"
 import { ConfirmDialog } from "./confirm-dialog"
@@ -27,9 +27,11 @@ export function CopyDialog(props: CopyDialogProps) {
 	const [error, setError] = useState<string | null>(null)
 	const [copiedTo, setCopiedTo] = useState<Destination | null>(null)
 	const [copiedQuestId, setCopiedQuestId] = useState<string | null>(null)
+	const [copiedQuestArc, setCopiedQuestArc] = useState<string | null>(null)
+	const requestToken = useRef(0)
 	useEffect(() => {
 		if (!open) return
-		let current = true
+		const token = ++requestToken.current
 		setDestinations(null)
 		setSelectedId(null)
 		setQuestTarget(null)
@@ -37,9 +39,10 @@ export function CopyDialog(props: CopyDialogProps) {
 		setError(null)
 		setCopiedTo(null)
 		setCopiedQuestId(null)
+		setCopiedQuestArc(null)
 		void getCopyDestinations(sourceSeasonId)
 			.then((result) => {
-				if (!current) return
+				if (token !== requestToken.current) return
 				if (!result.ok) {
 					setError(result.error)
 					return
@@ -50,10 +53,10 @@ export function CopyDialog(props: CopyDialogProps) {
 				setQuestTarget(first ? { seasonId: first.id, arcId: first.arcs[0]?.id ?? null } : null)
 			})
 			.catch(() => {
-				if (current) setError("Not saved, retry")
+				if (token === requestToken.current) setError("Not saved, retry")
 			})
 		return () => {
-			current = false
+			if (token === requestToken.current) requestToken.current += 1
 		}
 	}, [open, sourceSeasonId])
 
@@ -83,7 +86,7 @@ export function CopyDialog(props: CopyDialogProps) {
 		props.mode === "arc" ? (
 			`${label} is now the last arc there, with ${props.arc.quests.length} new ${props.arc.quests.length === 1 ? "quest" : "quests"}.`
 		) : (
-			`${label} is now the last quest in ${selectedQuestArc ?? sourceArcTitle}.`
+			`${label} is now the last quest in ${copiedQuestArc ?? sourceArcTitle}.`
 		)
 	) : props.mode === "arc" ? (
 		<div>
@@ -111,6 +114,7 @@ export function CopyDialog(props: CopyDialogProps) {
 										value={destination.id}
 										checked={selectedId === destination.id}
 										className="size-4 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+										disabled={pending}
 										onChange={() => setSelectedId(destination.id)}
 									/>
 									<span className="min-w-0 flex-1">
@@ -171,6 +175,7 @@ export function CopyDialog(props: CopyDialogProps) {
 														value={arc.id}
 														checked={checked}
 														className="size-4 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+														disabled={pending}
 														onChange={() => setQuestTarget({ seasonId: destination.id, arcId: arc.id })}
 													/>
 													<span className="min-w-0 flex-1">{arc.title}</span>
@@ -186,6 +191,7 @@ export function CopyDialog(props: CopyDialogProps) {
 												value={`new:${destination.id}`}
 												checked={questTarget?.seasonId === destination.id && questTarget.arcId === null}
 												className="size-4 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+												disabled={pending}
 												onChange={() => setQuestTarget({ seasonId: destination.id, arcId: null })}
 											/>
 											<span className="min-w-0 flex-1">
@@ -210,13 +216,17 @@ export function CopyDialog(props: CopyDialogProps) {
 
 	async function submit() {
 		if (!selected || !canSubmit || pending) return
+		const token = requestToken.current
+		const submittedDestination = selected
+		const submittedQuestArc = selectedQuestArc ?? sourceArcTitle
 		setPending(true)
 		setError(null)
 		try {
 			if (props.mode === "arc") {
 				const result = await copyArc(sourceSeasonId, props.arc.id, selected.id)
+				if (token !== requestToken.current) return
 				if (!result.ok) setError(result.error)
-				else setCopiedTo(selected)
+				else setCopiedTo(submittedDestination)
 			} else {
 				if (!questTarget) return
 				const result = await copyQuest(
@@ -226,17 +236,24 @@ export function CopyDialog(props: CopyDialogProps) {
 						? { seasonId: questTarget.seasonId, newArc: true }
 						: { seasonId: questTarget.seasonId, arcId: questTarget.arcId },
 				)
+				if (token !== requestToken.current) return
 				if (!result.ok) setError(result.error)
 				else {
-					setCopiedTo(selected)
+					setCopiedTo(submittedDestination)
 					setCopiedQuestId(result.questId)
+					setCopiedQuestArc(submittedQuestArc)
 				}
 			}
 		} catch {
-			setError("Not saved, retry")
+			if (token === requestToken.current) setError("Not saved, retry")
 		} finally {
-			setPending(false)
+			if (token === requestToken.current) setPending(false)
 		}
+	}
+
+	function close() {
+		requestToken.current += 1
+		onClose()
 	}
 
 	const empty = destinations !== null && destinations.length === 0
@@ -263,7 +280,7 @@ export function CopyDialog(props: CopyDialogProps) {
 					: undefined
 			}
 			onConfirm={() => void submit()}
-			onClose={onClose}
+			onClose={close}
 		/>
 	)
 }
