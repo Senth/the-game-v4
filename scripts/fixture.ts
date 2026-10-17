@@ -382,7 +382,7 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 		const progress = order.slice(0, solved + 1).map((questId, index): TeamQuestProgress => {
 			const { hints, points } = quests.get(questId) as Quest
 			const hintsRevealed = hints.slice(0, reveals[questId] ?? 0).map((hint, hintIndex) => ({
-				hintId: hint.id,
+				hintId: _id === "team-lagom" && questId === "backwards-log" ? "backwards-log-deleted-hint" : hint.id,
 				text: hint.text,
 				points: hint.points,
 				revealedAt: new Date(start + index * step + ((hintIndex + 1) * step) / 4),
@@ -391,6 +391,20 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 			const pointsEarned = (points ?? 0) - hintPenalty(hintsRevealed)
 			return { questId, solvedAt: new Date(start + (index + 1) * step), hintsRevealed, pointsEarned }
 		})
+		if (_id === "team-lagom") {
+			progress.push({
+				questId: "removed-quest",
+				pointsEarned: 0,
+				hintsRevealed: [
+					{
+						hintId: "removed-quest-h1",
+						text: "Look beneath the old pier.",
+						points: 5,
+						revealedAt: new Date(start + step / 8),
+					},
+				],
+			})
+		}
 		return {
 			_id,
 			name,

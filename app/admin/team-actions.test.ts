@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { requireTeam } from "@/lib/auth/guards"
+import { joinToken, verifyJoinToken } from "@/lib/auth/join"
 import { verifyPassword } from "@/lib/auth/password"
 import { getSession } from "@/lib/auth/session"
 import { collections } from "@/lib/db/collections"
@@ -9,9 +10,12 @@ import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { publish } from "@/lib/events/bus"
 import { allowedChannels, authorizeChannels } from "@/lib/events/channels"
 import { useTestDb } from "@/test/db"
-import { createTeamAction, deleteTeamAction } from "./team-actions"
+import { createTeamAction, deleteTeamAction, resetTeamPasswordAction } from "./team-actions"
 
-vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }))
+vi.mock("@/lib/auth/session", async (original) => ({
+	...(await original<typeof import("@/lib/auth/session")>()),
+	getSession: vi.fn(),
+}))
 vi.mock("@/lib/events/bus", async (original) => ({
 	...(await original<typeof import("@/lib/events/bus")>()),
 	publish: vi.fn(),
@@ -76,9 +80,13 @@ beforeEach(async () => {
 
 afterEach(() => vi.useRealTimers())
 
-describe.each(["create", "delete"] as const)("%s team action", (action) => {
+describe.each(["create", "delete", "reset"] as const)("%s team action", (action) => {
 	const run = (seasonId = "season", teamId = "team") =>
-		action === "create" ? createTeamAction(seasonId, {}, form()) : deleteTeamAction(seasonId, teamId)
+		action === "create"
+			? createTeamAction(seasonId, {}, form())
+			: action === "delete"
+				? deleteTeamAction(seasonId, teamId)
+				: resetTeamPasswordAction(seasonId, teamId, {}, form())
 
 	it.each([{}, { kind: "team", id: "team" }, { kind: "admin", id: "missing" }])(
 		"refuses session %j before validation or writes",
@@ -104,7 +112,10 @@ describe.each(["create", "delete"] as const)("%s team action", (action) => {
 		await setup()
 		const team = await existing()
 		const error = new Error("Database unavailable")
-		vi.spyOn(teams, action === "create" ? "createTeam" : "deleteTeam").mockRejectedValueOnce(error)
+		vi.spyOn(
+			teams,
+			action === "create" ? "createTeam" : action === "delete" ? "deleteTeam" : "setTeamField",
+		).mockRejectedValueOnce(error)
 		await expect(run("season", team._id)).rejects.toBe(error)
 		expect(publish).not.toHaveBeenCalled()
 	})
@@ -186,6 +197,69 @@ describe("createTeamAction", () => {
 	it("rejects a missing season without writing", async () => {
 		expect(await createTeamAction("missing", {}, form())).toEqual({ ok: false, error: "Season missing not found" })
 		expect(await teams.listTeams("missing")).toEqual([])
+		expect(publish).not.toHaveBeenCalled()
+	})
+})
+
+describe("resetTeamPasswordAction", () => {
+	it.each([null, now, new Date(now.getTime() - 7_200_000)])(
+		"resets at start %j, keeps sessions and progress, invalidates old join tokens and publishes once",
+		async (start) => {
+			await setup(start)
+			await createTeamAction("season", {}, form())
+			const [team] = await teams.listTeams("season")
+			if (!team) throw new Error("expected team")
+			const token = joinToken(team)
+			expect(await verifyJoinToken(token)).toEqual(team)
+			vi.mocked(publish).mockClear()
+			expect(await resetTeamPasswordAction("season", team._id, {}, form("", "abcd"))).toEqual({ ok: true })
+			const updated = await teams.getTeam(team._id)
+			if (!updated) throw new Error("expected team")
+			expect(updated).toEqual({ ...team, passwordHash: expect.any(String) })
+			expect(await verifyPassword("abcd", updated.passwordHash)).toBe(true)
+			expect(await verifyPassword("ninjas", updated.passwordHash)).toBe(false)
+			expect(await verifyJoinToken(token)).toBeNull()
+			expect(await verifyJoinToken(joinToken(updated))).toEqual(updated)
+			expect(vi.mocked(publish).mock.calls).toEqual([[`team:${team._id}`]])
+			vi.mocked(getSession).mockResolvedValueOnce({ kind: "team", id: team._id } as Awaited<
+				ReturnType<typeof getSession>
+			>)
+			expect(await requireTeam()).toEqual(updated)
+		},
+	)
+
+	it("rejects short, missing and file passwords without writing or publishing", async () => {
+		const team = await existing()
+		const file = form()
+		file.set("password", new Blob(["secret"]), "password.txt")
+		for (const [data, error] of [
+			[form("", "abc"), "Passwords need at least 4 characters."],
+			[new FormData(), "Passwords need at least 4 characters."],
+			[file, "Invalid value."],
+		] as const) {
+			expect(await resetTeamPasswordAction("season", team._id, {}, data)).toEqual({ ok: false, error })
+		}
+		expect(await teams.getTeam(team._id)).toEqual(team)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each(["", null, 42])("validates team id %j", async (invalid) => {
+		expect(await resetTeamPasswordAction("season", invalid as string, {}, form())).toEqual({
+			ok: false,
+			error: "Invalid value.",
+		})
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("refuses missing and other-season teams without writing or publishing", async () => {
+		const other = await existing("other")
+		for (const teamId of [other._id, "missing"]) {
+			expect(await resetTeamPasswordAction("season", teamId, {}, form())).toEqual({
+				ok: false,
+				error: `Team ${teamId} not found`,
+			})
+		}
+		expect(await teams.getTeam(other._id)).toEqual(other)
 		expect(publish).not.toHaveBeenCalled()
 	})
 })

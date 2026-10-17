@@ -1,18 +1,23 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { DeleteTeamButton } from "@/components/admin/delete-team-button"
+import { ResetPassword } from "@/components/admin/reset-password"
 import { TeamHeader } from "@/components/admin/team-header"
-import { TeamRow } from "@/components/admin/teams-list"
+import { TeamHistory } from "@/components/admin/team-history"
+import { TeamPreview } from "@/components/admin/team-preview"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
-import { adminTeamRows } from "@/lib/domain/admin-teams"
 import { buildFixture } from "@/scripts/fixture"
 import TeamPage from "./page"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn() }))
 vi.mock("@/lib/db/teams", () => ({ listSeasonTeams: vi.fn() }))
-vi.mock("@/app/admin/team-actions", () => ({ createTeamAction: vi.fn(), deleteTeamAction: vi.fn() }))
+vi.mock("@/app/admin/team-actions", () => ({
+	createTeamAction: vi.fn(),
+	deleteTeamAction: vi.fn(),
+	resetTeamPasswordAction: vi.fn(),
+}))
 
 const now = new Date("2026-10-11T17:00:00Z")
 const { season, teams } = buildFixture(now)
@@ -25,7 +30,7 @@ beforeEach(() => {
 	vi.useFakeTimers()
 	vi.setSystemTime(now)
 	vi.mocked(getSeason).mockResolvedValue(season)
-	vi.mocked(listSeasonTeams).mockResolvedValue(teams.map((team) => ({ ...team, passwordHash: "secret-password-hash" })))
+	vi.mocked(listSeasonTeams).mockResolvedValue(teams)
 })
 afterEach(() => vi.useRealTimers())
 
@@ -64,19 +69,21 @@ it("redirects missing season without reading teams", async () => {
 	expect(listSeasonTeams).not.toHaveBeenCalled()
 })
 
-it("composes phone header, ranked safe summary and separated delete control", async () => {
+it("composes header, safe history, reset, delete control and phone-only preview in reading order", async () => {
 	const page = await TeamPage(props)
-	const [header, summary, footer] = page.props.children
+	const [header, summary, reset, footer, preview] = page.props.children
 	expect(header.type).toBe(TeamHeader)
 	expect(header.props).toEqual({ seasonId: season._id, name: "Ninjas" })
-	expect(summary.type).toBe(TeamRow)
-	expect(summary.props).toEqual({
-		seasonId: season._id,
-		row: adminTeamRows(season, teams, now).find((row) => row.id === team._id),
-		summary: true,
-	})
+	expect(summary.type).toBe(TeamHistory)
+	expect(summary.props).toEqual({ season, team, now: now.getTime() })
+	expect(reset.type).toBe(ResetPassword)
+	expect(reset.key).toBe(team._id)
+	expect(reset.props).toEqual({ seasonId: season._id, teamId: team._id })
 	expect(footer.props.className).toContain("border-t")
 	expect(footer.props.children.type).toBe(DeleteTeamButton)
 	expect(footer.props.children.props).toEqual({ seasonId: season._id, teamId: team._id, name: "Ninjas" })
+	expect(preview.props.className).toContain("lg:hidden")
+	expect(preview.props.children.type).toBe(TeamPreview)
+	expect(preview.props.children.props).toEqual({ season, team, teams, now: now.getTime() })
 	expect(JSON.stringify(page)).not.toContain("passwordHash")
 })

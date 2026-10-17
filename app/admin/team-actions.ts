@@ -2,10 +2,11 @@
 
 import { z } from "zod"
 import { requireAdmin } from "@/lib/auth/guards"
-import { createSeasonTeam } from "@/lib/auth/register"
+import { hashPassword } from "@/lib/auth/password"
+import { createSeasonTeam, passwordError } from "@/lib/auth/register"
 import { NotFoundError } from "@/lib/db/collections"
 import { getSeason } from "@/lib/db/seasons"
-import { deleteTeam, getTeam } from "@/lib/db/teams"
+import { deleteTeam, getTeam, setTeamField } from "@/lib/db/teams"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
 import { type ActionResult, actionFailure } from "./action-result"
 
@@ -44,6 +45,29 @@ export async function createTeamAction(
 	} catch (error) {
 		return actionFailure(error, now)
 	}
+}
+
+export async function resetTeamPasswordAction(
+	seasonId: string,
+	teamId: string,
+	_state: CreateTeamState,
+	formData: FormData,
+): Promise<ActionResult> {
+	await requireAdmin()
+	const now = new Date()
+	try {
+		id.parse(seasonId)
+		const team = await getTeam(id.parse(teamId))
+		if (!team || team.seasonId !== seasonId) throw new NotFoundError(`Team ${teamId} not found`)
+		const password = z.string().parse(formData.get("password") ?? "")
+		const error = passwordError(password)
+		if (error) return { ok: false, error: errors[error] }
+		await setTeamField(teamId, "passwordHash", await hashPassword(password))
+	} catch (error) {
+		return actionFailure(error, now)
+	}
+	publish(teamChannel(teamId))
+	return { ok: true }
 }
 
 export async function deleteTeamAction(seasonId: string, teamId: string): Promise<ActionResult> {

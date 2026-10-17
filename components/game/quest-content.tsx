@@ -63,21 +63,28 @@ function CodeFence({ children }: { children?: ReactNode }) {
 	return <pre>{children}</pre>
 }
 
-export function QuestContent({ quest }: { quest: Pick<PlayerQuest, "displayTitle" | "assetPath" | "content"> }) {
+export function QuestContent({
+	quest,
+	preview = false,
+}: {
+	quest: Pick<PlayerQuest, "displayTitle" | "assetPath" | "content">
+	preview?: boolean
+}) {
 	const pdf = quest.assetPath?.toLowerCase().endsWith(".pdf")
+	const PdfLink = preview ? "span" : "a"
 	return (
-		<section>
+		<section inert={preview}>
 			<h1 className="mb-4 font-head text-2xl font-medium text-head">{quest.displayTitle}</h1>
 			{quest.assetPath &&
 				(pdf ? (
-					<a
-						href={quest.assetPath}
-						target="_blank"
-						rel="noopener noreferrer"
+					<PdfLink
+						href={preview ? undefined : quest.assetPath}
+						target={preview ? undefined : "_blank"}
+						rel={preview ? undefined : "noopener noreferrer"}
 						className="inline-flex min-h-11 items-center font-cond text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-link active:text-head"
 					>
 						Open PDF
-					</a>
+					</PdfLink>
 				) : (
 					// biome-ignore lint/performance/noImgElement: Authored assets have no stored dimensions and must retain their intrinsic aspect ratio.
 					<img
@@ -89,7 +96,13 @@ export function QuestContent({ quest }: { quest: Pick<PlayerQuest, "displayTitle
 			<div
 				className={`${quest.assetPath ? "mt-4 " : ""}break-words leading-relaxed [&_p+p]:mt-3 [&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-field [&_pre]:p-3 [&_pre]:text-sm [&_pre:focus-visible]:outline-2 [&_pre:focus-visible]:outline-link [&_img]:h-auto [&_img]:max-h-[70vh] [&_img]:max-w-full [&_img]:rounded-md [&_img]:object-contain [&_a]:text-link [&_a:hover]:underline [&_h1]:font-head [&_h1]:text-2xl [&_h1]:text-head [&_h2]:mt-5 [&_h2]:font-head [&_h2]:text-xl [&_h2]:text-head [&_h3]:mt-4 [&_h3]:font-head [&_h3]:text-lg [&_h3]:text-head [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-z2 [&_blockquote]:pl-4 [&_blockquote]:text-muted`}
 			>
-				<Markdown rehypePlugins={[rehypeRaw]} components={{ pre: CodeFence }}>
+				<Markdown
+					rehypePlugins={[rehypeRaw]}
+					components={{
+						pre: CodeFence,
+						a: preview ? ({ children }) => <span className="text-link">{children}</span> : undefined,
+					}}
+				>
 					{quest.content}
 				</Markdown>
 			</div>

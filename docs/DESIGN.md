@@ -84,7 +84,7 @@ Code fences use Shiki; the authoring textarea can use the platform monospace fon
 Extend those shared implementations rather than copying layouts into routes.
 Desktop reuses the mobile quests, teams and team-history components in its middle pane.
 Desktop phone frame and mobile Edit/Preview render the real player components, not a second rendering system.
-With a team open, the desktop preview shows that team's current quest.
+With a team open, the desktop preview follows [M4's team preview rules](#m4-admin-team-history).
 
 ### Quest preview
 
@@ -143,8 +143,8 @@ primary action is editing the content; read first the display title, second cont
 must not look like a CMS with a Save bar.
 
 Use the season tree on the left, form in the middle, phone preview on the right.
-Season title and live controls are in the top bar. Selecting a team replaces the middle form with team history
-and shows that team's current quest in the right preview. Shared mobile views provide the middle-pane content.
+Season title and live controls are in the top bar. Selecting a team opens [M4's history and preview](#m4-admin-team-history).
+Shared mobile views provide the middle-pane content.
 Use H1/H2 hint interaction instead of D1's always-open hint inputs.
 The seasons menu replaces D1's "Seasons /" breadcrumb.
 
@@ -258,8 +258,7 @@ It opens a native `<dialog>` with this copy:
 - Body: `Its score and quest history are deleted. Every phone logged in as <name> is logged out.`
 - Buttons: "Cancel" and red "Delete team".
 
-Until #22 adds M4, show the team's row as a summary above Delete team.
-The desktop right pane keeps its placeholder during this interim view.
+Team detail follows [M4's history, actions and preview](#m4-admin-team-history).
 
 ## H1: hints at rest and mid-drag
 
@@ -291,13 +290,44 @@ Surface brief: job is understanding one team's game and what they see right now;
 primary action is none (read-only plus reset password); read first score and pace, second the quest list,
 third the preview; must not wrap hint lines.
 
-Show score, solved count, hint loss and pace. Group quests by arcs in authored order.
-Each quest has a status marker, title and points earned or "Now" in the right column.
-Each revealed hint gets its own line below the title: H1/H2 label, truncated text, penalty at right.
-Hint lines never wrap. Mobile ends with the live phone preview; desktop puts that preview in its right pane.
-Keep Reset password secondary. Use the revised admin3 mock, not the earlier M4 design.
-Delete team stays last, below the history and Reset password. Use [M3's delete control and confirmation](#m3-admin-teams).
-Use [PROJECT.md's hint-loss total](PROJECT.md#answers-hints-and-score).
+Show score, `N / M solved`, then `−Np from hints` in `warn` or muted "No hints", then the state line.
+Use [PROJECT.md's hint-loss total](PROJECT.md#answers-hints-and-score) and [pace rules](PROJECT.md#pace).
+Show no rank.
+
+- Running: "N behind pace", "N ahead of pace" or "On pace", in the pace band's color.
+- Before start: muted "Not started".
+- Ended, unfinished: muted "Game ended".
+- Finished, during or after play: "Finished" in `pace-ok`.
+
+Group quests by arcs in authored order. Use [M3's admin quest label](#m3-admin-teams).
+Each quest has a status marker, title and earnings or status in the right column.
+
+- Solved: ✓ and `+Np`.
+- Current while running: blue dot, accent tint and "Now".
+- After end: the unfinished current quest has a hollow ring and muted "Stopped", without tint.
+- Unreached: a `z2` dot.
+
+Each revealed hint gets one line below the title, with its label, truncated snapshot text and snapshot penalty at right.
+Hint lines never wrap. Labels use the hint's position in the quest, H1/H2, matching Intel's numbers.
+A hint deleted since reveal reads "H?". Sort by position, with unknown positions last.
+
+Quests removed during play follow the arcs in a muted "Removed during play" group. Keep their hint lines.
+Rows read "Removed quest", with × and "Skipped · 0p", or ✓ and `+Np` if solved before removal.
+
+Reset password is a quiet link below the history. It opens a visible-text field, Cancel and an outline "Set password".
+Label the field "Reset password". Helper copy: "Phones already logged in stay in. Old QR links stop working."
+Success closes the field and shows muted "Password changed." beside the link until reopening or leaving the page.
+Cancel and Escape close without saving and clear the input. Use [PROJECT.md's password-reset rules](PROJECT.md#teams).
+
+Phone order is stats, history, Reset password, Delete team, then preview.
+Delete team is last in the history, above the preview. Use [M3's delete control and confirmation](#m3-admin-teams).
+Desktop keeps stats, history and actions in the middle pane, with preview only in the right pane, replacing its placeholder.
+
+The preview heading is `What <team> see now`, with muted "live".
+Render the team's real screen, including waiting, countdown, "Time's up." and "You solved every quest." states.
+While running, show the team's quest, revealed hints, pace and standings strip.
+Hints and the answer dock stay inert. The standings strip and "Standings ›" are not links.
+Hide Log out and the QR code. Use the real player header, not the mock iframe's superseded pace wording.
 
 ## Unmocked surfaces
 

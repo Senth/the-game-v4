@@ -26,6 +26,7 @@ vi.mock("react", async (importOriginal) => {
 	}
 })
 vi.mock("@/app/actions", () => ({ getGame: vi.fn(), submitAnswer: vi.fn(), revealHint: vi.fn() }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("@/lib/events/use-live-state", () => ({
 	useLiveState: (_fetcher: unknown, _channels: unknown, initial: PlayerGame) => [initial, hooks.setGame],
 }))

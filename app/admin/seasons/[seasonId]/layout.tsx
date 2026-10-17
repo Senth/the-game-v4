@@ -12,7 +12,7 @@ import { SeasonMenuLinks, SeasonTabs } from "@/components/admin/season-tabs"
 import { SeasonTree } from "@/components/admin/season-tree"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason, listSeasons } from "@/lib/db/seasons"
-import { countTeams } from "@/lib/db/teams"
+import { listSeasonTeams } from "@/lib/db/teams"
 import { liveControls } from "@/lib/domain/admin-seasons"
 import { treeView } from "@/lib/domain/season-tree"
 
@@ -21,7 +21,8 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 	const { seasonId } = await params
 	const season = await getSeason(seasonId)
 	if (!season) notFound()
-	const [seasons, teamCount] = await Promise.all([listSeasons(), countTeams(seasonId)])
+	const [seasons, teams] = await Promise.all([listSeasons(), listSeasonTeams(seasonId)])
+	const teamCount = teams.length
 	const now = Date.now()
 	const status = <SeasonStatus start={season.start} end={season.end} now={now} />
 	const controls = (
@@ -78,6 +79,7 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 				preview={
 					<SeasonPreview
 						season={{ start: season.start, end: season.end, lengthMinutes: season.lengthMinutes, arcs: season.arcs }}
+						teams={teams}
 						now={now}
 					/>
 				}

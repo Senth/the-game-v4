@@ -132,7 +132,7 @@ function provider(state = scope(), timing = { start: null as Date | null, end: n
 
 const moveFirst = (items: string[], id: string) => [id, ...items.filter((item) => item !== id)]
 
-it.each(["list", "summary"])(
+it.each(["list", "history"])(
 	"refreshes server-derived team %s at clock boundaries without SSE events",
 	async (surface) => {
 		const now = Date.now()
@@ -155,6 +155,7 @@ it.each(["list", "summary"])(
 		expect(html).not.toContain('aria-current="step"')
 		expect(html).not.toContain("w-5 shrink-0 text-xs text-muted")
 		expect(html).not.toContain("On <span")
+		if (surface === "history") expect(html).toContain("Not started")
 		tick()
 		expect(hooks.refresh).not.toHaveBeenCalled()
 		await vi.advanceTimersByTimeAsync(2000)
@@ -163,8 +164,14 @@ it.each(["list", "summary"])(
 		page = await load()
 		html = markup()
 		expect(html).toContain('aria-current="step"')
-		expect(html).toContain("w-5 shrink-0 text-xs text-muted")
-		expect(html).toContain("On <span")
+		if (surface === "list") {
+			expect(html).toContain("w-5 shrink-0 text-xs text-muted")
+			expect(html).toContain("On <span")
+		} else {
+			expect(html).not.toContain("w-5 shrink-0 text-xs text-muted")
+			expect(html).toContain('aria-label="Current"')
+			expect(html).toContain(">Now<")
+		}
 		timing.now = Date.now()
 		tick()
 		await vi.advanceTimersByTimeAsync(1000)
@@ -177,7 +184,12 @@ it.each(["list", "summary"])(
 		html = markup()
 		expect(html).not.toContain('aria-current="step"')
 		expect(html).not.toContain("On <span")
-		expect(html).toContain("Stopped on <span")
+		if (surface === "list") expect(html).toContain("Stopped on <span")
+		else {
+			expect(html).toContain("Game ended")
+			expect(html).toContain('aria-label="Stopped"')
+			expect(html).not.toContain(">Now<")
+		}
 		expect(hooks.connection.start).toHaveBeenCalledOnce()
 		expect(vi.getTimerCount()).toBe(0)
 		unmount(state)
@@ -242,7 +254,7 @@ it.each(["direct", "via placeholder"])(
 		}
 		const layout = scope()
 		let preview = scope()
-		const frame = () => render(layout, () => SeasonPreview({ season, now }))
+		const frame = () => render(layout, () => SeasonPreview({ season, teams: [], now }))
 		const timeLeft = () => {
 			const element = frame() as ReactElement<Parameters<typeof QuestPreview>[0]>
 			const result = render(preview, () => QuestPreview(element.props))

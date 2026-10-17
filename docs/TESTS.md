@@ -71,6 +71,9 @@ The names and representative standings come from S1:
 Ninjas is currently on Backwards log, with display title "The keeper's last log" and answers
 `["lighthouse", "fyren"]`. Give it content, an asset and hints at 5, 10 and 20 points, with the first revealed.
 Retain revealed hints on solved quests too, so M1 completion/revealer chips and M4 history have real records.
+Lagom has a removed, skipped quest with one 5-point hint snapshot and no earned points.
+Its solved Backwards log has a deleted-hint snapshot, already charged against that quest's 15 earned points.
+Lagom stays at 70 points, with the same standings order. Ninjas is unchanged.
 Fixture scores and progress must be internally consistent with PROJECT.md; mock numbers are illustrative,
 not separate scoring rules. M3 and M4 use different illustrative hint-loss totals.
 

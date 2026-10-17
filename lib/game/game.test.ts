@@ -1,9 +1,20 @@
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import * as actions from "@/app/actions"
+import { TeamPreview } from "@/components/admin/team-preview"
 import { registerTeam } from "@/lib/auth/register"
 import { collections } from "@/lib/db/collections"
 import { createSeason, setRegistrationOpen, setSeasonField } from "@/lib/db/seasons"
-import { createTeam, fillQuestOrders, getTeam, listTeams, setTeamField, solveCurrentQuest } from "@/lib/db/teams"
+import {
+	createTeam,
+	fillQuestOrders,
+	getTeam,
+	listSeasonTeams,
+	listTeams,
+	setTeamField,
+	solveCurrentQuest,
+} from "@/lib/db/teams"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { publicBoard } from "@/lib/domain/player-game"
 import type { Season, Team } from "@/lib/domain/schemas"
@@ -218,6 +229,55 @@ describe("loader snapshots", () => {
 })
 
 describe("submitAnswer", () => {
+	it("refreshes the admin team preview through the season channel within 1 second of a player solve", async () => {
+		const team = await freshTeam()
+		const preview = async () => {
+			const teams = await listSeasonTeams(season._id)
+			const fresh = teams.find((candidate) => candidate._id === team._id)
+			if (!fresh) throw new Error("Missing preview team")
+			const props = { season, team: fresh, teams, now: now.getTime() }
+			expect(JSON.stringify(props)).not.toContain("passwordHash")
+			return renderToStaticMarkup(createElement(TeamPreview, props))
+		}
+		expect(await preview()).toContain("Start from the bottom.")
+		const received = Promise.withResolvers<string>()
+		const source = {
+			readyState: 1,
+			close: vi.fn(),
+			onopen: null,
+			onmessage: null as (() => void) | null,
+			onerror: null,
+		}
+		const connection = createLiveConnection({
+			url: `/api/events?channel=${seasonChannel(season._id)}`,
+			fetcher: preview,
+			onData: received.resolve,
+			createEventSource: () => source,
+		})
+		connection.start()
+		const unsubscribe = subscribe([seasonChannel(season._id)], () => source.onmessage?.())
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const deadline = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error("Admin team preview did not advance within 1 second")), 1000)
+		})
+		try {
+			const html = await Promise.race([
+				submitAnswer(team, current, secretAnswer(current), now).then((result) => {
+					expect(result).toMatchObject({ ok: true, correct: true })
+					return received.promise
+				}),
+				deadline,
+			])
+			const quest = season.arcs.flatMap((arc) => arc.quests).find((quest) => quest.id === next)
+			expect(html).toContain(quest?.displayTitle ?? "Missing next quest")
+			expect(html).not.toContain("Start from the bottom.")
+		} finally {
+			clearTimeout(timer)
+			unsubscribe()
+			connection.stop()
+		}
+	})
+
 	it("advances two sessions of the same team through live events within 1 second", async () => {
 		const team = await freshTeam()
 		const sessions = [0, 1].map(() => {
