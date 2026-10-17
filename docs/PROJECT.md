@@ -257,6 +257,7 @@ Structural edits require confirmation that names how many teams are affected:
 
 Copying an arc into an unstarted season creates independent quests with new ids.
 Admin live quest stats show completion and revealers only while running; hide before start and after end.
+N counts teams that solved the quest. M counts teams whose order includes it, or whose order is not built yet.
 Hint-editor "Revealed by" chips are hidden until the season has started.
 Team views retain per-quest revealed hints and earnings after solving.
 

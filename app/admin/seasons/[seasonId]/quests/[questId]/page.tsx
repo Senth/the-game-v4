@@ -6,7 +6,7 @@ import { QuestPreview } from "@/components/admin/quest-preview"
 import { QuestViewToggle } from "@/components/admin/quest-view-toggle"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
-import { listTeams } from "@/lib/db/teams"
+import { listSeasonTeams } from "@/lib/db/teams"
 import { hintRevealers } from "@/lib/domain/hints"
 import { questLabel } from "@/lib/domain/season-tree"
 
@@ -18,7 +18,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 	const quest = arc?.quests.find((quest) => quest.id === questId)
 	if (!season || !arc || !quest) redirect(`/admin/seasons/${seasonId}`)
 	const label = questLabel(quest)
-	const revealers = hintRevealers(await listTeams(seasonId), questId)
+	const revealers = hintRevealers(await listSeasonTeams(seasonId), questId)
 	const now = Date.now()
 	return (
 		<>

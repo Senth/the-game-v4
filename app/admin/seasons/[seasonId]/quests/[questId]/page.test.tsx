@@ -5,14 +5,14 @@ import { QuestPreview } from "@/components/admin/quest-preview"
 import { QuestViewToggle } from "@/components/admin/quest-view-toggle"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
-import { listTeams } from "@/lib/db/teams"
+import { listSeasonTeams } from "@/lib/db/teams"
 import { hintRevealers } from "@/lib/domain/hints"
 import { buildFixture } from "@/scripts/fixture"
 import QuestPage from "./page"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn() }))
-vi.mock("@/lib/db/teams", () => ({ listTeams: vi.fn() }))
+vi.mock("@/lib/db/teams", () => ({ listSeasonTeams: vi.fn() }))
 
 const fixture = buildFixture(new Date("2026-10-12T17:00:00Z"))
 const season = fixture.season
@@ -29,14 +29,14 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	vi.mocked(requireAdmin).mockResolvedValue({ _id: "admin", name: "admin", passwordHash: "hash" })
 	vi.mocked(getSeason).mockResolvedValue(season)
-	vi.mocked(listTeams).mockResolvedValue(fixture.teams.map((team) => ({ ...team, passwordHash: "hash" })))
+	vi.mocked(listSeasonTeams).mockResolvedValue(fixture.teams)
 })
 
 it("requires admin before reading quest data", async () => {
 	vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
 	await expect(QuestPage(props)).rejects.toThrow("Unauthorized")
 	expect(getSeason).not.toHaveBeenCalled()
-	expect(listTeams).not.toHaveBeenCalled()
+	expect(listSeasonTeams).not.toHaveBeenCalled()
 })
 
 it.each(["season", "arc", "quest"])("redirects to the Quests tab when %s disappears", async (missing) => {
@@ -100,7 +100,7 @@ it("selects the quest's own arc and passes editor fields without hints across th
 		quest,
 		now: titles.props.now,
 	})
-	expect(listTeams).toHaveBeenCalledExactlyOnceWith(season._id)
+	expect(listSeasonTeams).toHaveBeenCalledExactlyOnceWith(season._id)
 })
 
 it.each([
@@ -145,7 +145,7 @@ it.each(["unstarted", "live", "ended"])(
 		expect(hints.props.now).toEqual(expect.any(Number))
 		expect(hints.props).not.toHaveProperty("teams")
 		expect(JSON.stringify(hints.props)).not.toContain("passwordHash")
-		expect(listTeams).toHaveBeenCalledExactlyOnceWith(season._id)
+		expect(listSeasonTeams).toHaveBeenCalledExactlyOnceWith(season._id)
 	},
 )
 
