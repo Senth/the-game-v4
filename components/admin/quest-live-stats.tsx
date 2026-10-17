@@ -3,10 +3,16 @@ import type { QuestLiveStats } from "@/lib/domain/quest-stats"
 import type { Hint } from "@/lib/domain/schemas"
 import { outlineClass } from "./confirm-dialog"
 
-export function QuestCompletion({ stats }: { stats: Pick<QuestLiveStats, "done" | "total"> }) {
+export function QuestCompletion({
+	stats,
+	wide = false,
+}: {
+	stats: Pick<QuestLiveStats, "done" | "total">
+	wide?: boolean
+}) {
 	return (
-		<span className="mt-1 flex items-center gap-2">
-			<span aria-hidden="true" className="h-1 w-20 overflow-hidden rounded-full bg-z2">
+		<span className={wide ? "flex items-center gap-2" : "mt-1 flex items-center gap-2"}>
+			<span aria-hidden="true" className={`h-1 ${wide ? "w-40" : "w-20"} overflow-hidden rounded-full bg-z2`}>
 				<span
 					className="block h-full bg-pace-ok"
 					style={{ width: `${stats.total ? Math.min(100, (stats.done / stats.total) * 100) : 0}%` }}
@@ -23,13 +29,22 @@ export function QuestLiveStatsBlock({
 	stats,
 	hints,
 	editHref,
+	variant,
 }: {
 	stats: QuestLiveStats
 	hints: Hint[]
 	editHref?: string
+	variant?: "desktop"
 }) {
+	const desktop = variant === "desktop"
 	return (
-		<div className="space-y-4 bg-z1/50 px-4 pt-3 pb-4 font-body">
+		<div className={`space-y-4 bg-z1/50 px-4 font-body ${desktop ? "mb-8 rounded-md py-4" : "pt-3 pb-4"}`}>
+			{desktop && (
+				<div className="flex items-center gap-3">
+					<span className="font-cond text-xs uppercase tracking-wider text-muted">Live</span>
+					<QuestCompletion stats={stats} wide />
+				</div>
+			)}
 			<div>
 				<p className="mb-1.5 font-cond text-xs uppercase tracking-wider text-muted">Completed by</p>
 				{stats.completedBy.length ? (

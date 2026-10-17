@@ -2,12 +2,15 @@ import { redirect } from "next/navigation"
 import { HintsEditor } from "@/components/admin/hints-editor"
 import { QuestEditor } from "@/components/admin/quest-editor"
 import { QuestHeader } from "@/components/admin/quest-header"
+import { QuestLiveStatsBlock } from "@/components/admin/quest-live-stats"
 import { QuestPreview } from "@/components/admin/quest-preview"
 import { QuestViewToggle } from "@/components/admin/quest-view-toggle"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
+import { seasonStatus } from "@/lib/domain/admin-seasons"
 import { hintRevealers } from "@/lib/domain/hints"
+import { questLiveStats } from "@/lib/domain/quest-stats"
 import { questLabel } from "@/lib/domain/season-tree"
 
 export default async function QuestPage({ params }: PageProps<"/admin/seasons/[seasonId]/quests/[questId]">) {
@@ -18,8 +21,10 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 	const quest = arc?.quests.find((quest) => quest.id === questId)
 	if (!season || !arc || !quest) redirect(`/admin/seasons/${seasonId}`)
 	const label = questLabel(quest)
-	const revealers = hintRevealers(await listSeasonTeams(seasonId), questId)
+	const teams = await listSeasonTeams(seasonId)
 	const now = Date.now()
+	const revealers = hintRevealers(teams, questId)
+	const stats = seasonStatus(season, new Date(now)) === "live" ? questLiveStats(season, teams)[questId] : null
 	return (
 		<>
 			<QuestHeader seasonId={seasonId} arcTitle={arc.title} label={label} />
@@ -43,6 +48,11 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 					<h2 className={`mb-6 hidden truncate font-head text-2xl lg:block ${label ? "text-head" : "text-muted"}`}>
 						{label ?? "Untitled quest"}
 					</h2>
+					{stats && (
+						<div className="hidden lg:block">
+							<QuestLiveStatsBlock stats={stats} hints={quest.hints} variant="desktop" />
+						</div>
+					)}
 					<QuestEditor
 						seasonId={seasonId}
 						arcId={arc.id}

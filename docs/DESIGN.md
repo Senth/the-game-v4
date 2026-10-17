@@ -184,8 +184,10 @@ A quest crossing arcs shows only H1's dashed slot, without a target-arc highligh
 An empty arc accepts a drop, with the slot as its only row.
 In C and E, mute source-arc rows too; Lighthouse's `ink` text in the mocks is superseded.
 
-While live, show completion bars and "N/M done". Tap expands Completed by chips, hints with revealers,
-and "Edit quest ›". The same live block appears above the desktop form.
+While live, show completion bars and "N/M done". Tap expands "Completed by" chips, or muted "Nobody yet",
+then hints with revealers.
+Only one quest stays open at a time. Phone shows "Edit quest ›". Desktop block stays open above form,
+with no Edit link.
 PROJECT.md owns the visibility window for these stats.
 
 ## M2: mobile quest editor
