@@ -2,7 +2,6 @@
 
 import { refresh } from "next/cache"
 import { z } from "zod"
-import { releaseAsset } from "@/lib/assets/release"
 import { requireAdmin } from "@/lib/auth/guards"
 import { NotFoundError } from "@/lib/db/collections"
 import {
@@ -17,7 +16,7 @@ import {
 } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
 import { applyStructuralEdit, type StructuralEdit, type StructuralEditImpact } from "@/lib/domain/game"
-import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
+import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
 import { type ActionResult, actionFailure } from "./action-result"
 
 const id = z.string().min(1)
@@ -86,15 +85,10 @@ export async function removeArc(seasonId: string, arcId: string): Promise<Action
 	await requireAdmin()
 	const now = new Date()
 	try {
-		const { assetPaths, affected } = await deleteArc(id.parse(seasonId), id.parse(arcId), now)
-		for (const teamId of affected) publish(teamChannel(teamId))
-		for (const assetPath of assetPaths)
-			await releaseAsset(assetPath).catch((error) => console.error("Failed to release asset", assetPath, error))
+		await deleteArc(id.parse(seasonId), id.parse(arcId), now)
 	} catch (error) {
 		return actionFailure(error, now)
 	}
-	publish(seasonChannel(seasonId))
-	publish(boardChannel)
 	return { ok: true }
 }
 
@@ -102,15 +96,10 @@ export async function removeQuest(seasonId: string, arcId: string, questId: stri
 	await requireAdmin()
 	const now = new Date()
 	try {
-		const { assetPaths, affected } = await deleteQuest(id.parse(seasonId), id.parse(arcId), id.parse(questId), now)
-		for (const teamId of affected) publish(teamChannel(teamId))
-		for (const assetPath of assetPaths)
-			await releaseAsset(assetPath).catch((error) => console.error("Failed to release asset", assetPath, error))
+		await deleteQuest(id.parse(seasonId), id.parse(arcId), id.parse(questId), now)
 	} catch (error) {
 		return actionFailure(error, now)
 	}
-	publish(seasonChannel(seasonId))
-	publish(boardChannel)
 	return { ok: true }
 }
 
@@ -118,13 +107,10 @@ export async function addQuestToGame(seasonId: string, arcId: string, questId: s
 	await requireAdmin()
 	const now = new Date()
 	try {
-		const affected = await publishQuest(id.parse(seasonId), id.parse(arcId), id.parse(questId), now)
-		for (const teamId of affected) publish(teamChannel(teamId))
+		await publishQuest(id.parse(seasonId), id.parse(arcId), id.parse(questId), now)
 	} catch (error) {
 		return actionFailure(error, now)
 	}
-	publish(seasonChannel(seasonId))
-	publish(boardChannel)
 	return { ok: true }
 }
 

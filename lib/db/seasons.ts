@@ -14,8 +14,9 @@ import {
 	withHintIds,
 } from "@/lib/domain/schemas"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
+import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
 import { collections, NotFoundError } from "./collections"
-import { editSeasonTeamOrders } from "./teams"
+import { finishSeasonStructure, type PendingStructure, withSeasonStructure } from "./structural-writes"
 
 type Field<T> = Exclude<keyof T, "_id" | "id">
 
@@ -102,75 +103,137 @@ async function writeSeasonTree(
 }
 
 export async function addArc(seasonId: string, now: Date): Promise<string> {
-	const season = await getSeason(seasonId)
-	if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
-	const arc = newArc(season.shuffleArcs)
-	await writeSeasonTree(seasonId, now, {}, { $push: { arcs: arc } })
-	return arc.id
+	return withSeasonStructure(seasonId, async () => {
+		await finishSeasonStructure(seasonId)
+		const season = await getSeason(seasonId)
+		if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
+		const arc = newArc(season.shuffleArcs)
+		await writeSeasonTree(seasonId, now, {}, { $push: { arcs: arc } })
+		return arc.id
+	})
 }
 
 export async function addQuest(seasonId: string, arcId: string, now: Date): Promise<string> {
-	const season = await getSeason(seasonId)
-	if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
-	const live = seasonStatus(season, now) === "live"
-	const quest = { ...newQuest(), ...(live ? { hidden: true } : {}) }
-	const { path, filter, arrayFilters } = locate({ arcId, field: "quests" })
-	await writeSeasonTree(
-		seasonId,
-		now,
-		filter,
-		{ $push: { [path]: quest } },
-		arrayFilters,
-		live ? "live" : "beforeStart",
-	)
-	return quest.id
+	return withSeasonStructure(seasonId, async () => {
+		await finishSeasonStructure(seasonId)
+		const season = await getSeason(seasonId)
+		if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
+		const live = seasonStatus(season, now) === "live"
+		const quest = { ...newQuest(), ...(live ? { hidden: true } : {}) }
+		const { path, filter, arrayFilters } = locate({ arcId, field: "quests" })
+		await writeSeasonTree(
+			seasonId,
+			now,
+			filter,
+			{ $push: { [path]: quest } },
+			arrayFilters,
+			live ? "live" : "beforeStart",
+		)
+		return quest.id
+	})
 }
 
 export async function addQuestToGame(seasonId: string, arcId: string, questId: string, now: Date): Promise<string[]> {
-	const season = await getSeason(seasonId)
-	if (season && seasonStatus(season, now) === "ended") throw new SeasonEndedError()
-	const quest = season?.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
-	if (!quest) throw new NotFoundError(`Quest ${questId} not found`)
-	if (!quest.hidden) return []
-	const missing = missingForGame(quest)
-	if (missing.length) throw new QuestNotReadyError(missing)
-	const { path, arrayFilters } = locate({ arcId, questId, field: "hidden" })
-	await writeSeasonTree(
-		seasonId,
-		now,
-		{ arcs: { $elemMatch: { id: arcId, quests: { $elemMatch: quest } } } },
-		{ $set: { [path]: false } },
-		arrayFilters,
-		"live",
-	)
-	return editSeasonTeamOrders(seasonId, { kind: "addQuest", questId })
+	return withSeasonStructure(seasonId, async () => {
+		const target = JSON.stringify(["addQuestToGame", arcId, questId])
+		const resumed = await finishSeasonStructure(seasonId)
+		if (resumed?.target === target) return resumed.affected
+		const season = await getSeason(seasonId)
+		if (season && seasonStatus(season, now) === "ended") throw new SeasonEndedError()
+		const quest = season?.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
+		if (!quest) throw new NotFoundError(`Quest ${questId} not found`)
+		if (!quest.hidden) {
+			publish(seasonChannel(seasonId))
+			publish(boardChannel)
+			return []
+		}
+		const missing = missingForGame(quest)
+		if (missing.length) throw new QuestNotReadyError(missing)
+		const { path, arrayFilters } = locate({ arcId, questId, field: "hidden" })
+		const pendingStructure: PendingStructure = { target, edit: { kind: "addQuest", questId }, assetPaths: [] }
+		await writeSeasonTree(
+			seasonId,
+			now,
+			{ arcs: { $elemMatch: { id: arcId, quests: { $elemMatch: quest } } } },
+			{ $set: { [path]: false, pendingStructure } },
+			arrayFilters,
+			"live",
+		)
+		return (await finishSeasonStructure(seasonId))?.affected ?? []
+	})
 }
 
 type RemovalResult = { assetPaths: string[]; affected: string[] }
 
 export async function removeArc(seasonId: string, arcId: string, now: Date): Promise<RemovalResult> {
-	const before = await writeSeasonTree(seasonId, now, { "arcs.id": arcId }, { $pull: { arcs: { id: arcId } } })
-	const quests = before.arcs.find((arc) => arc.id === arcId)?.quests ?? []
-	const affected =
-		seasonStatus(before, now) === "live"
-			? await editSeasonTeamOrders(seasonId, {
-					kind: "deleteQuest",
-					questIds: quests.filter((quest) => !quest.hidden).map((quest) => quest.id),
-				})
-			: []
-	return { assetPaths: quests.flatMap((quest) => (quest.assetPath === null ? [] : [quest.assetPath])), affected }
+	return withSeasonStructure(seasonId, async () => {
+		const target = JSON.stringify(["removeArc", arcId])
+		const resumed = await finishSeasonStructure(seasonId)
+		if (resumed?.target === target) return { assetPaths: resumed.assetPaths, affected: resumed.affected }
+		const season = await getSeason(seasonId)
+		const arc = season?.arcs.find((arc) => arc.id === arcId)
+		if (!season || !arc) throw new NotFoundError(`Arc ${arcId} not found`)
+		const pendingStructure: PendingStructure = {
+			target,
+			edit:
+				seasonStatus(season, now) === "live"
+					? {
+							kind: "deleteQuest",
+							questIds: arc.quests.filter((quest) => !quest.hidden).map((quest) => quest.id),
+						}
+					: null,
+			assetPaths: arc.quests.flatMap((quest) => (quest.assetPath === null ? [] : [quest.assetPath])),
+		}
+		await writeSeasonTree(
+			seasonId,
+			now,
+			{ start: season.start, end: season.end, arcs: { $elemMatch: arc } },
+			{
+				$pull: { arcs: { id: arcId } },
+				$set: { pendingStructure },
+			},
+		)
+		return {
+			assetPaths: pendingStructure.assetPaths,
+			affected: (await finishSeasonStructure(seasonId))?.affected ?? [],
+		}
+	})
 }
 
 export async function removeQuest(seasonId: string, arcId: string, questId: string, now: Date): Promise<RemovalResult> {
-	const { path, arrayFilters } = locate({ arcId, field: "quests" })
-	const filter = { arcs: { $elemMatch: { id: arcId, "quests.id": questId } } }
-	const before = await writeSeasonTree(seasonId, now, filter, { $pull: { [path]: { id: questId } } }, arrayFilters)
-	const quest = before.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
-	const affected =
-		seasonStatus(before, now) === "live" && !quest?.hidden
-			? await editSeasonTeamOrders(seasonId, { kind: "deleteQuest", questIds: [questId] })
-			: []
-	return { assetPaths: quest?.assetPath == null ? [] : [quest.assetPath], affected }
+	return withSeasonStructure(seasonId, async () => {
+		const target = JSON.stringify(["removeQuest", arcId, questId])
+		const resumed = await finishSeasonStructure(seasonId)
+		if (resumed?.target === target) return { assetPaths: resumed.assetPaths, affected: resumed.affected }
+		const season = await getSeason(seasonId)
+		const quest = season?.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
+		if (!season || !quest) throw new NotFoundError(`Quest ${questId} not found`)
+		const pendingStructure: PendingStructure = {
+			target,
+			edit: seasonStatus(season, now) === "live" && !quest.hidden ? { kind: "deleteQuest", questIds: [questId] } : null,
+			assetPaths: quest.assetPath === null ? [] : [quest.assetPath],
+		}
+		const { path, arrayFilters } = locate({ arcId, field: "quests" })
+		const filter = {
+			start: season.start,
+			end: season.end,
+			arcs: { $elemMatch: { id: arcId, quests: { $elemMatch: quest } } },
+		}
+		await writeSeasonTree(
+			seasonId,
+			now,
+			filter,
+			{
+				$pull: { [path]: { id: questId } },
+				$set: { pendingStructure },
+			},
+			arrayFilters,
+		)
+		return {
+			assetPaths: pendingStructure.assetPaths,
+			affected: (await finishSeasonStructure(seasonId))?.affected ?? [],
+		}
+	})
 }
 
 export type MoveTarget = { seasonId: string; id: string; beforeId: string | null }

@@ -2,7 +2,7 @@ import { Collection, MongoServerError } from "mongodb"
 import { describe, expect, it, vi } from "vitest"
 import type { Season, Team } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
-import { NotFoundError } from "./collections"
+import { collections, NotFoundError } from "./collections"
 import {
 	countTeams,
 	createTeam,
@@ -256,6 +256,7 @@ describe("fillQuestOrders", () => {
 
 	it("fills each team once under ten concurrent calls and every caller reads the same orders", async () => {
 		const input = season()
+		await (await collections()).seasons.insertOne(input)
 		const teams = await Promise.all(["Ninjas", "Owls", "Foxes"].map((name) => createTeam(team(name, input._id))))
 		const before = structuredClone({ input, teams })
 		const results = await Promise.all(
@@ -277,6 +278,7 @@ describe("fillQuestOrders", () => {
 
 	it("reports exactly one winning caller for one team", async () => {
 		const input = season()
+		await (await collections()).seasons.insertOne(input)
 		const teams = [await createTeam(team("Ninjas", input._id))]
 		const results = await Promise.all(Array.from({ length: 10 }, () => fillQuestOrders(input, teams)))
 		expect(results.filter(Boolean)).toHaveLength(1)
@@ -284,6 +286,7 @@ describe("fillQuestOrders", () => {
 
 	it("leaves existing orders, progress and other seasons untouched even with stale team input", async () => {
 		const input = season()
+		await (await collections()).seasons.insertOne(input)
 		const ordered = await createTeam(team("Ordered", input._id))
 		const progressed = await createTeam(team("Progressed", input._id))
 		const other = await createTeam(team("Other", null))
@@ -297,6 +300,7 @@ describe("fillQuestOrders", () => {
 
 	it("writes nothing for an empty season or an empty team list", async () => {
 		const input = { ...season(), arcs: [] }
+		await (await collections()).seasons.insertOne(input)
 		const ninjas = await createTeam(team("Ninjas", input._id))
 		expect(await fillQuestOrders(input, [ninjas])).toBe(false)
 		expect(await fillQuestOrders(season(), [])).toBe(false)
@@ -309,6 +313,7 @@ describe("fillQuestOrders", () => {
 			...arc,
 			quests: arc.quests.map((quest, index) => ({ ...quest, hidden: allHidden || index === 0 })),
 		}))
+		await (await collections()).seasons.insertOne(input)
 		const ninjas = await createTeam(team("Ninjas", input._id))
 		const original = structuredClone({ input, ninjas })
 		expect(await fillQuestOrders(input, [ninjas])).toBe(!allHidden)

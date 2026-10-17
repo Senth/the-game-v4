@@ -2,7 +2,9 @@ import { z } from "zod"
 import { applyStructuralEdit, buildQuestOrder, type StructuralEdit } from "@/lib/domain/game"
 import { playableArcs } from "@/lib/domain/playable-quests"
 import { RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
+import { publish, teamChannel } from "@/lib/events/bus"
 import { collections, NotFoundError } from "./collections"
+import { finishSeasonStructure, withSeasonStructure } from "./structural-writes"
 
 type TeamField = Exclude<keyof Team, "_id">
 
@@ -64,6 +66,7 @@ export async function editSeasonTeamOrders(seasonId: string, edit: StructuralEdi
 			)
 			if (written.matchedCount) {
 				affected.push(current._id)
+				publish(teamChannel(current._id))
 				break
 			}
 			if (attempt === 3) throw new Error("Not saved, retry")
@@ -78,18 +81,22 @@ export async function fillQuestOrders(
 	teams: readonly Team[],
 	random: () => number = Math.random,
 ): Promise<boolean> {
-	if (!playableArcs(season).some((arc) => arc.quests.length > 0)) return false
-	const operations = teams
-		.filter((team) => team.seasonId === season._id && team.questOrder.length === 0 && team.progress.length === 0)
-		.map((team) => ({
-			updateOne: {
-				filter: { _id: team._id, seasonId: season._id, questOrder: { $size: 0 }, progress: { $size: 0 } },
-				update: { $set: { questOrder: buildQuestOrder(season, random) } },
-			},
-		}))
-	if (operations.length === 0) return false
-	const result = await (await collections()).teams.bulkWrite(operations, { ordered: false })
-	return result.matchedCount > 0
+	return withSeasonStructure(season._id, async () => {
+		await finishSeasonStructure(season._id)
+		const current = await (await collections()).seasons.findOne({ _id: season._id })
+		if (!current || !playableArcs(current).some((arc) => arc.quests.length > 0)) return false
+		const operations = teams
+			.filter((team) => team.seasonId === season._id && team.questOrder.length === 0 && team.progress.length === 0)
+			.map((team) => ({
+				updateOne: {
+					filter: { _id: team._id, seasonId: season._id, questOrder: { $size: 0 }, progress: { $size: 0 } },
+					update: { $set: { questOrder: buildQuestOrder(current, random) } },
+				},
+			}))
+		if (operations.length === 0) return false
+		const result = await (await collections()).teams.bulkWrite(operations, { ordered: false })
+		return result.matchedCount > 0
+	})
 }
 
 export async function countTeams(seasonId: string): Promise<number> {
