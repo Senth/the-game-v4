@@ -330,6 +330,15 @@ it("shows live completion stats in the desktop menu", () => {
 	expect(view.html).not.toContain("Completed by")
 })
 
+it("keeps live desktop quest rows navigable with completion stats", () => {
+	const view = render({ ...liveProps, variant: "menu" })
+	expect(view.html).toContain('href="/admin/seasons/s1/quests/q1"')
+	expect(view.html).toContain("7/10 done")
+	expect(view.html).toContain('style="width:70%"')
+	expect(view.html).not.toContain('aria-controls="quest-stats-q1"')
+	expect(view.html).not.toContain("Edit quest")
+})
+
 it("hides live stats when the client clock reaches the season end", async () => {
 	const props = { ...liveProps, end: new Date(now + 1000) }
 	questButton(render(props), "q1").props.onClick?.()

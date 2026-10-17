@@ -538,7 +538,7 @@ function ArcTree({
 									onMove={onMove}
 								>
 									{(bindings) =>
-										questStats ? (
+										questStats && variant === "page" ? (
 											<>
 												<button
 													type="button"
@@ -578,7 +578,7 @@ function ArcTree({
 												role="link"
 												href={`/admin/seasons/${seasonId}/quests/${quest.id}`}
 												aria-current={selectedQuest === quest.id ? "page" : undefined}
-												className={`flex h-11 items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
+												className={`flex ${questStats ? "min-h-14" : "h-11"} items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
 											>
 												<span className="min-w-0">
 													<span
@@ -589,6 +589,7 @@ function ArcTree({
 													{quest.hidden && (
 														<span className="block font-cond text-xs text-muted">Draft · teams don't see it</span>
 													)}
+													{questStats && <QuestCompletion stats={questStats} />}
 												</span>
 												<span
 													className={`shrink-0 tabular-nums ${quest.hidden || quest.points === null || variant === "menu" ? "text-xs text-muted" : dragging ? "text-sm text-muted" : "text-sm font-bold text-head"}`}
