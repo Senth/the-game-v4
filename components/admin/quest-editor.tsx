@@ -1,8 +1,11 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { type ReactNode, useRef, useState } from "react"
-import { removeQuest } from "@/app/admin/tree-actions"
+import { type ReactNode, useEffect, useRef, useState } from "react"
+import { addQuestToGame, getAddQuestImpact, getRemoveQuestImpact, removeQuest } from "@/app/admin/tree-actions"
+import { seasonStatus } from "@/lib/domain/admin-seasons"
+import type { StructuralEditImpact } from "@/lib/domain/game"
+import { missingForGame } from "@/lib/domain/playable-quests"
 import type { Quest } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
 import { AnswerChips } from "./answer-chips"
@@ -10,8 +13,9 @@ import { AutosavePointsField } from "./autosave-points-field"
 import { useAssetDraft, useAutosave } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { AutosaveTextarea } from "./autosave-textarea"
-import { ConfirmDialog } from "./confirm-dialog"
+import { ConfirmDialog, primaryClass } from "./confirm-dialog"
 import { QuestAsset, type QuestAssetHandle } from "./quest-asset"
+import { RemovalImpact } from "./removal-impact"
 import { useSeasonClock } from "./use-season-clock"
 
 export function QuestEditor({
@@ -33,21 +37,75 @@ export function QuestEditor({
 }) {
 	const router = useRouter()
 	const autosave = useAutosave()
-	const editable = canEditStructure({ start, end }, new Date(useSeasonClock(now, start, end)))
+	const currentNow = new Date(useSeasonClock(now, start, end))
+	const editable = canEditStructure({ start, end }, currentNow)
+	const live = seasonStatus({ start, end }, currentNow) === "live"
+	const canAddRemove = editable || live
 	const label = questLabel(quest)
-	const [confirming, setConfirming] = useState(false)
+	const dialogLabel = label ?? "this quest"
+	const missing = quest.hidden ? missingForGame(quest) : []
+	const missingLabel =
+		missing.length > 1 ? `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}` : missing[0]
+	const [confirming, setConfirming] = useState<"add" | "remove" | null>(null)
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [impactFor, setImpactFor] = useState<"add" | "remove" | null>(null)
+	const [impact, setImpact] = useState<StructuralEditImpact | null>(null)
+	const [impactError, setImpactError] = useState<string | null>(null)
 	const { value: assetPath, onChange: setAssetPath } = useAssetDraft(
 		{ arcId, questId: quest.id, field: "assetPath" },
 		quest.assetPath,
 	)
 	const asset = useRef<QuestAssetHandle>(null)
 	const dragDepth = useRef(0)
+	const impactRequest = useRef(0)
 	const [dragging, setDragging] = useState(false)
+	const needsImpact = live && (confirming === "add" || (confirming === "remove" && !quest.hidden))
+	const addImpact = impact?.kind === "addQuest" ? impact : null
+	const removeImpact = impact?.kind === "deleteQuest" ? impact : null
+	const impactErrorForDialog = impactFor === confirming ? impactError : null
+	const impactLoading = needsImpact && !impactErrorForDialog && (impactFor !== confirming || !impact)
+
+	useEffect(() => {
+		if (!needsImpact || !confirming || impactFor === confirming) return
+		const request = ++impactRequest.current
+		setImpactFor(confirming)
+		setImpact(null)
+		setImpactError(null)
+		const read =
+			confirming === "add"
+				? getAddQuestImpact(seasonId, arcId, quest.id)
+				: getRemoveQuestImpact(seasonId, arcId, quest.id)
+		void read
+			.then((result) => {
+				if (impactRequest.current !== request) return
+				if (result.ok) setImpact(result.impact)
+				else setImpactError(result.error)
+			})
+			.catch(() => {
+				if (impactRequest.current === request) setImpactError("Not saved, retry")
+			})
+	}, [needsImpact, confirming, impactFor, seasonId, arcId, quest.id])
+
+	function openConfirmation(mode: "add" | "remove") {
+		impactRequest.current += 1
+		setImpactFor(null)
+		setImpact(null)
+		setImpactError(null)
+		setError(null)
+		setConfirming(mode)
+	}
+
+	function closeConfirmation() {
+		impactRequest.current += 1
+		setConfirming(null)
+		setImpactFor(null)
+		setImpact(null)
+		setImpactError(null)
+	}
 
 	async function remove() {
-		if (pending || !editable) return
+		if (pending || !canAddRemove || (live && !quest.hidden && !removeImpact)) return
 		setPending(true)
 		setError(null)
 		try {
@@ -62,6 +120,64 @@ export function QuestEditor({
 			setPending(false)
 		}
 	}
+
+	async function addToGame() {
+		if (pending || !live || missing.length) return
+		setPending(true)
+		setError(null)
+		try {
+			const result = await addQuestToGame(seasonId, arcId, quest.id)
+			if (result.ok) setConfirming(null)
+			else setError(result.error)
+		} catch {
+			setError("Not saved, retry")
+		} finally {
+			setPending(false)
+		}
+	}
+
+	const dialogTitle =
+		confirming === "add" && addImpact?.added.length
+			? `Add ${dialogLabel} for ${addImpact.added.length} teams?`
+			: confirming === "add"
+				? `Add ${dialogLabel} to the game?`
+				: `Remove ${dialogLabel}?`
+	const dialogBody: ReactNode =
+		confirming === "add" ? (
+			addImpact ? (
+				<>
+					<p>
+						{addImpact.added.length
+							? "Each team gets it at a random spot after its current quest."
+							: "No team is playing it yet. Teams that start later get it."}
+					</p>
+					{addImpact.completed > 0 && (
+						<p className="mt-2 font-cond text-xs text-muted">{addImpact.completed} teams finished and don't get it.</p>
+					)}
+				</>
+			) : impactLoading ? (
+				<p className="font-cond text-xs text-muted">Counting teams…</p>
+			) : null
+		) : confirming === "remove" && needsImpact && removeImpact ? (
+			<RemovalImpact
+				impact={removeImpact}
+				onItLabel="On it now · skips it with 0 points"
+				notReachedLabel="Not reached · leaves their order"
+				solvedLabel={(count) => `${count} teams solved it and keep their points.`}
+			/>
+		) : needsImpact ? (
+			impactLoading ? (
+				<p className="font-cond text-xs text-muted">Counting teams…</p>
+			) : null
+		) : assetPath ? (
+			"Its answers, hints and image go too."
+		) : (
+			"Its answers and hints go too."
+		)
+	const dialogDisabled =
+		pending ||
+		(confirming === "add" && (!live || missing.length > 0 || !addImpact)) ||
+		(confirming === "remove" && (!canAddRemove || (needsImpact && !removeImpact)))
 
 	return (
 		<section
@@ -92,6 +208,28 @@ export function QuestEditor({
 			}}
 		>
 			<div className="space-y-5">
+				{quest.hidden && (
+					<div className="bg-z1 rounded-md p-3">
+						<p className="font-body text-sm">
+							{missing.length ? `Fill in ${missingLabel} to add it to the game.` : "Teams don't see this quest yet."}
+						</p>
+						{live && (
+							<button
+								type="button"
+								className={`${primaryClass} mt-3`}
+								disabled={pending || missing.length > 0}
+								onClick={() => openConfirmation("add")}
+							>
+								Add to game
+							</button>
+						)}
+						{error && (
+							<p role="alert" className="mt-2 font-cond text-xs text-warn">
+								{error}
+							</p>
+						)}
+					</div>
+				)}
 				<div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
 					<AutosaveTextField
 						label={
@@ -149,13 +287,13 @@ export function QuestEditor({
 				/>
 				{children}
 			</div>
-			{editable && (
+			{canAddRemove && (
 				<div className="mt-8 border-t border-z1 pt-2">
 					<button
 						type="button"
 						className="min-h-11 font-cond text-sm text-muted hover:underline active:text-head focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
 						disabled={pending}
-						onClick={() => setConfirming(true)}
+						onClick={() => openConfirmation("remove")}
 					>
 						Remove quest
 					</button>
@@ -167,13 +305,15 @@ export function QuestEditor({
 				</div>
 			)}
 			<ConfirmDialog
-				open={confirming}
-				title={label ? `Remove ${label}?` : "Remove this quest?"}
-				body={assetPath ? "Its answers, hints and image go too." : "Its answers and hints go too."}
-				confirmLabel="Remove quest"
-				disabled={pending || !editable}
-				onConfirm={() => void remove()}
-				onClose={() => setConfirming(false)}
+				open={confirming !== null}
+				title={dialogTitle}
+				body={dialogBody}
+				confirmLabel={confirming === "add" ? "Add to game" : "Remove quest"}
+				confirmTone={confirming === "add" ? "accent" : "danger"}
+				disabled={dialogDisabled}
+				error={impactErrorForDialog}
+				onConfirm={() => void (confirming === "add" ? addToGame() : remove())}
+				onClose={closeConfirmation}
 			/>
 			{dragging && (
 				<div className="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center rounded-md border-2 border-dashed border-accent bg-z0/85 lg:flex">
