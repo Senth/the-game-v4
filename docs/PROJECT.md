@@ -269,7 +269,17 @@ Structural edits follow these rules:
 
 Structural edits publish `team:<id>` for each changed team, plus `season:<id>` and `board`.
 
-Copying an arc into an unstarted season creates independent quests with new ids.
+Admins copy an arc, or one quest, from a season in any state into another season that hasn't started.
+Unstarted means `start` is null or in the future. The write re-checks this; rejection names the started destination.
+The source season is never a destination. Copying only reads it; editing either copy or source never changes the other.
+Copies get new arc, quest and hint ids. Every quest and hint field is copied, plus the arc's title and `shuffleQuests`.
+Copies drop `hidden`, so a live draft becomes an ordinary quest. Missing-field warnings flag anything incomplete.
+Images are shared by path, following the [asset reference check](#assets-migration-and-deployment).
+A copied arc goes last in the destination. A copied quest goes last in its chosen arc.
+A quest may go into a new arc that takes the source arc's title and `shuffleQuests`.
+Matching arc titles are allowed and never renamed.
+Team progress, stats and revealers never copy. A copy publishes `season:<destination id>` only.
+
 Admin live quest stats show completion and revealers only while running; hide before start and after end.
 N counts teams that solved the quest. M counts teams whose order includes it, or whose order is not built yet.
 Hint-editor "Revealed by" chips are hidden until the season has started.
