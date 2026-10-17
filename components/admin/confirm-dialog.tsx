@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { type ReactNode, useEffect, useId, useRef } from "react"
 import { createPortal } from "react-dom"
 import { buttonClass } from "@/components/auth-form"
@@ -14,22 +15,26 @@ export function ConfirmDialog({
 	open,
 	title,
 	body,
+	cancelLabel = "Cancel",
 	confirmLabel,
 	confirmTone = "danger",
 	disabled = false,
 	closeOnConfirm = true,
 	error,
+	result,
 	onConfirm,
 	onClose,
 }: {
 	open: boolean
 	title: string
 	body: ReactNode
-	confirmLabel: string
+	cancelLabel?: string
+	confirmLabel?: string
 	confirmTone?: "accent" | "danger"
 	disabled?: boolean
 	closeOnConfirm?: boolean
 	error?: string | null
+	result?: { label: string; href: string }
 	onConfirm: () => void
 	onClose: () => void
 }) {
@@ -66,26 +71,36 @@ export function ConfirmDialog({
 					{error}
 				</p>
 			)}
-			<div className="mt-5 grid grid-cols-2 gap-2">
+			<div className={`mt-5 ${confirmLabel || result ? "grid grid-cols-2 gap-2" : "flex justify-end"}`}>
 				<button
 					ref={cancel}
 					type="button"
 					className={`${outlineClass} border-z2`}
 					onClick={() => dialog.current?.close()}
 				>
-					Cancel
+					{cancelLabel}
 				</button>
-				<button
-					type="button"
-					className={confirmClass}
-					disabled={disabled}
-					onClick={() => {
-						if (closeOnConfirm) dialog.current?.close()
-						onConfirm()
-					}}
-				>
-					{confirmLabel}
-				</button>
+				{result ? (
+					<Link
+						href={result.href}
+						className={`${outlineClass.replace("text-ink", "text-link")} border-z2`}
+						onClick={() => dialog.current?.close()}
+					>
+						{result.label}
+					</Link>
+				) : confirmLabel ? (
+					<button
+						type="button"
+						className={confirmClass}
+						disabled={disabled}
+						onClick={() => {
+							if (closeOnConfirm) dialog.current?.close()
+							onConfirm()
+						}}
+					>
+						{confirmLabel}
+					</button>
+				) : null}
 			</div>
 		</dialog>,
 		document.body,

@@ -39,6 +39,7 @@ export function treeView(season: Season) {
 			id: arc.id,
 			title: arc.title,
 			shuffleQuests: arc.shuffleQuests,
+			hintCount: arc.quests.reduce((count, quest) => count + quest.hints.length, 0),
 			quests: arc.quests.map((quest) => ({
 				id: quest.id,
 				label: questLabel(quest),

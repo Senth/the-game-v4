@@ -59,6 +59,7 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 						<div className="mx-3 mt-2 border-t border-z1" />
 						<SeasonTree
 							seasonId={seasonId}
+							seasonTitle={season.title}
 							tree={treeView(season)}
 							start={season.start}
 							end={season.end}

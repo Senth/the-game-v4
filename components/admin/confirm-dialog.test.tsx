@@ -121,3 +121,18 @@ it("renders node bodies and accent confirmation buttons", () => {
 	expect(html).toContain("2 teams affected")
 	expect(view.buttons[1]?.props.className).toContain("bg-accent")
 })
+
+it("renders result action beside Close", () => {
+	const view = render({
+		title: "Copied to Spring Hunt 2027",
+		body: "Lighthouse is now the last arc there, with 1 new quest.",
+		cancelLabel: "Close",
+		result: { label: "Open it ›", href: "/admin/seasons/spring" },
+	})
+	const html = renderToStaticMarkup(view.dialog)
+	expect(html).toContain("Lighthouse is now the last arc there, with 1 new quest.")
+	expect(html).toContain(">Close</button>")
+	expect(html).toContain('href="/admin/seasons/spring"')
+	expect(html).toContain("Open it ›")
+	expect(html).not.toContain("Remove quest")
+})
