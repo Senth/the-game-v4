@@ -1,39 +1,42 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { copyArc, getCopyDestinations } from "@/app/admin/copy-actions"
+import { copyArc, copyQuest, getCopyDestinations } from "@/app/admin/copy-actions"
 import { formatSeasonDay } from "@/lib/domain/admin-seasons"
 import { ConfirmDialog } from "./confirm-dialog"
 
 type Destination = Extract<Awaited<ReturnType<typeof getCopyDestinations>>, { ok: true }>["destinations"][number]
 type SourceArc = { id: string; title: string; hintCount?: number; quests: { id: string }[] }
-
-export function CopyDialog({
-	open,
-	sourceSeasonId,
-	sourceSeasonTitle,
-	arc,
-	onClose,
-}: {
+type CopyDialogProps = {
 	open: boolean
 	sourceSeasonId: string
 	sourceSeasonTitle: string
-	arc: SourceArc
 	onClose: () => void
-}) {
+} & (
+	| { mode: "arc"; arc: SourceArc }
+	| { mode: "quest"; quest: { id: string; label: string; hintCount: number }; sourceArc: { id: string; title: string } }
+)
+type QuestTarget = { seasonId: string; arcId: string | null }
+
+export function CopyDialog(props: CopyDialogProps) {
+	const { open, sourceSeasonId, sourceSeasonTitle, onClose } = props
 	const [destinations, setDestinations] = useState<Destination[] | null>(null)
 	const [selectedId, setSelectedId] = useState<string | null>(null)
+	const [questTarget, setQuestTarget] = useState<QuestTarget | null>(null)
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [copiedTo, setCopiedTo] = useState<Destination | null>(null)
+	const [copiedQuestId, setCopiedQuestId] = useState<string | null>(null)
 	useEffect(() => {
 		if (!open) return
 		let current = true
 		setDestinations(null)
 		setSelectedId(null)
+		setQuestTarget(null)
 		setPending(false)
 		setError(null)
 		setCopiedTo(null)
+		setCopiedQuestId(null)
 		void getCopyDestinations(sourceSeasonId)
 			.then((result) => {
 				if (!current) return
@@ -43,6 +46,8 @@ export function CopyDialog({
 				}
 				setDestinations(result.destinations)
 				setSelectedId(result.destinations[0]?.id ?? null)
+				const first = result.destinations[0]
+				setQuestTarget(first ? { seasonId: first.id, arcId: first.arcs[0]?.id ?? null } : null)
 			})
 			.catch(() => {
 				if (current) setError("Not saved, retry")
@@ -52,17 +57,39 @@ export function CopyDialog({
 		}
 	}, [open, sourceSeasonId])
 
-	const selected = destinations?.find((destination) => destination.id === selectedId)
-	const arcTitle = arc.title.trim() || "Untitled arc"
-	const hintCount = arc.hintCount ?? 0
-	const title = copiedTo ? `Copied to ${copiedTo.title}` : `Copy ${arcTitle}`
+	const selected =
+		props.mode === "arc"
+			? destinations?.find((destination) => destination.id === selectedId)
+			: destinations?.find((destination) => destination.id === questTarget?.seasonId)
+	const selectedQuestArc =
+		props.mode === "quest" && selected && questTarget
+			? questTarget.arcId === null
+				? props.sourceArc.title
+				: selected.arcs.find((arc) => arc.id === questTarget.arcId)?.title
+			: undefined
+	const canSubmit =
+		props.mode === "arc" ||
+		Boolean(
+			questTarget &&
+				selected &&
+				(questTarget.arcId === null || selected.arcs.some((arc) => arc.id === questTarget.arcId)),
+		)
+	const sourceArcTitle =
+		props.mode === "arc" ? props.arc.title.trim() || "Untitled arc" : props.sourceArc.title.trim() || "Untitled arc"
+	const label = props.mode === "arc" ? sourceArcTitle : props.quest.label
+	const hintCount = props.mode === "arc" ? (props.arc.hintCount ?? 0) : props.quest.hintCount
+	const title = copiedTo ? `Copied to ${copiedTo.title}` : `Copy ${label}`
 	const body = copiedTo ? (
-		`${arcTitle} is now the last arc there, with ${arc.quests.length} new ${arc.quests.length === 1 ? "quest" : "quests"}.`
-	) : (
+		props.mode === "arc" ? (
+			`${label} is now the last arc there, with ${props.arc.quests.length} new ${props.arc.quests.length === 1 ? "quest" : "quests"}.`
+		) : (
+			`${label} is now the last quest in ${selectedQuestArc ?? sourceArcTitle}.`
+		)
+	) : props.mode === "arc" ? (
 		<div>
 			<p className="font-cond text-sm text-muted">
-				From {sourceSeasonTitle} · {arc.quests.length} {arc.quests.length === 1 ? "quest" : "quests"} · {hintCount}{" "}
-				{hintCount === 1 ? "hint" : "hints"}
+				From {sourceSeasonTitle} · {props.arc.quests.length} {props.arc.quests.length === 1 ? "quest" : "quests"} ·{" "}
+				{hintCount} {hintCount === 1 ? "hint" : "hints"}
 			</p>
 			<div className="mt-3">
 				<p className="font-cond text-sm text-muted">To season</p>
@@ -80,7 +107,7 @@ export function CopyDialog({
 								>
 									<input
 										type="radio"
-										name={`copy-arc-${arc.id}`}
+										name={`copy-arc-${props.arc.id}`}
 										value={destination.id}
 										checked={selectedId === destination.id}
 										className="size-4 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -106,16 +133,105 @@ export function CopyDialog({
 				</p>
 			) : null}
 		</div>
+	) : (
+		<div>
+			<p className="font-cond text-sm text-muted">
+				From {sourceSeasonTitle} · {sourceArcTitle} · {hintCount} {hintCount === 1 ? "hint" : "hints"}
+			</p>
+			<div className="mt-3">
+				<p className="font-cond text-sm text-muted">Into arc</p>
+				{destinations === null && !error ? (
+					<p className="mt-2 font-cond text-xs text-muted">Finding seasons…</p>
+				) : destinations?.length === 0 && !error ? (
+					<p className="mt-2 font-cond text-xs text-muted">No season is waiting to start. Create one first.</p>
+				) : (
+					destinations && (
+						<div className="mt-2 space-y-2">
+							{destinations.map((destination) => (
+								<section key={destination.id}>
+									<div className="flex items-center justify-between gap-3 px-3 py-2">
+										<span className="font-cond text-sm text-head">{destination.title}</span>
+										<span className="shrink-0 font-cond text-xs text-muted">
+											{destination.status === "upcoming" && destination.start
+												? `Upcoming · ${formatSeasonDay(destination.start)}`
+												: "Not started"}
+										</span>
+									</div>
+									<div className="space-y-1">
+										{destination.arcs.map((arc) => {
+											const checked = questTarget?.seasonId === destination.id && questTarget.arcId === arc.id
+											return (
+												<label
+													key={arc.id}
+													className={`ml-3 flex min-h-12 cursor-pointer items-center gap-3 rounded-md px-3 text-sm ${checked ? "bg-accent/15 text-head" : "text-ink"}`}
+												>
+													<input
+														type="radio"
+														name={`copy-quest-${props.quest.id}`}
+														value={arc.id}
+														checked={checked}
+														className="size-4 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+														onChange={() => setQuestTarget({ seasonId: destination.id, arcId: arc.id })}
+													/>
+													<span className="min-w-0 flex-1">{arc.title}</span>
+												</label>
+											)
+										})}
+										<label
+											className={`ml-3 flex min-h-12 cursor-pointer items-center gap-3 rounded-md px-3 text-sm ${questTarget?.seasonId === destination.id && questTarget.arcId === null ? "bg-accent/15 text-head" : "text-ink"}`}
+										>
+											<input
+												type="radio"
+												name={`copy-quest-${props.quest.id}`}
+												value={`new:${destination.id}`}
+												checked={questTarget?.seasonId === destination.id && questTarget.arcId === null}
+												className="size-4 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+												onChange={() => setQuestTarget({ seasonId: destination.id, arcId: null })}
+											/>
+											<span className="min-w-0 flex-1">
+												<span className="text-link">New arc</span>{" "}
+												<span className="text-muted">“{sourceArcTitle}”</span>
+											</span>
+										</label>
+									</div>
+								</section>
+							))}
+						</div>
+					)
+				)}
+			</div>
+			{destinations?.length ? (
+				<p className="mt-3 font-cond text-xs text-muted">
+					The copy is a new quest. Editing one season never changes the other.
+				</p>
+			) : null}
+		</div>
 	)
 
 	async function submit() {
-		if (!selected || pending) return
+		if (!selected || !canSubmit || pending) return
 		setPending(true)
 		setError(null)
 		try {
-			const result = await copyArc(sourceSeasonId, arc.id, selected.id)
-			if (!result.ok) setError(result.error)
-			else setCopiedTo(selected)
+			if (props.mode === "arc") {
+				const result = await copyArc(sourceSeasonId, props.arc.id, selected.id)
+				if (!result.ok) setError(result.error)
+				else setCopiedTo(selected)
+			} else {
+				if (!questTarget) return
+				const result = await copyQuest(
+					sourceSeasonId,
+					props.quest.id,
+					questTarget.arcId === null
+						? { seasonId: questTarget.seasonId, newArc: true }
+						: { seasonId: questTarget.seasonId, arcId: questTarget.arcId },
+				)
+				if (!result.ok) setError(result.error)
+				else {
+					setCopiedTo(selected)
+					setCopiedQuestId(result.questId)
+				}
+			}
 		} catch {
 			setError("Not saved, retry")
 		} finally {
@@ -130,12 +246,22 @@ export function CopyDialog({
 			title={title}
 			body={body}
 			cancelLabel={copiedTo || empty ? "Close" : undefined}
-			confirmLabel={copiedTo || empty ? undefined : "Copy arc"}
+			confirmLabel={copiedTo || empty ? undefined : props.mode === "arc" ? "Copy arc" : "Copy quest"}
 			confirmTone="accent"
-			disabled={pending || !selected}
+			disabled={pending || !selected || !canSubmit}
 			closeOnConfirm={false}
 			error={error}
-			result={copiedTo ? { label: "Open it ›", href: `/admin/seasons/${copiedTo.id}` } : undefined}
+			result={
+				copiedTo
+					? {
+							label: "Open it ›",
+							href:
+								props.mode === "arc"
+									? `/admin/seasons/${copiedTo.id}`
+									: `/admin/seasons/${copiedTo.id}/quests/${copiedQuestId}`,
+						}
+					: undefined
+			}
 			onConfirm={() => void submit()}
 			onClose={onClose}
 		/>

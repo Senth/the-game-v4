@@ -631,6 +631,7 @@ function ArcTree({
 					)}
 				</section>
 				<CopyDialog
+					mode="arc"
 					open={copyOpen}
 					sourceSeasonId={seasonId}
 					sourceSeasonTitle={seasonTitle}

@@ -14,6 +14,7 @@ import { uploadQuestAsset } from "@/app/admin/asset-actions"
 import { addQuestToGame, getAddQuestImpact, getRemoveQuestImpact, removeQuest } from "@/app/admin/tree-actions"
 import { useAutosaveField, useAutosaveList } from "./autosave-provider"
 import { ConfirmDialog } from "./confirm-dialog"
+import { CopyDialog } from "./copy-dialog"
 import { QuestEditor } from "./quest-editor"
 
 const hooks = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ const hooks = vi.hoisted(() => ({
 	showModal: vi.fn(),
 	close: vi.fn(),
 	focus: vi.fn(),
+	copyDialog: vi.fn(() => null),
 }))
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
@@ -53,6 +55,7 @@ vi.mock("react", async (importOriginal) => ({
 	useId: () => "quest-title",
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: hooks.push }) }))
+vi.mock("./copy-dialog", () => ({ CopyDialog: hooks.copyDialog }))
 vi.mock("@/app/admin/tree-actions", () => ({
 	addQuestToGame: vi.fn(),
 	getAddQuestImpact: vi.fn(),
@@ -75,7 +78,10 @@ vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }))
 const now = new Date("2026-10-12T17:00:00Z").getTime()
 const defaults = {
 	seasonId: "s1",
+	seasonTitle: "Cipher Night 2026",
 	arcId: "a1",
+	arcTitle: "Lighthouse",
+	hintCount: 1,
 	quest: {
 		id: "q1",
 		displayTitle: "The map",
@@ -111,16 +117,19 @@ function render(props: Partial<Parameters<typeof QuestEditor>[0]> = {}) {
 	const offset = props.quest?.hidden ? 1 : 0
 	const fields = content[offset] as ReactElement<{ children: ReactNode }>
 	const dialog = ConfirmDialog(children[2].props)
+	const controls = buttons(children[1])
 	return {
-		html: renderToStaticMarkup(cloneElement(element, {}, children[0], children[1], dialog, children[3])),
+		html: renderToStaticMarkup(cloneElement(element, {}, children[0], children[1], dialog, children[3], children[4])),
 		root: element,
 		asset: content[offset + 2] as ReactElement<{ assetPath: string | null; onChange: (path: string | null) => void }>,
 		fields: Children.toArray(fields.props.children) as ReactElement<{ autoFocus?: boolean }>[],
-		remove: buttons(children[1])[0],
+		copy: controls.find((button) => button.props.children === "Copy to another season…"),
+		remove: controls.find((button) => button.props.children === "Remove quest"),
 		add: buttons(children[0]).find((button) => button.props.children === "Add to game"),
 		dialog,
 		cancel: buttons(dialog)[0],
 		confirm: buttons(dialog)[1],
+		copyDialogProps: vi.mocked(CopyDialog).mock.lastCall?.[0],
 	}
 }
 
@@ -197,6 +206,27 @@ it("renders all seven fields in M2 order with helper text, desktop pairs and qui
 	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "adminNotes" }, "Bring a map")
 	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "points" }, 10)
 	expect(useAutosaveList).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "answers" }, ["harbour"])
+})
+
+it.each([
+	["unscheduled", { start: null, end: null }],
+	["upcoming", { start: new Date(now + 60_000), end: new Date(now + 3_660_000) }],
+	["live", live],
+	["ended", { start: new Date(now - 60_000), end: new Date(now) }],
+])("offers quest copying in %s seasons", (_state, timing) => {
+	const view = render(timing)
+	expect(view.copy).toBeDefined()
+	if (view.remove) expect(view.html.indexOf("Copy to another season…")).toBeLessThan(view.html.indexOf("Remove quest"))
+	view.copy?.props.onClick()
+	const opened = render(timing)
+	expect(opened.copyDialogProps).toMatchObject({
+		open: true,
+		mode: "quest",
+		sourceSeasonId: "s1",
+		sourceSeasonTitle: "Cipher Night 2026",
+		sourceArc: { id: "a1", title: "Lighthouse" },
+		quest: { id: "q1", label: "Harbour map", hintCount: 1 },
+	})
 })
 
 it("shows missing draft fields above Display title and disables Add to game", () => {

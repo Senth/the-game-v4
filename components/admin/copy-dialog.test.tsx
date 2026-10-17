@@ -1,7 +1,7 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, expect, it, vi } from "vitest"
-import { copyArc, getCopyDestinations } from "@/app/admin/copy-actions"
+import { copyArc, copyQuest, getCopyDestinations } from "@/app/admin/copy-actions"
 import { CopyDialog } from "./copy-dialog"
 
 const hooks = vi.hoisted(() => ({
@@ -18,7 +18,7 @@ vi.mock("react", async (importOriginal) => ({
 	},
 	useEffect: (effect: () => void) => hooks.effects.push(effect),
 }))
-vi.mock("@/app/admin/copy-actions", () => ({ copyArc: vi.fn(), getCopyDestinations: vi.fn() }))
+vi.mock("@/app/admin/copy-actions", () => ({ copyArc: vi.fn(), copyQuest: vi.fn(), getCopyDestinations: vi.fn() }))
 vi.mock("./confirm-dialog", () => ({ ConfirmDialog: vi.fn(() => null) }))
 
 const arc = {
@@ -28,7 +28,16 @@ const arc = {
 	quests: [{ id: "quest-1", label: "Harbour map", points: 40 }],
 }
 const destinations = [
-	{ id: "spring", title: "Spring Hunt 2027", status: "unscheduled" as const, start: null, arcs: [] },
+	{
+		id: "spring",
+		title: "Spring Hunt 2027",
+		status: "unscheduled" as const,
+		start: null,
+		arcs: [
+			{ id: "harbour", title: "Harbour" },
+			{ id: "market", title: "Market" },
+		],
+	},
 	{
 		id: "summer",
 		title: "Summer Relay",
@@ -52,20 +61,22 @@ type DialogProps = {
 type ElementProps = {
 	children?: ReactNode
 	value?: string
+	checked?: boolean
 	onChange?: (event: { target: { value: string } }) => void
 }
 
-function render(props: Partial<Parameters<typeof CopyDialog>[0]> = {}) {
+function render(props: Record<string, unknown> = {}) {
 	hooks.cursor = 0
 	hooks.effects.length = 0
 	const dialog = CopyDialog({
 		open: true,
 		sourceSeasonId: "source",
 		sourceSeasonTitle: "Cipher Night 2026",
+		mode: "arc",
 		arc,
 		onClose: vi.fn(),
 		...props,
-	})
+	} as Parameters<typeof CopyDialog>[0])
 	if (!isValidElement<DialogProps>(dialog)) throw new Error("Missing copy dialog")
 	return {
 		props: dialog.props,
@@ -74,6 +85,13 @@ function render(props: Partial<Parameters<typeof CopyDialog>[0]> = {}) {
 			for (const effect of hooks.effects) effect()
 		},
 	}
+}
+
+function hasCheckedInput(node: ReactNode): boolean {
+	return Children.toArray(node).some((child) => {
+		if (!isValidElement<ElementProps>(child)) return false
+		return (child.type === "input" && child.props.checked === true) || hasCheckedInput(child.props.children)
+	})
 }
 
 function find(
@@ -93,6 +111,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	vi.mocked(getCopyDestinations).mockResolvedValue({ ok: true, destinations })
 	vi.mocked(copyArc).mockResolvedValue({ ok: true, seasonId: "spring", arcId: "copied" })
+	vi.mocked(copyQuest).mockResolvedValue({ ok: true, seasonId: "spring", arcId: "harbour", questId: "copied-quest" })
 })
 
 it("loads destinations on open and shows muted loading with confirm disabled", async () => {
@@ -167,4 +186,64 @@ it("shows copied result and destination route", async () => {
 	expect(result.props.body).toBe("Lighthouse is now the last arc there, with 1 new quest.")
 	expect(result.props.result).toEqual({ label: "Open it ›", href: "/admin/seasons/spring" })
 	expect(result.props.cancelLabel).toBe("Close")
+})
+
+it("shows nested destination arcs and pluralized quest summary", async () => {
+	const props = {
+		mode: "quest",
+		quest: { id: "quest-1", label: "Fog horn morse", hintCount: 3 },
+		sourceArc: { id: "arc-1", title: "Lighthouse" },
+	}
+	const view = render(props)
+	view.runEffects()
+	await vi.waitFor(() => expect(render(props).props.disabled).toBe(false))
+	const loaded = render(props)
+	expect(loaded.html).toContain("From Cipher Night 2026 · Lighthouse · 3 hints")
+	expect(loaded.html).toContain("Into arc")
+	expect(loaded.html).toContain("Spring Hunt 2027")
+	expect(loaded.html).toContain("Harbour")
+	expect(loaded.html).toContain("Market")
+	expect(loaded.html).toContain("New arc")
+	expect(loaded.html).toContain("“Lighthouse”")
+	expect(loaded.html).toContain("Summer Relay")
+	expect(loaded.html).toContain("The copy is a new quest. Editing one season never changes the other.")
+	expect(hasCheckedInput(loaded.props.body)).toBe(true)
+	expect(loaded.html).toContain('checked="" value="harbour"')
+	expect(loaded.props.confirmLabel).toBe("Copy quest")
+	find(loaded.props.body, (element) => element.type === "input" && element.props.value === "market")?.props.onChange?.({
+		target: { value: "market" },
+	})
+	const changed = render(props)
+	await (changed.props.onConfirm as () => Promise<void>)()
+	expect(copyQuest).toHaveBeenCalledWith("source", "quest-1", { seasonId: "spring", arcId: "market" })
+	expect(render(props).props.body).toBe("Fog horn morse is now the last quest in Market.")
+})
+
+it("selects New arc for an arc-less first season and opens copied quest", async () => {
+	const props = {
+		mode: "quest",
+		quest: { id: "quest-1", label: "Fog horn morse", hintCount: 1 },
+		sourceArc: { id: "arc-1", title: "Lighthouse" },
+	}
+	vi.mocked(getCopyDestinations).mockResolvedValueOnce({
+		ok: true,
+		destinations: [{ ...destinations[0]!, arcs: [] }],
+	})
+	const view = render(props)
+	view.runEffects()
+	await vi.waitFor(() => expect(render(props).props.disabled).toBe(false))
+	const loaded = render(props)
+	expect(loaded.html).toContain("From Cipher Night 2026 · Lighthouse · 1 hint")
+	expect(loaded.html).toContain("New arc")
+	expect(loaded.html).toContain("“Lighthouse”")
+	expect(hasCheckedInput(loaded.props.body)).toBe(true)
+	await (loaded.props.onConfirm as () => Promise<void>)()
+	expect(copyQuest).toHaveBeenCalledWith("source", "quest-1", { seasonId: "spring", newArc: true })
+	const result = render(props)
+	expect(result.props.title).toBe("Copied to Spring Hunt 2027")
+	expect(result.props.body).toBe("Fog horn morse is now the last quest in Lighthouse.")
+	expect(result.props.result).toEqual({
+		label: "Open it ›",
+		href: "/admin/seasons/spring/quests/copied-quest",
+	})
 })
