@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { buildQuestOrder } from "@/lib/domain/game"
+import { applyStructuralEdit, buildQuestOrder, type StructuralEdit } from "@/lib/domain/game"
 import { playableArcs } from "@/lib/domain/playable-quests"
 import { RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
 import { collections, NotFoundError } from "./collections"
@@ -39,6 +39,38 @@ export async function listSeasonTeams(seasonId: string): Promise<Omit<Team, "pas
 
 export async function deleteTeam(id: string): Promise<boolean> {
 	return (await (await collections()).teams.deleteOne({ _id: id })).deletedCount === 1
+}
+
+export async function editSeasonTeamOrders(seasonId: string, edit: StructuralEdit): Promise<string[]> {
+	const { teams } = await collections()
+	const affected: string[] = []
+	for (const listed of await listSeasonTeams(seasonId)) {
+		let current: Omit<Team, "passwordHash"> | null = listed
+		for (let attempt = 0; current && current.seasonId === seasonId; attempt++) {
+			if (edit.kind === "addQuest" && current.questOrder.includes(edit.questId)) break
+			const result = applyStructuralEdit([current], edit)
+			const changed = result.teams[0]
+			if (!result.affected.length || !changed) break
+			const written = await teams.updateOne(
+				{
+					_id: current._id,
+					seasonId,
+					questOrder: current.questOrder,
+					questIndex: current.questIndex,
+					completed: current.completed,
+					progress: current.progress,
+				},
+				{ $set: { questOrder: changed.questOrder, completed: changed.completed, progress: changed.progress } },
+			)
+			if (written.matchedCount) {
+				affected.push(current._id)
+				break
+			}
+			if (attempt === 3) throw new Error("Not saved, retry")
+			current = await getTeam(current._id)
+		}
+	}
+	return affected
 }
 
 export async function fillQuestOrders(

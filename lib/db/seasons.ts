@@ -2,6 +2,7 @@ import type { Document, Filter, UpdateFilter } from "mongodb"
 import { z } from "zod"
 import { overlappingSeason, scheduleWindow, seasonStatus } from "@/lib/domain/admin-seasons"
 import { hasEnded, normalizeAnswer, registrationConflict } from "@/lib/domain/game"
+import { missingForGame } from "@/lib/domain/playable-quests"
 import {
 	AnswerAddValue,
 	Arc,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/domain/schemas"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { collections, NotFoundError } from "./collections"
+import { editSeasonTeamOrders } from "./teams"
 
 type Field<T> = Exclude<keyof T, "_id" | "id">
 
@@ -51,17 +53,39 @@ export class SeasonStartedError extends Error {
 	}
 }
 
+export class SeasonEndedError extends Error {
+	name = "SeasonEndedError"
+	constructor() {
+		super("The game has ended.")
+	}
+}
+
+export class QuestNotReadyError extends Error {
+	name = "QuestNotReadyError"
+	constructor(fields: string[]) {
+		super(`Fill in ${new Intl.ListFormat("en-GB", { style: "long", type: "conjunction" }).format(fields)} first.`)
+	}
+}
+
 async function writeSeasonTree(
 	seasonId: string,
 	now: Date,
 	filter: Filter<Season>,
 	update: UpdateFilter<Season>,
 	arrayFilters: Filter<unknown>[] = [],
+	state: "editable" | "beforeStart" | "live" = "editable",
 ): Promise<Season> {
 	const { seasons } = await collections()
 	const target = { ...filter, _id: seasonId }
 	const before = await seasons.findOneAndUpdate(
-		{ ...target, $or: [{ start: null }, { start: { $gt: now } }] },
+		{
+			...target,
+			$and: [
+				{ $or: [{ start: null }, { start: { $gt: now } }, { end: null }, { end: { $gt: now } }] },
+				...(state === "beforeStart" ? [{ $or: [{ start: null }, { start: { $gt: now } }] }] : []),
+				...(state === "live" ? [{ start: { $ne: null, $lte: now } }] : []),
+			],
+		},
 		update,
 		{
 			arrayFilters,
@@ -69,6 +93,8 @@ async function writeSeasonTree(
 		},
 	)
 	if (!before) {
+		const season = await seasons.findOne({ _id: seasonId })
+		if (season && seasonStatus(season, now) === "ended") throw new SeasonEndedError()
 		if (!(await seasons.findOne(target))) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(filter)}`)
 		throw new SeasonStartedError()
 	}
@@ -84,25 +110,67 @@ export async function addArc(seasonId: string, now: Date): Promise<string> {
 }
 
 export async function addQuest(seasonId: string, arcId: string, now: Date): Promise<string> {
-	const quest = newQuest()
+	const season = await getSeason(seasonId)
+	if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
+	const live = seasonStatus(season, now) === "live"
+	const quest = { ...newQuest(), ...(live ? { hidden: true } : {}) }
 	const { path, filter, arrayFilters } = locate({ arcId, field: "quests" })
-	await writeSeasonTree(seasonId, now, filter, { $push: { [path]: quest } }, arrayFilters)
+	await writeSeasonTree(
+		seasonId,
+		now,
+		filter,
+		{ $push: { [path]: quest } },
+		arrayFilters,
+		live ? "live" : "beforeStart",
+	)
 	return quest.id
 }
 
-export async function removeArc(seasonId: string, arcId: string, now: Date): Promise<string[]> {
-	const before = await writeSeasonTree(seasonId, now, { "arcs.id": arcId }, { $pull: { arcs: { id: arcId } } })
-	return before.arcs
-		.filter((arc) => arc.id === arcId)
-		.flatMap((arc) => arc.quests.flatMap((quest) => (quest.assetPath === null ? [] : [quest.assetPath])))
+export async function addQuestToGame(seasonId: string, arcId: string, questId: string, now: Date): Promise<string[]> {
+	const season = await getSeason(seasonId)
+	if (season && seasonStatus(season, now) === "ended") throw new SeasonEndedError()
+	const quest = season?.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
+	if (!quest) throw new NotFoundError(`Quest ${questId} not found`)
+	if (!quest.hidden) return []
+	const missing = missingForGame(quest)
+	if (missing.length) throw new QuestNotReadyError(missing)
+	const { path, arrayFilters } = locate({ arcId, questId, field: "hidden" })
+	await writeSeasonTree(
+		seasonId,
+		now,
+		{ arcs: { $elemMatch: { id: arcId, quests: { $elemMatch: quest } } } },
+		{ $set: { [path]: false } },
+		arrayFilters,
+		"live",
+	)
+	return editSeasonTeamOrders(seasonId, { kind: "addQuest", questId })
 }
 
-export async function removeQuest(seasonId: string, arcId: string, questId: string, now: Date): Promise<string[]> {
+type RemovalResult = { assetPaths: string[]; affected: string[] }
+
+export async function removeArc(seasonId: string, arcId: string, now: Date): Promise<RemovalResult> {
+	const before = await writeSeasonTree(seasonId, now, { "arcs.id": arcId }, { $pull: { arcs: { id: arcId } } })
+	const quests = before.arcs.find((arc) => arc.id === arcId)?.quests ?? []
+	const affected =
+		seasonStatus(before, now) === "live"
+			? await editSeasonTeamOrders(seasonId, {
+					kind: "deleteQuest",
+					questIds: quests.filter((quest) => !quest.hidden).map((quest) => quest.id),
+				})
+			: []
+	return { assetPaths: quests.flatMap((quest) => (quest.assetPath === null ? [] : [quest.assetPath])), affected }
+}
+
+export async function removeQuest(seasonId: string, arcId: string, questId: string, now: Date): Promise<RemovalResult> {
 	const { path, arrayFilters } = locate({ arcId, field: "quests" })
 	const filter = { arcs: { $elemMatch: { id: arcId, "quests.id": questId } } }
 	const before = await writeSeasonTree(seasonId, now, filter, { $pull: { [path]: { id: questId } } }, arrayFilters)
-	const assetPath = before.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)?.assetPath
-	return assetPath == null ? [] : [assetPath]
+	const quest = before.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
+	const affected =
+		seasonStatus(before, now) === "live" && !quest?.hidden
+			? await editSeasonTeamOrders(seasonId, { kind: "deleteQuest", questIds: [questId] })
+			: []
+	return { assetPaths: quest?.assetPath == null ? [] : [quest.assetPath], affected }
 }
 
 export type MoveTarget = { seasonId: string; id: string; beforeId: string | null }
@@ -155,7 +223,9 @@ async function writeMove(
 		[{ $set: { arcs } }],
 	)
 	if (result.matchedCount === 0) {
-		if (now && (await seasons.findOne(target))) throw new SeasonStartedError()
+		const season = now && (await seasons.findOne(target))
+		if (season && now && seasonStatus(season, now) === "ended") throw new SeasonEndedError()
+		if (season) throw new SeasonStartedError()
 		throw new MoveConflictError()
 	}
 }

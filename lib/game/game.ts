@@ -1,8 +1,10 @@
 import { getSeason, listSeasons } from "@/lib/db/seasons"
 import { fillQuestOrders, getTeam, listTeams, revealHint as revealTeamHint, solveCurrentQuest } from "@/lib/db/teams"
 import {
+	applyStructuralEdit,
 	boardSeasons,
 	currentQuest,
+	findQuest,
 	isRevealed,
 	lifecycleState,
 	matchesAnswer,
@@ -48,7 +50,12 @@ export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame
 	if (!team.seasonId) return playerGame(null, team, [], now)
 	const [season, listed] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
 	const teams = await fillEmptyQuestOrders(season, listed, now)
-	return playerGame(season, teams.find((candidate) => candidate._id === team._id) ?? team, teams, now)
+	let current = teams.find((candidate) => candidate._id === team._id) ?? team
+	if (season && lifecycleState(season, current, now) === "running") {
+		const missing = current.questOrder.slice(current.questIndex).filter((id) => !findQuest(season, id))
+		current = applyStructuralEdit([current], { kind: "deleteQuest", questIds: missing }).teams[0] ?? current
+	}
+	return playerGame(season, current, teams, now)
 }
 
 export async function loadStandings(team: Team, now = new Date()): Promise<PlayerStandings> {
