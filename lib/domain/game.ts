@@ -320,44 +320,90 @@ export function standingsRows(
 	})
 }
 
-export type StructuralEdit = { kind: "addQuest"; questId: string } | { kind: "deleteQuest"; questId: string }
+export type StructuralEdit = { kind: "addQuest"; questId: string } | { kind: "deleteQuest"; questIds: string[] }
 
-type EditableTeam = Pick<Team, "_id" | "questOrder" | "questIndex" | "completed" | "progress">
+export type StructuralEditImpact =
+	| { kind: "addQuest"; added: string[]; completed: number }
+	| { kind: "deleteQuest"; onIt: string[]; notReached: string[]; solved: number }
 
-function editTeam<T extends EditableTeam>(team: T, edit: StructuralEdit, random: () => number): T | null {
+type EditableTeam = Pick<Team, "_id" | "name" | "questOrder" | "questIndex" | "completed" | "progress">
+
+type TeamEditOutcome = "added" | "completed" | "onIt" | "notReached" | "solved" | "unchanged"
+
+function editTeam<T extends EditableTeam>(
+	team: T,
+	edit: StructuralEdit,
+	random: () => number,
+): { team: T | null; outcome: TeamEditOutcome } {
 	const { questOrder, questIndex } = team
 	if (edit.kind === "addQuest") {
-		if (team.completed) return null
+		if (team.completed) return { team: null, outcome: "completed" }
+		if (!questOrder.length) return { team: null, outcome: "unchanged" }
 		const slot = questIndex + 1 + Math.floor(random() * (questOrder.length - questIndex))
-		return { ...team, questOrder: questOrder.toSpliced(slot, 0, edit.questId) }
+		return { team: { ...team, questOrder: questOrder.toSpliced(slot, 0, edit.questId) }, outcome: "added" }
 	}
-	const position = questOrder.indexOf(edit.questId)
-	if (position === -1 || position < questIndex) return null
-	const remaining = questOrder.toSpliced(position, 1)
-	if (position > questIndex) return { ...team, questOrder: remaining }
-	const skipped = team.progress.find((entry) => entry.questId === edit.questId)
-	return {
-		...team,
-		questOrder: remaining,
-		completed: questIndex >= remaining.length,
-		progress: [
-			...team.progress.filter((entry) => entry !== skipped),
-			{ questId: edit.questId, hintsRevealed: skipped?.hintsRevealed ?? [], pointsEarned: 0 },
-		],
+	const questIds = new Set(edit.questIds)
+	if (!questOrder.length || !questIds.size) return { team: null, outcome: "unchanged" }
+	const currentQuestId = questOrder[questIndex]
+	if (currentQuestId !== undefined && questIds.has(currentQuestId)) {
+		const remaining = questOrder.filter((questId, index) => index < questIndex || !questIds.has(questId))
+		const skipped = team.progress.find((entry) => entry.questId === currentQuestId)
+		return {
+			team: {
+				...team,
+				questOrder: remaining,
+				completed: questIndex >= remaining.length,
+				progress: [
+					...team.progress.filter((entry) => entry !== skipped),
+					{ questId: currentQuestId, hintsRevealed: skipped?.hintsRevealed ?? [], pointsEarned: 0 },
+				],
+			},
+			outcome: "onIt",
+		}
 	}
+	if (questOrder.some((questId, index) => index > questIndex && questIds.has(questId))) {
+		return {
+			team: {
+				...team,
+				questOrder: questOrder.filter((questId, index) => index <= questIndex || !questIds.has(questId)),
+			},
+			outcome: "notReached",
+		}
+	}
+	if (
+		edit.questIds.every((questId) => {
+			const position = questOrder.indexOf(questId)
+			return position >= 0 && position < questIndex
+		})
+	) {
+		return { team: null, outcome: "solved" }
+	}
+	return { team: null, outcome: "unchanged" }
 }
 
 export function applyStructuralEdit<T extends EditableTeam>(
 	teams: T[],
 	edit: StructuralEdit,
 	random: () => number = Math.random,
-): { teams: T[]; affected: string[] } {
+): { teams: T[]; affected: string[]; impact: StructuralEditImpact } {
 	const affected: string[] = []
+	const impact: StructuralEditImpact =
+		edit.kind === "addQuest"
+			? { kind: "addQuest", added: [], completed: 0 }
+			: { kind: "deleteQuest", onIt: [], notReached: [], solved: 0 }
 	const edited = teams.map((team) => {
-		const changed = editTeam(team, edit, random)
+		const { team: changed, outcome } = editTeam(team, edit, random)
+		if (impact.kind === "addQuest") {
+			if (outcome === "added") impact.added.push(team.name)
+			if (outcome === "completed") impact.completed++
+		} else {
+			if (outcome === "onIt") impact.onIt.push(team.name)
+			if (outcome === "notReached") impact.notReached.push(team.name)
+			if (outcome === "solved") impact.solved++
+		}
 		if (!changed) return team
 		affected.push(team._id)
 		return changed
 	})
-	return { teams: edited, affected }
+	return { teams: edited, affected, impact }
 }
