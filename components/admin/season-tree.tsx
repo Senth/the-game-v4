@@ -75,7 +75,7 @@ export function SeasonTree({
 	const editable = canEditStructure({ start, end }, currentNow)
 	const live = seasonStatus({ start, end }, currentNow) === "live"
 	const canAddRemove = editable || live
-	const liveStats = variant === "page" && live ? stats : undefined
+	const liveStats = live ? stats : undefined
 	const [expandedQuest, setExpandedQuest] = useState<string | null>(null)
 	const [editing, setEditing] = useState<{ arcId: string; selectTitle: boolean } | null>(null)
 	const [confirming, setConfirming] = useState<string | null>(null)
@@ -258,7 +258,7 @@ export function SeasonTree({
 							return result
 						})
 					}
-					onRemove={() => (arc.quests.length ? setConfirming(arc.id) : void deleteArc(arc.id))}
+					onRemove={() => setConfirming(arc.id)}
 				/>
 			))}
 		</ul>

@@ -323,11 +323,11 @@ it("keeps only one live quest expanded across arcs", () => {
 	expect(view.html).toContain("Lagom")
 })
 
-it("leaves the desktop menu unchanged even when stats are supplied", () => {
+it("shows live completion stats in the desktop menu", () => {
 	const view = render({ ...liveProps, variant: "menu" })
-	expect(view.html).toContain('href="/admin/seasons/s1/quests/q1"')
-	expect(view.html).not.toContain("done")
-	expect(view.html).not.toContain("quest-stats-q1")
+	expect(view.html).toContain("7/10 done")
+	expect(view.html).toContain('style="width:70%"')
+	expect(view.html).not.toContain("Completed by")
 })
 
 it("hides live stats when the client clock reaches the season end", async () => {
@@ -495,13 +495,21 @@ it("keeps a plain confirmation for arcs containing only hidden drafts", () => {
 	expect(getRemoveArcImpact).not.toHaveBeenCalled()
 })
 
-it("removes an empty arc without confirmation", async () => {
-	const props = { tree: { arcs: [{ ...arc, quests: [] }] } }
+it.each(["menu", "page"] as const)("confirms removal of an empty arc in %s", async (variant) => {
+	const props = { ...liveProps, variant, tree: { arcs: [{ ...arc, quests: [] }] } }
 	render(props).button("Old Town").props.onClick?.()
 	render(props).button("Remove arc").props.onClick?.()
-	await vi.waitFor(() => expect(hooks.refresh).toHaveBeenCalledOnce())
-	expect(removeArc).toHaveBeenCalledWith("s1", "a1")
-	expect(render(props).html).not.toContain("<dialog")
+	const view = render(props)
+	expect(view.html).toContain("Remove Old Town?")
+	expect(view.html).toContain("This also removes its 0 quests.")
+	expect(removeArc).not.toHaveBeenCalled()
+	expect(getRemoveArcImpact).not.toHaveBeenCalled()
+	const dialog = view.all.find((element) => element.type === "dialog")
+	elements(dialog)
+		.filter((element) => element.type === "button")[1]
+		?.props.onClick?.()
+	await vi.waitFor(() => expect(removeArc).toHaveBeenCalledWith("s1", "a1"))
+	expect(hooks.refresh).toHaveBeenCalledOnce()
 })
 
 it("hides structural controls after the season ends", () => {
@@ -548,6 +556,12 @@ it.each(["arc", "quest", "remove"])("puts failed %s actions below their control 
 	if (control === "remove") render(props).button("Old Town").props.onClick?.()
 	const label = control === "arc" ? "+ Arc" : control === "quest" ? "+ Quest in Old Town" : "Remove arc"
 	render(props).button(label).props.onClick?.()
+	if (control === "remove") {
+		const dialog = render(props).all.find((element) => element.type === "dialog")
+		elements(dialog)
+			.filter((element) => element.type === "button")[1]
+			?.props.onClick?.()
+	}
 	await vi.waitFor(() => expect(render(props).html).toContain("The game has started."))
 	const view = render(props)
 	expect(view.html.match(/role="alert"/g)).toHaveLength(1)

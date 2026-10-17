@@ -13,7 +13,8 @@ import { SeasonTree } from "@/components/admin/season-tree"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason, listSeasons } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
-import { liveControls } from "@/lib/domain/admin-seasons"
+import { liveControls, seasonStatus } from "@/lib/domain/admin-seasons"
+import { questLiveStats } from "@/lib/domain/quest-stats"
 import { treeView } from "@/lib/domain/season-tree"
 
 export default async function SeasonLayout({ children, params }: LayoutProps<"/admin/seasons/[seasonId]">) {
@@ -24,6 +25,17 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 	const [seasons, teams] = await Promise.all([listSeasons(), listSeasonTeams(seasonId)])
 	const teamCount = teams.length
 	const now = Date.now()
+	const liveStats = seasonStatus(season, new Date(now)) === "live" ? questLiveStats(season, teams) : undefined
+	const stats =
+		liveStats &&
+		Object.fromEntries(
+			season.arcs.flatMap((arc) =>
+				arc.quests.flatMap((quest) => {
+					const questStats = liveStats[quest.id]
+					return questStats ? [[quest.id, { ...questStats, hints: quest.hints }]] : []
+				}),
+			),
+		)
 	const status = <SeasonStatus start={season.start} end={season.end} now={now} />
 	const controls = (
 		<LiveControls
@@ -52,6 +64,7 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 							end={season.end}
 							now={now}
 							variant="menu"
+							stats={stats}
 						/>
 					</SeasonMenu>
 				}
