@@ -1,6 +1,7 @@
 import type { Db } from "mongodb"
 import type { Admin, Season, Team } from "@/lib/domain/schemas"
 import { getDb } from "./client"
+import type { PendingStructure } from "./structural-writes"
 
 export class NotFoundError extends Error {
 	name = "NotFoundError"
@@ -8,7 +9,7 @@ export class NotFoundError extends Error {
 
 export function collectionsOf(db: Db) {
 	return {
-		seasons: db.collection<Season>("seasons"),
+		seasons: db.collection<Season & { pendingStructure?: PendingStructure }>("seasons"),
 		teams: db.collection<Team>("teams"),
 		admins: db.collection<Admin>("admins"),
 	}

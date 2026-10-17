@@ -53,6 +53,7 @@ A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
 | `Hint` | `id: string`, `text: string`, `points: number` |
 
 A quest and each hint must have a stable id. Assign ids to hints that lack them, including on import.
+`Quest` also has `hidden?: boolean`; absent means visible.
 Draft quests may have empty content, empty answers or missing points.
 Quest points are a whole number from 0 to 10000, or null on a draft.
 Hint points are a whole number from 0 to 10000.
@@ -232,7 +233,8 @@ A server action validates values before writing.
 The `registrationOpen` field keeps its own action.
 Lists never save whole. Additions and removals in `answers` and `hints` change one item at a time.
 Before start, admins add, remove and move arcs and quests freely, including quests across arcs.
-Once live or ended, I-24 owns those changes.
+While live, admins may add and remove arcs and quests. Moves stay pre-start only.
+Ended seasons reject every structural edit.
 A move sends one id and its target, never the whole list, and never overwrites a concurrent field edit.
 A new arc is titled "New arc" and copies `shuffleArcs` into `shuffleQuests`.
 A new quest has empty display title, internal title and content, no answers, hints or asset, and `points: null`.
@@ -246,7 +248,16 @@ Preview renders real game components from the current edit, following unsaved ch
 
 Text, answers, hints and points apply immediately during play, including hint reordering.
 Revealed-hint snapshots remain unchanged.
-Structural edits require confirmation that names how many teams are affected:
+Quests added while live are hidden drafts.
+Players, rails, standings, board, order builds and live stats skip hidden drafts.
+"Add to game" clears `hidden` once display title, content, at least one answer and points are set.
+It then applies the new-quest rule below. Removing a hidden draft affects no team.
+
+Adding a quest to the game and removals touching teams require confirmation naming the affected team count.
+Read counts when the dialog opens; recompute impact from current team documents when writing.
+Teams whose orders are not built yet are skipped and not counted. Their later build reads the current season.
+
+Structural edits follow these rules:
 
 - A new quest goes into a random position after the current quest in each team's remaining order.
   Completed teams ignore added quests.
@@ -254,6 +265,9 @@ Structural edits require confirmation that names how many teams are affected:
 - Teams currently on a deleted quest skip it with 0 points. The quest leaves `questOrder`, `questIndex` stays,
   and its progress entry records `pointsEarned: 0` without `solvedAt`, keeping revealed hint snapshots.
   Score is unchanged. If no quest remains at `questIndex`, the team is completed.
+- Removing an arc applies the delete rule to each quest. Count each team once.
+
+Structural edits publish `team:<id>` for each changed team, plus `season:<id>` and `board`.
 
 Copying an arc into an unstarted season creates independent quests with new ids.
 Admin live quest stats show completion and revealers only while running; hide before start and after end.

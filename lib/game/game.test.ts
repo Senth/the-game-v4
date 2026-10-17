@@ -81,6 +81,27 @@ beforeAll(async () => {
 })
 
 describe("loadGame", () => {
+	it.each([false, true])("skips a missing current quest during the season/team write gap, last=%s", async (last) => {
+		const gapSeason = await createSeason({
+			...season,
+			_id: crypto.randomUUID(),
+			arcs: season.arcs.map((arc) => ({ ...arc, quests: arc.quests.filter((quest) => quest.id !== current) })),
+		})
+		const team = await freshTeam({
+			seasonId: gapSeason._id,
+			questOrder: last ? [current] : [current, next],
+			questIndex: 0,
+			score: 0,
+			progress: ninjas.progress.filter((entry) => entry.questId === current),
+		})
+		expect(await loadGame(team, now)).toMatchObject(
+			last
+				? { lifecycleState: "completed", score: 0 }
+				: { lifecycleState: "running", quest: { id: next }, score: 0, total: 1 },
+		)
+		expect(await getTeam(team._id)).toEqual(team)
+	})
+
 	it("returns waiting for a seasonless team", async () => {
 		expect(await loadGame(await freshTeam({ seasonId: null }), now)).toEqual({ lifecycleState: "waiting" })
 	})

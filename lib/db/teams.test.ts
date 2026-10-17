@@ -1,12 +1,13 @@
-import { MongoServerError } from "mongodb"
-import { describe, expect, it } from "vitest"
+import { Collection, MongoServerError } from "mongodb"
+import { describe, expect, it, vi } from "vitest"
 import type { Season, Team } from "@/lib/domain/schemas"
 import { useTestDb } from "@/test/db"
-import { NotFoundError } from "./collections"
+import { collections, NotFoundError } from "./collections"
 import {
 	countTeams,
 	createTeam,
 	deleteTeam,
+	editSeasonTeamOrders,
 	fillQuestOrders,
 	getTeam,
 	listSeasonTeams,
@@ -114,8 +115,8 @@ describe("teams", () => {
 		const q1 = { questIndex: 0, questId: "q1" }
 		const solveQ1 = { ...q1, orderLength: 2, hintCount: 0 }
 
-		async function playing() {
-			return createTeam({ ...team(crypto.randomUUID(), "spring"), questOrder: ["q1", "q2"] })
+		async function playing(seasonId = "spring") {
+			return createTeam({ ...team(crypto.randomUUID(), seasonId), questOrder: ["q1", "q2"] })
 		}
 
 		it("adds points and advances once for concurrent solves", async () => {
@@ -165,6 +166,62 @@ describe("teams", () => {
 
 			expect(await getTeam(_id)).toMatchObject({ score: 80, questIndex: 2, completed: true })
 		})
+
+		it.each(["solve", "reveal"])("re-reads and retries structural writes after a concurrent %s", async (kind) => {
+			const seasonId = crypto.randomUUID()
+			const input = await playing(seasonId)
+			const original = Collection.prototype.updateOne
+			const write = vi.spyOn(Collection.prototype, "updateOne").mockImplementationOnce(async function (
+				this: Collection,
+				...args
+			) {
+				if (kind === "solve") expect(await solveCurrentQuest(input._id, solveQ1, hint.revealedAt, 50)).toBe(true)
+				else expect(await revealHint(input._id, q1, hint)).toBe(true)
+				return original.apply(this, args)
+			})
+			try {
+				const affected = await editSeasonTeamOrders(seasonId, { kind: "deleteQuest", questIds: ["q1"] })
+				const stored = await getTeam(input._id)
+				if (kind === "solve") {
+					expect(affected).not.toContain(input._id)
+					expect(stored).toEqual({
+						...input,
+						questIndex: 1,
+						score: 50,
+						progress: [{ questId: "q1", solvedAt: hint.revealedAt, pointsEarned: 50, hintsRevealed: [] }],
+					})
+				} else {
+					expect(affected).toContain(input._id)
+					expect(stored).toEqual({
+						...input,
+						questOrder: ["q2"],
+						progress: [{ questId: "q1", hintsRevealed: [hint], pointsEarned: 0 }],
+					})
+				}
+			} finally {
+				write.mockRestore()
+			}
+		})
+
+		it("makes a solve stale when deleting the current quest wins", async () => {
+			const seasonId = crypto.randomUUID()
+			const input = await playing(seasonId)
+			await editSeasonTeamOrders(seasonId, { kind: "deleteQuest", questIds: ["q1"] })
+			expect(await solveCurrentQuest(input._id, solveQ1, hint.revealedAt, 50)).toBe(false)
+			expect(await getTeam(input._id)).toEqual({
+				...input,
+				questOrder: ["q2"],
+				progress: [{ questId: "q1", hintsRevealed: [], pointsEarned: 0 }],
+			})
+		})
+
+		it("does not add a published quest twice when a fresh order build already contains it", async () => {
+			const seasonId = crypto.randomUUID()
+			const input = await playing(seasonId)
+			const edit = { kind: "addQuest", questId: "q2" } as const
+			expect(await editSeasonTeamOrders(seasonId, edit)).not.toContain(input._id)
+			expect(await getTeam(input._id)).toEqual(input)
+		})
 	})
 })
 
@@ -199,6 +256,7 @@ describe("fillQuestOrders", () => {
 
 	it("fills each team once under ten concurrent calls and every caller reads the same orders", async () => {
 		const input = season()
+		await (await collections()).seasons.insertOne(input)
 		const teams = await Promise.all(["Ninjas", "Owls", "Foxes"].map((name) => createTeam(team(name, input._id))))
 		const before = structuredClone({ input, teams })
 		const results = await Promise.all(
@@ -220,6 +278,7 @@ describe("fillQuestOrders", () => {
 
 	it("reports exactly one winning caller for one team", async () => {
 		const input = season()
+		await (await collections()).seasons.insertOne(input)
 		const teams = [await createTeam(team("Ninjas", input._id))]
 		const results = await Promise.all(Array.from({ length: 10 }, () => fillQuestOrders(input, teams)))
 		expect(results.filter(Boolean)).toHaveLength(1)
@@ -227,6 +286,7 @@ describe("fillQuestOrders", () => {
 
 	it("leaves existing orders, progress and other seasons untouched even with stale team input", async () => {
 		const input = season()
+		await (await collections()).seasons.insertOne(input)
 		const ordered = await createTeam(team("Ordered", input._id))
 		const progressed = await createTeam(team("Progressed", input._id))
 		const other = await createTeam(team("Other", null))
@@ -240,9 +300,24 @@ describe("fillQuestOrders", () => {
 
 	it("writes nothing for an empty season or an empty team list", async () => {
 		const input = { ...season(), arcs: [] }
+		await (await collections()).seasons.insertOne(input)
 		const ninjas = await createTeam(team("Ninjas", input._id))
 		expect(await fillQuestOrders(input, [ninjas])).toBe(false)
 		expect(await fillQuestOrders(season(), [])).toBe(false)
 		expect(await getTeam(ninjas._id)).toEqual(ninjas)
+	})
+
+	it.each([false, true])("skips hidden drafts when filling orders, all hidden %s", async (allHidden) => {
+		const input = season()
+		input.arcs = input.arcs.map((arc) => ({
+			...arc,
+			quests: arc.quests.map((quest, index) => ({ ...quest, hidden: allHidden || index === 0 })),
+		}))
+		await (await collections()).seasons.insertOne(input)
+		const ninjas = await createTeam(team("Ninjas", input._id))
+		const original = structuredClone({ input, ninjas })
+		expect(await fillQuestOrders(input, [ninjas])).toBe(!allHidden)
+		expect((await getTeam(ninjas._id))?.questOrder.toSorted()).toEqual(allHidden ? [] : ["a1-q2", "a2-q2"])
+		expect({ input, ninjas }).toEqual(original)
 	})
 })

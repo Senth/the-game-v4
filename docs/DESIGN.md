@@ -161,7 +161,8 @@ Tap an arc title to rename it; opening a newly added quest goes directly to its 
 Quest rows show internal title, else display title, else muted `Untitled quest`. Missing points show muted `–`.
 Tapping an arc title opens an H2-style panel with an `Arc title` field, `Remove arc` and `Done`.
 Done, Enter or Escape close it.
-Add and remove controls show only before start. Removing a quest is a quiet link at the bottom of its page.
+Add and remove controls show before start and while live; ended seasons show neither.
+Removing a quest is a quiet link at the bottom of its page.
 Removing an arc with quests, or any quest, confirms in End game's `<dialog>` style.
 Desktop tree rows are 44 px tall. D1's 36 px rows are superseded.
 After start, long presses on quest and arc rows do nothing; taps still open them.
@@ -189,6 +190,37 @@ then hints with revealers.
 Only one quest stays open at a time. Phone shows "Edit quest ›". Desktop block stays open above form,
 with no Edit link.
 PROJECT.md owns the visibility window for these stats.
+
+### Live structural edits
+
+Final mocks supersede M1 and M2 for these states:
+
+- [Phone](https://artifacts.senth.org/final-phone-2eb100.png)
+- [Desktop](https://artifacts.senth.org/final-desktop-e441d2.png)
+- [Desktop dialog](https://artifacts.senth.org/final-desktop-dialog-3f9af6.png)
+
+Draft rows use a muted title and second line, `font-cond text-xs text-muted`, reading "Draft · teams don't see it".
+Points show muted `–` or their value. Show no live stats or chevron.
+
+Dialogs read first affected count, second consequences, third Cancel and confirm.
+Keep secondary links and solved-team footnotes quiet.
+Use the existing native `<dialog>` style. While impact loads, show muted "Counting teams…" and disable confirm.
+Use accent for "Add to game" and red for removals.
+See [PROJECT.md](PROJECT.md#authoring-and-live-edits) for impact rules and count timing.
+
+Live removal dialogs share this impact body:
+
+- Count: `<N> teams affected`, "1 team affected" or "No team is affected", in `font-cond text-sm text-head`.
+- Group labels use `.label` style. Current-team chips use `bg-warn/15 text-warn`; unreached-team chips use `z2`.
+- Omit empty groups. With no affected teams, show no groups.
+- Footnote: `<K> teams solved it and keep their points.`, in `font-cond text-xs text-muted`. Omit when K is zero.
+
+Live Remove arc dialog:
+
+- Title: `Remove <arc>?`. Body line: `This also removes its <n> quests.`.
+- Groups: "On one of them now · skips it with 0 points" and "Quests left in it · they leave their order".
+- Footnote: `<K> teams solved every quest in it and keep their points.`. Omit when K is zero.
+- Confirm: "Remove arc". Empty arcs and arcs containing only hidden drafts keep the plain confirmation.
 
 ## M2: mobile quest editor
 
@@ -219,7 +251,7 @@ H1/H2 supersede M2's always-open hint rows, not its field order or Revealed by c
 - On desktop, dragging a file anywhere over the quest form shows a dashed accent overlay.
   It reads "Drop to replace the image" or "Drop to add an image or PDF".
 - Remove confirms in the Remove quest dialog style.
-- Remove quest's dialog body reads "Its answers, hints and image go too." when the quest has a file.
+- The plain Remove quest dialog reads "Its answers, hints and image go too." when the quest has a file.
 - Remove dialog copy:
   - Title: "Remove this image?" or "Remove this PDF?".
   - Body: "Players stop seeing it and the file is deleted." Confirm: "Remove image" or "Remove PDF".
@@ -229,6 +261,34 @@ H1/H2 supersede M2's always-open hint rows, not its field order or Revealed by c
   - `Drop one file at a time.`
   - `Not saved, retry` (existing generic failure)
 - On desktop, titles share a row, and so do Answers and Points, as D1.
+
+### Live draft and quest dialogs
+
+Use the [final structural-edit mocks](#live-structural-edits), panels 2 through 4, on phone and desktop.
+Put a `bg-z1 rounded-md p-3` draft note above Display title.
+
+- Not ready: `Fill in <fields> to add it to the game.`. Use lowercase field names joined as "a, b and c".
+- Disable the accent "Add to game" button until ready. Missing fields keep their warn border and line.
+- Ready: "Teams don't see this quest yet.". Enable "Add to game".
+- After adding succeeds, remove the note on `season:<id>` refresh and show the tree row's live stats.
+
+Add dialog copy:
+
+- Title: `Add <label> for <N> teams?`.
+- Body: "Each team gets it at a random spot after its current quest.".
+- When completed teams exist, add muted `<K> teams finished and don't get it.`.
+- For N = 0, title: `Add <label> to the game?`.
+  Body: "No team is playing it yet. Teams that start later get it.".
+- Confirm: accent "Add to game".
+
+Live Remove quest dialog uses the [shared impact body](#live-structural-edits):
+
+- Title: `Remove <label>?`.
+- Groups: "On it now · skips it with 0 points" and "Not reached · leaves their order".
+- Confirm: red "Remove quest". Omit "Its answers, hints and image go too." from this live impact dialog.
+- Hidden drafts keep the plain confirmation, including its answers, hints and image copy.
+
+`<label>` uses internal title, else display title, else "this quest".
 
 ## M3: admin teams
 

@@ -26,7 +26,7 @@ const FieldTarget = z.union([
 		.object({
 			arcId: id,
 			questId: id,
-			field: Quest.omit({ id: true, answers: true, hints: true, assetPath: true }).keyof(),
+			field: Quest.omit({ id: true, hidden: true, answers: true, hints: true, assetPath: true }).keyof(),
 		})
 		.strict(),
 	z.object({ arcId: id, questId: id, hintId: id, field: Hint.omit({ id: true }).keyof() }).strict(),

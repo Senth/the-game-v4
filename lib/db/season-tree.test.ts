@@ -11,6 +11,7 @@ import {
 	getSeason,
 	removeArc,
 	removeQuest,
+	SeasonEndedError,
 	SeasonStartedError,
 	setQuestAsset,
 	setSeasonField,
@@ -78,18 +79,18 @@ describe("season tree writes", () => {
 		expect(await getSeason(season._id)).toEqual(expected)
 	})
 
-	it.each([
-		{ state: "live", start: at(0), end: at(60) },
-		{ state: "ended", start: at(-60), end: at(0) },
-	])("rejects all four writes while $state without changing data", async ({ start, end }) => {
-		const season = await createSeason({ ...seasonInput(), start, end })
-		for (const { run } of writes) {
-			const rejected = run(season._id)
-			await expect(rejected).rejects.toThrow(SeasonStartedError)
-			await expect(rejected).rejects.toThrow("The game has started.")
-			expect(await getSeason(season._id)).toEqual(season)
-		}
-	})
+	it.each([{ state: "ended", start: at(-60), end: at(0) }])(
+		"rejects all four writes while $state without changing data",
+		async ({ start, end }) => {
+			const season = await createSeason({ ...seasonInput(), start, end })
+			for (const { run } of writes) {
+				const rejected = run(season._id)
+				await expect(rejected).rejects.toThrow(SeasonEndedError)
+				await expect(rejected).rejects.toThrow("The game has ended.")
+				expect(await getSeason(season._id)).toEqual(season)
+			}
+		},
+	)
 
 	it.each([false, true])("copies shuffleArcs=%s into new arcs", async (shuffleArcs) => {
 		const season = await createSeason({ ...seasonInput(), shuffleArcs })
@@ -127,22 +128,25 @@ describe("season tree writes", () => {
 		await setQuestAsset(season._id, "a1", "q1", "/assets/first.png")
 		await setQuestAsset(season._id, "a1", "q2", "/assets/second.pdf")
 		await setQuestAsset(season._id, "a2", "q4", "/assets/retained.jpg")
-		expect(await removeQuest(season._id, "a1", "q2", now)).toEqual(["/assets/second.pdf"])
-		expect(await removeQuest(season._id, "a1", "q3", now)).toEqual([])
-		expect(await removeArc(season._id, "a1", now)).toEqual(["/assets/first.png"])
-		expect(await removeArc(season._id, "a3", now)).toEqual([])
+		expect(await removeQuest(season._id, "a1", "q2", now)).toEqual({ assetPaths: ["/assets/second.pdf"], affected: [] })
+		expect(await removeQuest(season._id, "a1", "q3", now)).toEqual({ assetPaths: [], affected: [] })
+		expect(await removeArc(season._id, "a1", now)).toEqual({ assetPaths: ["/assets/first.png"], affected: [] })
+		expect(await removeArc(season._id, "a3", now)).toEqual({ assetPaths: [], affected: [] })
 		expect((await getSeason(season._id))?.arcs).toMatchObject([
 			{ id: "a2", quests: [{ id: "q4", assetPath: "/assets/retained.jpg" }] },
 		])
 		await setQuestAsset(season._id, "a2", "q4", null)
-		expect(await removeArc(season._id, "a2", now)).toEqual([])
+		expect(await removeArc(season._id, "a2", now)).toEqual({ assetPaths: [], affected: [] })
 	})
 
 	it("returns all non-null asset paths from a removed arc", async () => {
 		const season = await createSeason(seasonInput())
 		await setQuestAsset(season._id, "a1", "q1", "/assets/first.png")
 		await setQuestAsset(season._id, "a1", "q3", "/assets/second.pdf")
-		expect(await removeArc(season._id, "a1", now)).toEqual(["/assets/first.png", "/assets/second.pdf"])
+		expect(await removeArc(season._id, "a1", now)).toEqual({
+			assetPaths: ["/assets/first.png", "/assets/second.pdf"],
+			affected: [],
+		})
 	})
 
 	it("rejects missing seasons for all four writes", async () => {
@@ -161,7 +165,7 @@ describe("season tree writes", () => {
 		expect(await getSeason(season._id)).toEqual(season)
 	})
 
-	it.each(writes)("atomically rejects $name if the season starts before its write", async ({ run }) => {
+	it("atomically rejects a visible quest addition if the season starts before its write", async () => {
 		const season = await createSeason(seasonInput())
 		const findOneAndUpdate = Collection.prototype.findOneAndUpdate
 		const write = vi.spyOn(Collection.prototype, "findOneAndUpdate").mockImplementationOnce(async function (
@@ -172,8 +176,26 @@ describe("season tree writes", () => {
 			return findOneAndUpdate.apply(this, args)
 		})
 		try {
-			await expect(run(season._id)).rejects.toThrow(SeasonStartedError)
+			await expect(addQuest(season._id, "a1", now)).rejects.toThrow(SeasonStartedError)
 			expect(await getSeason(season._id)).toEqual({ ...season, start: now })
+		} finally {
+			write.mockRestore()
+		}
+	})
+
+	it.each(writes)("atomically rejects $name if the season ends before its write", async ({ run }) => {
+		const season = await createSeason({ ...seasonInput(), start: at(-1), end: at(59) })
+		const original = Collection.prototype.findOneAndUpdate
+		const write = vi.spyOn(Collection.prototype, "findOneAndUpdate").mockImplementationOnce(async function (
+			this: Collection,
+			...args
+		) {
+			await setSeasonField(season._id, { field: "end" }, now)
+			return original.apply(this, args)
+		})
+		try {
+			await expect(run(season._id)).rejects.toThrow(SeasonEndedError)
+			expect(await getSeason(season._id)).toEqual({ ...season, end: now })
 		} finally {
 			write.mockRestore()
 		}

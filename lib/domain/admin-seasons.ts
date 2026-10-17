@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { hasEnded } from "./game"
+import { playableArcs } from "./playable-quests"
 import type { Season } from "./schemas"
 
 export const NewSeasonTitle = z.string().trim().min(1).max(60)
@@ -64,7 +65,7 @@ export function liveControls(
 	return {
 		state: status === "unscheduled" || status === "upcoming" ? "start" : status,
 		canShrink: status === "live" && season.end !== null && season.end.getTime() - now.getTime() > 300_000,
-		hasQuests: season.arcs.some((arc) => arc.quests.length > 0),
+		hasQuests: playableArcs(season).some((arc) => arc.quests.length > 0),
 	}
 }
 

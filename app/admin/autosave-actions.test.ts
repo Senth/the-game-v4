@@ -56,6 +56,18 @@ async function setup() {
 const quest = { arcId: "a1", questId: "q1" }
 
 describe("autosave actions", () => {
+	it.each([true, false])("rejects hidden autosave %s without writing or publishing", async (value) => {
+		const season = await setup()
+		await (await collections()).seasons.updateOne({ _id: season._id }, { $set: { "arcs.0.quests.0.hidden": !value } })
+		const before = await seasons.getSeason(season._id)
+		expect(await saveSeasonField(season._id, { ...quest, field: "hidden" }, value)).toEqual({
+			ok: false,
+			error: "Invalid value.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(before)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
 	it("rejects assetPath autosave without writing or publishing", async () => {
 		const season = await setup()
 		expect(await saveSeasonField(season._id, { ...quest, field: "assetPath" }, "/assets/image.png")).toEqual({

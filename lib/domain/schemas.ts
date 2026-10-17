@@ -16,6 +16,7 @@ export type Hint = z.infer<typeof Hint>
 
 export const Quest = z.object({
 	id,
+	hidden: z.boolean().optional(),
 	displayTitle: z.string(),
 	internalTitle: z.string(),
 	content: z.string(),
