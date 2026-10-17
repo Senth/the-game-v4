@@ -13,18 +13,22 @@ import {
 	moveArc as saveArcMove,
 	moveQuest as saveQuestMove,
 } from "@/app/admin/tree-actions"
+import { seasonStatus } from "@/lib/domain/admin-seasons"
+import type { QuestLiveStats } from "@/lib/domain/quest-stats"
 import { moveArc, moveQuest } from "@/lib/domain/reorder"
-import type { Arc } from "@/lib/domain/schemas"
+import type { Arc, Hint } from "@/lib/domain/schemas"
 import { canEditStructure, type treeView } from "@/lib/domain/season-tree"
 import { useAutosave, useAutosaveField } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { ConfirmDialog, outlineClass } from "./confirm-dialog"
+import { QuestCompletion, QuestLiveStatsBlock } from "./quest-live-stats"
 import { SortableDragLayer, SortableRow } from "./sortable/drag-layer"
 import { useMoveQueue } from "./sortable/use-move-queue"
 import { useSeasonClock } from "./use-season-clock"
 
 type Tree = ReturnType<typeof treeView>
 type Variant = "menu" | "page"
+type LiveStats = Record<string, QuestLiveStats & { hints: Hint[] }>
 type TreeMove =
 	| { kind: "arc"; id: string; beforeId: string | null }
 	| {
@@ -51,6 +55,7 @@ export function SeasonTree({
 	end,
 	now,
 	variant,
+	stats,
 }: {
 	seasonId: string
 	tree: Tree
@@ -58,11 +63,15 @@ export function SeasonTree({
 	end: Date | null
 	now: number
 	variant: Variant
+	stats?: LiveStats
 }) {
 	const router = useRouter()
 	const autosave = useAutosave()
 	const segments = useSelectedLayoutSegments()
-	const editable = canEditStructure({ start, end }, new Date(useSeasonClock(now, start, end)))
+	const currentNow = new Date(useSeasonClock(now, start, end))
+	const editable = canEditStructure({ start, end }, currentNow)
+	const liveStats = variant === "page" && seasonStatus({ start, end }, currentNow) === "live" ? stats : undefined
+	const [expandedQuest, setExpandedQuest] = useState<string | null>(null)
 	const [editing, setEditing] = useState<{ arcId: string; selectTitle: boolean } | null>(null)
 	const [confirming, setConfirming] = useState<string | null>(null)
 	const [pending, setPending] = useState(false)
@@ -191,6 +200,9 @@ export function SeasonTree({
 					arc={arc}
 					seasonId={seasonId}
 					variant={variant}
+					stats={liveStats}
+					expandedQuest={expandedQuest}
+					onToggleQuest={(id) => setExpandedQuest(expandedQuest === id ? null : id)}
 					selectedQuest={variant === "menu" && segments[0] === "quests" ? segments[1] : undefined}
 					open={editing?.arcId === arc.id}
 					selectTitle={editing?.arcId === arc.id && editing.selectTitle}
@@ -341,6 +353,9 @@ function ArcTree({
 	dragging,
 	keyboardArcs,
 	onMove,
+	stats,
+	expandedQuest,
+	onToggleQuest,
 }: {
 	arc: Tree["arcs"][number]
 	seasonId: string
@@ -360,6 +375,9 @@ function ArcTree({
 	dragging?: "arc" | "quest"
 	keyboardArcs: Arc[]
 	onMove: (move: TreeMove) => void
+	stats?: LiveStats
+	expandedQuest: string | null
+	onToggleQuest: (id: string) => void
 }) {
 	const shuffle = useAutosaveField({ arcId: arc.id, field: "shuffleQuests" }, arc.shuffleQuests)
 	const panel = useRef<HTMLFormElement>(null)
@@ -443,35 +461,74 @@ function ArcTree({
 				)}
 				{!folded && (
 					<ul>
-						{arc.quests.map((quest) => (
-							<QuestTreeRow
-								key={quest.id}
-								quest={quest}
-								arcId={arc.id}
-								editable={editable}
-								keyboardArcs={keyboardArcs}
-								onMove={onMove}
-							>
-								{(bindings) => (
-									<Link
-										{...bindings}
-										role="link"
-										href={`/admin/seasons/${seasonId}/quests/${quest.id}`}
-										aria-current={selectedQuest === quest.id ? "page" : undefined}
-										className={`flex h-11 items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
-									>
-										<span className={`min-w-0 truncate${quest.label ? "" : " text-muted"}`}>
-											{quest.label ?? "Untitled quest"}
-										</span>
-										<span
-											className={`shrink-0 tabular-nums ${quest.points === null || variant === "menu" ? "text-xs text-muted" : dragging ? "text-sm text-muted" : "text-sm font-bold text-head"}`}
-										>
-											{quest.points === null ? "–" : `${quest.points}p`}
-										</span>
-									</Link>
-								)}
-							</QuestTreeRow>
-						))}
+						{arc.quests.map((quest) => {
+							const questStats = stats?.[quest.id]
+							return (
+								<QuestTreeRow
+									key={quest.id}
+									quest={quest}
+									arcId={arc.id}
+									editable={editable}
+									keyboardArcs={keyboardArcs}
+									onMove={onMove}
+								>
+									{(bindings) =>
+										questStats ? (
+											<>
+												<button
+													type="button"
+													aria-expanded={expandedQuest === quest.id}
+													aria-controls={`quest-stats-${quest.id}`}
+													onClick={() => onToggleQuest(quest.id)}
+													className={`flex min-h-14 w-full items-center gap-3 border-t border-z1 ${gutter} text-left hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent`}
+												>
+													<span className="min-w-0 flex-1">
+														<span className={`block truncate text-sm${quest.label ? "" : " text-muted"}`}>
+															{quest.label ?? "Untitled quest"}
+														</span>
+														<QuestCompletion stats={questStats} />
+													</span>
+													<span
+														className={`shrink-0 text-sm tabular-nums ${quest.points === null ? "text-muted" : "text-head"}`}
+													>
+														{quest.points === null ? "–" : `${quest.points}p`}
+													</span>
+													<span aria-hidden="true" className="w-4 text-center text-muted">
+														{expandedQuest === quest.id ? "▴" : "▾"}
+													</span>
+												</button>
+												{expandedQuest === quest.id && (
+													<div id={`quest-stats-${quest.id}`}>
+														<QuestLiveStatsBlock
+															stats={questStats}
+															hints={questStats.hints}
+															editHref={`/admin/seasons/${seasonId}/quests/${quest.id}`}
+														/>
+													</div>
+												)}
+											</>
+										) : (
+											<Link
+												{...bindings}
+												role="link"
+												href={`/admin/seasons/${seasonId}/quests/${quest.id}`}
+												aria-current={selectedQuest === quest.id ? "page" : undefined}
+												className={`flex h-11 items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
+											>
+												<span className={`min-w-0 truncate${quest.label ? "" : " text-muted"}`}>
+													{quest.label ?? "Untitled quest"}
+												</span>
+												<span
+													className={`shrink-0 tabular-nums ${quest.points === null || variant === "menu" ? "text-xs text-muted" : dragging ? "text-sm text-muted" : "text-sm font-bold text-head"}`}
+												>
+													{quest.points === null ? "–" : `${quest.points}p`}
+												</span>
+											</Link>
+										)
+									}
+								</QuestTreeRow>
+							)
+						})}
 						{editable && !arc.quests.length && <EmptyArcSlot arcId={arc.id} />}
 					</ul>
 				)}
