@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef } from "react"
+import { type ReactNode, useEffect, useId, useRef } from "react"
 import { createPortal } from "react-dom"
 import { buttonClass } from "@/components/auth-form"
 
@@ -15,6 +15,7 @@ export function ConfirmDialog({
 	title,
 	body,
 	confirmLabel,
+	confirmTone = "danger",
 	disabled = false,
 	closeOnConfirm = true,
 	error,
@@ -23,8 +24,9 @@ export function ConfirmDialog({
 }: {
 	open: boolean
 	title: string
-	body: string
+	body: ReactNode
 	confirmLabel: string
+	confirmTone?: "accent" | "danger"
 	disabled?: boolean
 	closeOnConfirm?: boolean
 	error?: string | null
@@ -35,6 +37,7 @@ export function ConfirmDialog({
 	const cancel = useRef<HTMLButtonElement>(null)
 	const titleId = useId()
 	const bodyId = useId()
+	const confirmClass = confirmTone === "accent" ? primaryClass : primaryClass.replaceAll("accent", "pace-3")
 	useEffect(() => {
 		if (open) {
 			dialog.current?.showModal()
@@ -55,9 +58,9 @@ export function ConfirmDialog({
 			<h2 id={titleId} className="font-head text-lg text-head">
 				{title}
 			</h2>
-			<p id={bodyId} className="mt-2 font-body text-sm">
+			<div id={bodyId} className="mt-2 font-body text-sm">
 				{body}
-			</p>
+			</div>
 			{error && (
 				<p role="alert" className="mt-2 font-cond text-xs text-warn">
 					{error}
@@ -74,7 +77,7 @@ export function ConfirmDialog({
 				</button>
 				<button
 					type="button"
-					className={primaryClass.replaceAll("accent", "pace-3")}
+					className={confirmClass}
 					disabled={disabled}
 					onClick={() => {
 						if (closeOnConfirm) dialog.current?.close()

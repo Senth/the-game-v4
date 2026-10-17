@@ -2,7 +2,7 @@ import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core"
 import { Children, cloneElement, type EffectCallback, isValidElement, type ReactElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { addArc, addQuest, moveArc, moveQuest, removeArc } from "@/app/admin/tree-actions"
+import { addArc, addQuest, getRemoveArcImpact, moveArc, moveQuest, removeArc } from "@/app/admin/tree-actions"
 import { useAutosaveField } from "./autosave-provider"
 import { ConfirmDialog } from "./confirm-dialog"
 import { SeasonTree } from "./season-tree"
@@ -59,6 +59,7 @@ vi.mock("next/link", () => ({ default: (props: object) => <a {...props} /> }))
 vi.mock("@/app/admin/tree-actions", () => ({
 	addArc: vi.fn(),
 	addQuest: vi.fn(),
+	getRemoveArcImpact: vi.fn(),
 	removeArc: vi.fn(),
 	moveArc: vi.fn(),
 	moveQuest: vi.fn(),
@@ -135,7 +136,7 @@ vi.mock("./confirm-dialog", async (importOriginal) => ({
 		open ? (
 			<dialog>
 				<h2>{title}</h2>
-				<p>{body}</p>
+				<div>{body}</div>
 				<button type="button" onClick={onClose}>
 					Cancel
 				</button>
@@ -206,6 +207,10 @@ beforeEach(() => {
 	hooks.serverItems = null
 	vi.mocked(addArc).mockResolvedValue({ ok: true, arcId: "new-arc" })
 	vi.mocked(addQuest).mockResolvedValue({ ok: true, questId: "new-quest" })
+	vi.mocked(getRemoveArcImpact).mockResolvedValue({
+		ok: true,
+		impact: { kind: "deleteQuest", onIt: ["Ninjas"], notReached: ["Lagom"], solved: 4 },
+	})
 	vi.mocked(removeArc).mockResolvedValue({ ok: true })
 	vi.mocked(moveArc).mockResolvedValue({ ok: true })
 	vi.mocked(moveQuest).mockResolvedValue({ ok: true })
@@ -237,6 +242,30 @@ it.each(["menu", "page"] as const)("renders quiet fallbacks, missing points and 
 	expect(view.html).not.toContain("aria-current")
 	expect(view.html).not.toContain("done")
 	view.button(variant === "menu" ? "+ Quest" : "+ Quest in Untitled arc")
+})
+
+it("renders hidden drafts as muted editor links without live stats or a chevron", () => {
+	const view = render({
+		...liveProps,
+		tree: { arcs: [{ ...arc, quests: [{ id: "q1", label: "Lantern code", points: null, hidden: true }] }] },
+	})
+	expect(view.html).toContain("Draft · teams don&#x27;t see it")
+	expect(view.html).toContain('href="/admin/seasons/s1/quests/q1"')
+	expect(view.html).toContain("text-muted")
+	expect(view.html).not.toContain("7/10 done")
+	expect(view.html).not.toContain('aria-controls="quest-stats-q1"')
+	expect(view.html).not.toContain("▾")
+})
+
+it.each(["menu", "page"] as const)("shows live add and remove controls without row movement in %s", (variant) => {
+	const props = { ...liveProps, tree: dragTree, variant }
+	const view = render(props)
+	expect(view.button(variant === "menu" ? "+ Quest" : "+ Quest in Old Town")).toBeDefined()
+	view.button("+ Arc")
+	expect(hooks.layer).toBeNull()
+	expect(questLinks(view).every((link) => !link.props.onPointerDown && !link.props.onKeyDown)).toBe(true)
+	view.button("Old Town").props.onClick?.()
+	render(props).button("Remove arc")
 })
 
 it("marks only the selected desktop quest and keeps points subordinate", () => {
@@ -424,6 +453,48 @@ it("cancels confirmation without deleting", () => {
 	expect(removeArc).not.toHaveBeenCalled()
 })
 
+it("loads live arc impact before enabling removal", async () => {
+	let resolveImpact!: (result: Awaited<ReturnType<typeof getRemoveArcImpact>>) => void
+	vi.mocked(getRemoveArcImpact).mockReturnValueOnce(new Promise((resolve) => (resolveImpact = resolve)))
+	const props = { ...liveProps, tree: { arcs: [arc] } }
+	render(props).button("Old Town").props.onClick?.()
+	render(props).button("Remove arc").props.onClick?.()
+	render(props)
+	for (const effect of hooks.effects) effect()
+	expect(getRemoveArcImpact).toHaveBeenCalledWith("s1", "a1")
+	const loading = render(props)
+	expect(loading.html).toContain("Counting teams…")
+	expect(vi.mocked(ConfirmDialog).mock.lastCall?.[0].disabled).toBe(true)
+	resolveImpact({
+		ok: true,
+		impact: { kind: "deleteQuest", onIt: ["Ninjas"], notReached: ["Lagom"], solved: 4 },
+	})
+	await vi.waitFor(() => expect(render(props).html).toContain("2 teams affected"))
+	const view = render(props)
+	expect(view.html).toContain("On one of them now · skips it with 0 points")
+	expect(view.html).toContain("Quests left in it · they leave their order")
+	expect(view.html).toContain("4 teams solved every quest in it and keep their points.")
+	expect(vi.mocked(ConfirmDialog).mock.lastCall?.[0].disabled).toBe(false)
+	const dialog = view.all.find((element) => element.type === "dialog")
+	elements(dialog)
+		.filter((element) => element.type === "button")[1]
+		?.props.onClick?.()
+	await vi.waitFor(() => expect(removeArc).toHaveBeenCalledWith("s1", "a1"))
+})
+
+it("keeps a plain confirmation for arcs containing only hidden drafts", () => {
+	const props = {
+		...liveProps,
+		tree: { arcs: [{ ...arc, quests: [{ id: "draft", label: "Draft", points: null, hidden: true }] }] },
+	}
+	render(props).button("Old Town").props.onClick?.()
+	render(props).button("Remove arc").props.onClick?.()
+	const view = render(props)
+	expect(view.html).toContain("This also removes its quest.")
+	expect(view.html).not.toContain("Counting teams…")
+	expect(getRemoveArcImpact).not.toHaveBeenCalled()
+})
+
 it("removes an empty arc without confirmation", async () => {
 	const props = { tree: { arcs: [{ ...arc, quests: [] }] } }
 	render(props).button("Old Town").props.onClick?.()
@@ -433,8 +504,8 @@ it("removes an empty arc without confirmation", async () => {
 	expect(render(props).html).not.toContain("<dialog")
 })
 
-it.each([now + 60_000, now])("hides structural controls for live or ended seasons ending at %i", (end) => {
-	const props = { start: new Date(now - 60_000), end: new Date(end) }
+it("hides structural controls after the season ends", () => {
+	const props = { start: new Date(now - 60_000), end: new Date(now) }
 	const closed = render(props)
 	expect(closed.html).not.toContain("+ Quest")
 	expect(closed.html).not.toContain("+ Arc")
@@ -445,7 +516,7 @@ it.each([now + 60_000, now])("hides structural controls for live or ended season
 	expect(opened.html).not.toContain("Remove arc")
 })
 
-it("removes controls and disables an open confirmation when the clock crosses start", async () => {
+it("keeps controls and requires live impact if a plain confirmation crosses start", async () => {
 	const props = { start: new Date(now + 1000), end: new Date(now + 600_000) }
 	render(props).button("Old Town").props.onClick?.()
 	render(props).button("Remove arc").props.onClick?.()
@@ -453,11 +524,14 @@ it("removes controls and disables an open confirmation when the clock crosses st
 	cleanup = hooks.effects[0]?.()
 	await vi.advanceTimersByTimeAsync(1000)
 	const view = render(props)
-	expect(view.html).not.toContain("+ Quest")
-	expect(view.html).not.toContain("+ Arc")
+	expect(view.html).toContain("+ Quest in Old Town")
+	expect(view.html).toContain("+ Arc")
+	for (const effect of hooks.effects) effect()
+	expect(getRemoveArcImpact).toHaveBeenCalledWith("s1", "a1")
+	expect(view.html).toContain("Counting teams…")
 	expect(vi.mocked(ConfirmDialog).mock.lastCall?.[0].disabled).toBe(true)
 	expect(view.html).toContain("Arc title")
-	expect(view.html.match(/Remove arc/g)).toHaveLength(1)
+	expect(view.html.match(/Remove arc/g)).toHaveLength(2)
 })
 
 it("offers the first arc for an empty season", () => {

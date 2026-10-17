@@ -43,6 +43,7 @@ export function treeView(season: Season) {
 				id: quest.id,
 				label: questLabel(quest),
 				points: quest.points,
+				...(quest.hidden ? { hidden: true } : {}),
 			})),
 		})),
 	}
