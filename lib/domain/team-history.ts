@@ -1,4 +1,5 @@
 import { lifecycleState, type PaceBand, pace, paceLabel, questCounts } from "./game"
+import { playableArcs } from "./playable-quests"
 import type { Quest, Season, Team, TeamQuestProgress } from "./schemas"
 import { teamHintLoss } from "./scoring"
 import { questLabel } from "./season-tree"
@@ -45,10 +46,11 @@ export function teamHistory(
 						label: teamPace?.n ? `${paceLabel(teamPace.n)} ${teamPace.n < 0 ? "of pace" : "pace"}` : paceLabel(0),
 					}
 	const progressByQuest = new Map(team.progress.map((entry) => [entry.questId, entry]))
-	const questIds = new Set(season.arcs.flatMap((arc) => arc.quests.map((quest) => quest.id)))
+	const arcs = playableArcs(season)
+	const questIds = new Set(arcs.flatMap((arc) => arc.quests.map((quest) => quest.id)))
 	return {
 		stats: { score: team.score, ...questCounts(team), hintLoss: teamHintLoss(team), state },
-		arcs: season.arcs.map((arc) => ({
+		arcs: arcs.map((arc) => ({
 			id: arc.id,
 			title: arc.title,
 			quests: arc.quests.map((quest) => {

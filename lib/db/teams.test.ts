@@ -245,4 +245,17 @@ describe("fillQuestOrders", () => {
 		expect(await fillQuestOrders(season(), [])).toBe(false)
 		expect(await getTeam(ninjas._id)).toEqual(ninjas)
 	})
+
+	it.each([false, true])("skips hidden drafts when filling orders, all hidden %s", async (allHidden) => {
+		const input = season()
+		input.arcs = input.arcs.map((arc) => ({
+			...arc,
+			quests: arc.quests.map((quest, index) => ({ ...quest, hidden: allHidden || index === 0 })),
+		}))
+		const ninjas = await createTeam(team("Ninjas", input._id))
+		const original = structuredClone({ input, ninjas })
+		expect(await fillQuestOrders(input, [ninjas])).toBe(!allHidden)
+		expect((await getTeam(ninjas._id))?.questOrder.toSorted()).toEqual(allHidden ? [] : ["a1-q2", "a2-q2"])
+		expect({ input, ninjas }).toEqual(original)
+	})
 })

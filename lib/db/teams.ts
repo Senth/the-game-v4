@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { buildQuestOrder } from "@/lib/domain/game"
+import { playableArcs } from "@/lib/domain/playable-quests"
 import { RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
 import { collections, NotFoundError } from "./collections"
 
@@ -45,7 +46,7 @@ export async function fillQuestOrders(
 	teams: readonly Team[],
 	random: () => number = Math.random,
 ): Promise<boolean> {
-	if (!season.arcs.some((arc) => arc.quests.length > 0)) return false
+	if (!playableArcs(season).some((arc) => arc.quests.length > 0)) return false
 	const operations = teams
 		.filter((team) => team.seasonId === season._id && team.questOrder.length === 0 && team.progress.length === 0)
 		.map((team) => ({

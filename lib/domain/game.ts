@@ -1,3 +1,4 @@
+import { playableArcs } from "./playable-quests"
 import type { Quest, Season, Team, TeamQuestProgress } from "./schemas"
 import { hintPenalty } from "./scoring"
 
@@ -24,7 +25,8 @@ function shuffle<T>(items: T[], random: () => number): T[] {
 }
 
 export function buildQuestOrder(season: Season, random: () => number = Math.random): string[] {
-	const arcs = season.shuffleArcs ? shuffle(season.arcs, random) : season.arcs
+	const playable = playableArcs(season)
+	const arcs = season.shuffleArcs ? shuffle(playable, random) : playable
 	return arcs.flatMap((arc) => {
 		const ids = arc.quests.map((quest) => quest.id)
 		return arc.shuffleQuests ? shuffle(ids, random) : ids
@@ -248,7 +250,9 @@ export function pickLoginTeam<
 }
 
 export function findQuest(season: Pick<Season, "arcs">, questId: string | undefined): Quest | undefined {
-	return season.arcs.flatMap((arc) => arc.quests).find((quest) => quest.id === questId)
+	return playableArcs(season)
+		.flatMap((arc) => arc.quests)
+		.find((quest) => quest.id === questId)
 }
 
 export function currentQuest(
@@ -270,7 +274,7 @@ export function rail(
 ): RailArc[] {
 	const solved = new Set(team.progress.filter((entry) => entry.solvedAt).map((entry) => entry.questId))
 	const current = team.questOrder[team.questIndex]
-	return season.arcs.map((arc) => ({
+	return playableArcs(season).map((arc) => ({
 		arcId: arc.id,
 		segments: arc.quests.map(({ id }) => ({
 			questId: id,
