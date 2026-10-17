@@ -106,6 +106,15 @@ it("selects the quest's own arc and passes editor fields without hints across th
 	expect(listSeasonTeams).toHaveBeenCalledExactlyOnceWith(season._id)
 })
 
+it("passes hidden draft status to QuestEditor without adding hints", async () => {
+	const hiddenQuest = { ...quest, hidden: true }
+	vi.mocked(getSeason).mockResolvedValue({ ...season, arcs: [{ ...arc, quests: [hiddenQuest] }] })
+	const element = await QuestPage(props)
+	const editor = element.props.children[1].props.children.props.children[2]
+	expect(editor.props.quest.hidden).toBe(true)
+	expect(editor.props.quest).not.toHaveProperty("hints")
+})
+
 it.each([
 	["Internal", "Display", "Internal"],
 	[" ", "Display", "Display"],

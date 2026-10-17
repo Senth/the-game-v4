@@ -1,7 +1,10 @@
 import { z } from "zod"
-import { buildQuestOrder } from "@/lib/domain/game"
+import { applyStructuralEdit, buildQuestOrder, type StructuralEdit } from "@/lib/domain/game"
+import { playableArcs } from "@/lib/domain/playable-quests"
 import { RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
+import { publish, teamChannel } from "@/lib/events/bus"
 import { collections, NotFoundError } from "./collections"
+import { finishSeasonStructure, withSeasonStructure } from "./structural-writes"
 
 type TeamField = Exclude<keyof Team, "_id">
 
@@ -40,23 +43,60 @@ export async function deleteTeam(id: string): Promise<boolean> {
 	return (await (await collections()).teams.deleteOne({ _id: id })).deletedCount === 1
 }
 
+export async function editSeasonTeamOrders(seasonId: string, edit: StructuralEdit): Promise<string[]> {
+	const { teams } = await collections()
+	const affected: string[] = []
+	for (const listed of await listSeasonTeams(seasonId)) {
+		let current: Omit<Team, "passwordHash"> | null = listed
+		for (let attempt = 0; current && current.seasonId === seasonId; attempt++) {
+			if (edit.kind === "addQuest" && current.questOrder.includes(edit.questId)) break
+			const result = applyStructuralEdit([current], edit)
+			const changed = result.teams[0]
+			if (!result.affected.length || !changed) break
+			const written = await teams.updateOne(
+				{
+					_id: current._id,
+					seasonId,
+					questOrder: current.questOrder,
+					questIndex: current.questIndex,
+					completed: current.completed,
+					progress: current.progress,
+				},
+				{ $set: { questOrder: changed.questOrder, completed: changed.completed, progress: changed.progress } },
+			)
+			if (written.matchedCount) {
+				affected.push(current._id)
+				publish(teamChannel(current._id))
+				break
+			}
+			if (attempt === 3) throw new Error("Not saved, retry")
+			current = await getTeam(current._id)
+		}
+	}
+	return affected
+}
+
 export async function fillQuestOrders(
 	season: Season,
 	teams: readonly Team[],
 	random: () => number = Math.random,
 ): Promise<boolean> {
-	if (!season.arcs.some((arc) => arc.quests.length > 0)) return false
-	const operations = teams
-		.filter((team) => team.seasonId === season._id && team.questOrder.length === 0 && team.progress.length === 0)
-		.map((team) => ({
-			updateOne: {
-				filter: { _id: team._id, seasonId: season._id, questOrder: { $size: 0 }, progress: { $size: 0 } },
-				update: { $set: { questOrder: buildQuestOrder(season, random) } },
-			},
-		}))
-	if (operations.length === 0) return false
-	const result = await (await collections()).teams.bulkWrite(operations, { ordered: false })
-	return result.matchedCount > 0
+	return withSeasonStructure(season._id, async () => {
+		await finishSeasonStructure(season._id)
+		const current = await (await collections()).seasons.findOne({ _id: season._id })
+		if (!current || !playableArcs(current).some((arc) => arc.quests.length > 0)) return false
+		const operations = teams
+			.filter((team) => team.seasonId === season._id && team.questOrder.length === 0 && team.progress.length === 0)
+			.map((team) => ({
+				updateOne: {
+					filter: { _id: team._id, seasonId: season._id, questOrder: { $size: 0 }, progress: { $size: 0 } },
+					update: { $set: { questOrder: buildQuestOrder(current, random) } },
+				},
+			}))
+		if (operations.length === 0) return false
+		const result = await (await collections()).teams.bulkWrite(operations, { ordered: false })
+		return result.matchedCount > 0
+	})
 }
 
 export async function countTeams(seasonId: string): Promise<number> {

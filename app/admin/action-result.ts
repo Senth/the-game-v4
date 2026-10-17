@@ -2,7 +2,9 @@ import { z } from "zod"
 import { NotFoundError } from "@/lib/db/collections"
 import {
 	MoveConflictError,
+	QuestNotReadyError,
 	RegistrationConflictError,
+	SeasonEndedError,
 	SeasonOverlapError,
 	SeasonStartedError,
 	StaleWindowError,
@@ -41,8 +43,11 @@ export function actionFailure(error: unknown, now: Date): Extract<ActionResult, 
 		error instanceof NotFoundError ||
 		error instanceof RegistrationConflictError ||
 		error instanceof SeasonStartedError ||
+		error instanceof SeasonEndedError ||
+		error instanceof QuestNotReadyError ||
 		error instanceof StaleWindowError ||
-		(error instanceof Error && error.message === "Set at start. Use −5 / +5 min while live.")
+		(error instanceof Error &&
+			["Set at start. Use −5 / +5 min while live.", "Not saved, retry"].includes(error.message))
 	) {
 		return { ok: false, error: error.message }
 	}

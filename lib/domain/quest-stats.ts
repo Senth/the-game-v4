@@ -1,4 +1,5 @@
 import { hintRevealers } from "./hints"
+import { playableArcs } from "./playable-quests"
 import type { Team } from "./schemas"
 
 export type QuestLiveStats = {
@@ -9,11 +10,11 @@ export type QuestLiveStats = {
 }
 
 type QuestStatsTeam = Pick<Team, "name" | "questOrder" | "progress">
-type QuestStatsSeason = { arcs: { quests: { id: string }[] }[] }
+type QuestStatsSeason = { arcs: { quests: { id: string; hidden?: boolean }[] }[] }
 
 export function questLiveStats(season: QuestStatsSeason, teams: QuestStatsTeam[]): Record<string, QuestLiveStats> {
 	return Object.fromEntries(
-		season.arcs.flatMap((arc) =>
+		playableArcs(season).flatMap((arc) =>
 			arc.quests.map((quest) => {
 				const completedBy = teams
 					.flatMap((team) => {

@@ -14,6 +14,7 @@ import {
 	patchSeasonList,
 	removeArc,
 	removeQuest,
+	SeasonEndedError,
 	SeasonStartedError,
 	setSeasonField,
 } from "./seasons"
@@ -223,12 +224,11 @@ describe("atomic reorder writes", () => {
 		"blocks structural moves at or after start %j but allows hints",
 		async (start) => {
 			const season = await setup(start)
-			await expect(moveArc({ seasonId: season._id, id: "a1", beforeId: null }, now)).rejects.toBeInstanceOf(
-				SeasonStartedError,
-			)
+			const error = start < now ? SeasonEndedError : SeasonStartedError
+			await expect(moveArc({ seasonId: season._id, id: "a1", beforeId: null }, now)).rejects.toBeInstanceOf(error)
 			await expect(
 				moveQuest({ seasonId: season._id, id: "q1", toArcId: "a2", beforeId: null }, now),
-			).rejects.toBeInstanceOf(SeasonStartedError)
+			).rejects.toBeInstanceOf(error)
 			expect(await getSeason(season._id)).toEqual(season)
 			await moveHint({ seasonId: season._id, id: "h1", beforeId: null })
 			expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.hints.map((hint) => hint.id)).toEqual([
@@ -310,5 +310,9 @@ describe("atomic reorder writes", () => {
 				},
 			],
 		})
+		const solved = await getTeam(team._id)
+		await moveHint({ seasonId: season._id, id: "h1", beforeId: "h2" })
+		await patchSeasonList(season._id, { arcId: "a1", questId: "q1", field: "hints" }, { op: "remove", hintId: "h1" })
+		expect(await getTeam(team._id)).toEqual(solved)
 	})
 })

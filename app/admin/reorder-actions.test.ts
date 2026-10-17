@@ -94,7 +94,9 @@ describe.each(moves)("$name", ({ name, run, target }) => {
 		async (start) => {
 			const season = await setup(start)
 			expect(await run(target as Parameters<typeof moveQuest>[0])).toEqual(
-				name === "moveHint" ? { ok: true } : { ok: false, error: "The game has started." },
+				name === "moveHint"
+					? { ok: true }
+					: { ok: false, error: start < now ? "The game has ended." : "The game has started." },
 			)
 			if (name !== "moveHint") {
 				expect(await seasons.getSeason(season._id)).toEqual(season)

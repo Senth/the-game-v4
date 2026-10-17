@@ -11,7 +11,7 @@ import {
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { uploadQuestAsset } from "@/app/admin/asset-actions"
-import { removeQuest } from "@/app/admin/tree-actions"
+import { addQuestToGame, getAddQuestImpact, getRemoveQuestImpact, removeQuest } from "@/app/admin/tree-actions"
 import { useAutosaveField, useAutosaveList } from "./autosave-provider"
 import { ConfirmDialog } from "./confirm-dialog"
 import { QuestEditor } from "./quest-editor"
@@ -53,7 +53,12 @@ vi.mock("react", async (importOriginal) => ({
 	useId: () => "quest-title",
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: hooks.push }) }))
-vi.mock("@/app/admin/tree-actions", () => ({ removeQuest: vi.fn() }))
+vi.mock("@/app/admin/tree-actions", () => ({
+	addQuestToGame: vi.fn(),
+	getAddQuestImpact: vi.fn(),
+	getRemoveQuestImpact: vi.fn(),
+	removeQuest: vi.fn(),
+}))
 vi.mock("@/app/admin/asset-actions", () => ({ uploadQuestAsset: vi.fn(), removeQuestAsset: vi.fn() }))
 vi.mock("./autosave-provider", () => ({
 	useAutosaveField: vi.fn(),
@@ -85,6 +90,7 @@ const defaults = {
 	end: null,
 	now,
 }
+const live = { start: new Date(now - 60_000), end: new Date(now + 60_000) }
 type ButtonProps = { children?: ReactNode; disabled?: boolean; className: string; onClick: () => void }
 let cleanup: ReturnType<EffectCallback>
 
@@ -101,13 +107,17 @@ function render(props: Partial<Parameters<typeof QuestEditor>[0]> = {}) {
 	hooks.effects.length = 0
 	const element = QuestEditor({ ...defaults, ...props })
 	const children = element.props.children
+	const content = Children.toArray(children[0].props.children)
+	const offset = props.quest?.hidden ? 1 : 0
+	const fields = content[offset] as ReactElement<{ children: ReactNode }>
 	const dialog = ConfirmDialog(children[2].props)
 	return {
 		html: renderToStaticMarkup(cloneElement(element, {}, children[0], children[1], dialog, children[3])),
 		root: element,
-		asset: children[0].props.children[2],
-		fields: children[0].props.children[0].props.children,
+		asset: content[offset + 2] as ReactElement<{ assetPath: string | null; onChange: (path: string | null) => void }>,
+		fields: Children.toArray(fields.props.children) as ReactElement<{ autoFocus?: boolean }>[],
 		remove: buttons(children[1])[0],
+		add: buttons(children[0]).find((button) => button.props.children === "Add to game"),
 		dialog,
 		cancel: buttons(dialog)[0],
 		confirm: buttons(dialog)[1],
@@ -122,6 +132,19 @@ beforeEach(() => {
 	hooks.refs.length = 0
 	vi.mocked(uploadQuestAsset).mockReset().mockResolvedValue({ ok: true, assetPath: "/assets/new-image.png" })
 	vi.mocked(removeQuest).mockReset().mockResolvedValue({ ok: true })
+	vi.mocked(addQuestToGame).mockReset().mockResolvedValue({ ok: true })
+	vi.mocked(getAddQuestImpact)
+		.mockReset()
+		.mockResolvedValue({
+			ok: true,
+			impact: { kind: "addQuest", added: ["Ninjas", "Lagom"], completed: 3 },
+		})
+	vi.mocked(getRemoveQuestImpact)
+		.mockReset()
+		.mockResolvedValue({
+			ok: true,
+			impact: { kind: "deleteQuest", onIt: ["Ninjas"], notReached: ["Lagom"], solved: 4 },
+		})
 	vi.mocked(useAutosaveList).mockImplementation((_target, items) => ({
 		items,
 		add: vi.fn(),
@@ -174,6 +197,89 @@ it("renders all seven fields in M2 order with helper text, desktop pairs and qui
 	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "adminNotes" }, "Bring a map")
 	expect(useAutosaveField).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "points" }, 10)
 	expect(useAutosaveList).toHaveBeenCalledWith({ arcId: "a1", questId: "q1", field: "answers" }, ["harbour"])
+})
+
+it("shows missing draft fields above Display title and disables Add to game", () => {
+	const view = render({
+		...live,
+		quest: { ...defaults.quest, hidden: true, displayTitle: "", content: "", answers: [], points: null },
+	})
+	expect(view.html).toContain("Fill in display title, content, answers and points to add it to the game.")
+	expect(view.html).toContain("bg-z1 rounded-md p-3")
+	expect(view.html.indexOf("Fill in display title")).toBeLessThan(view.html.indexOf(">Display title"))
+	expect(view.add?.props.disabled).toBe(true)
+})
+
+it("shows ready draft copy and enables Add to game", () => {
+	const view = render({ ...live, quest: { ...defaults.quest, hidden: true } })
+	expect(view.html).toContain("Teams don&#x27;t see this quest yet.")
+	expect(view.add?.props.disabled).toBe(false)
+	expect(view.add?.props.className).toContain("bg-accent")
+})
+
+it("loads Add to game counts and confirms completed teams in dialog", async () => {
+	const props = { ...live, quest: { ...defaults.quest, hidden: true } }
+	render(props).add?.props.onClick()
+	render(props)
+	for (const effect of hooks.effects) effect()
+	expect(getAddQuestImpact).toHaveBeenCalledWith("s1", "a1", "q1")
+	const loading = render(props)
+	expect(loading.html).toContain("Counting teams…")
+	expect(loading.confirm?.props.disabled).toBe(true)
+	await vi.waitFor(() => expect(render(props).html).toContain("Add Harbour map for 2 teams?"))
+	const dialog = render(props)
+	expect(dialog.html).toContain("Each team gets it at a random spot after its current quest.")
+	expect(dialog.html).toContain("3 teams finished and don&#x27;t get it.")
+	expect(dialog.html).not.toContain("Counting teams…")
+	expect(dialog.confirm?.props.className).toContain("bg-accent")
+	expect(dialog.confirm?.props.disabled).toBe(false)
+	dialog.confirm?.props.onClick()
+	await vi.waitFor(() => expect(addQuestToGame).toHaveBeenCalledWith("s1", "a1", "q1"))
+	expect(render({ ...live, quest: { ...defaults.quest, hidden: false } }).html).not.toContain(
+		"Teams don&#x27;t see this quest yet.",
+	)
+})
+
+it("uses the no-team Add to game title and body", async () => {
+	const props = { ...live, quest: { ...defaults.quest, hidden: true } }
+	vi.mocked(getAddQuestImpact).mockResolvedValueOnce({
+		ok: true,
+		impact: { kind: "addQuest", added: [], completed: 0 },
+	})
+	render(props).add?.props.onClick()
+	render(props)
+	for (const effect of hooks.effects) effect()
+	await vi.waitFor(() => expect(render(props).html).toContain("Add Harbour map to the game?"))
+	const dialog = render(props)
+	expect(dialog.html).toContain("No team is playing it yet. Teams that start later get it.")
+	expect(dialog.html).not.toContain("teams finished")
+})
+
+it("confirms live quest removal with shared impact body", async () => {
+	const props = { ...live, quest: { ...defaults.quest, hidden: false } }
+	render(props).remove?.props.onClick()
+	render(props)
+	for (const effect of hooks.effects) effect()
+	expect(getRemoveQuestImpact).toHaveBeenCalledWith("s1", "a1", "q1")
+	await vi.waitFor(() => expect(render(props).html).toContain("2 teams affected"))
+	const dialog = render(props)
+	expect(dialog.html).toContain("Remove Harbour map?")
+	expect(dialog.html).toContain("On it now · skips it with 0 points")
+	expect(dialog.html).toContain("Not reached · leaves their order")
+	expect(dialog.html).toContain("4 teams solved it and keep their points.")
+	expect(dialog.html).not.toContain("Its answers, hints and image go too.")
+	expect(dialog.confirm?.props.className).toContain("bg-pace-3")
+	dialog.confirm?.props.onClick()
+	await vi.waitFor(() => expect(removeQuest).toHaveBeenCalledWith("s1", "a1", "q1"))
+})
+
+it("keeps live draft removal confirmation plain", () => {
+	const props = { ...live, quest: { ...defaults.quest, hidden: true } }
+	render(props).remove?.props.onClick()
+	const dialog = render(props)
+	expect(dialog.html).toContain("Its answers, hints and image go too.")
+	expect(dialog.html).not.toContain("Counting teams…")
+	expect(getRemoveQuestImpact).not.toHaveBeenCalled()
 })
 
 it("shows Upload and empty Image row when the quest has no asset", () => {
@@ -284,8 +390,8 @@ it.each([
 	const view = render({
 		quest: { ...defaults.quest, displayTitle: displayTitle as string, internalTitle: internalTitle as string },
 	})
-	expect(view.fields[0].props.autoFocus).toBe(focused)
-	expect(view.fields[1].props.autoFocus).toBeUndefined()
+	expect(view.fields[0]?.props.autoFocus).toBe(focused)
+	expect(view.fields[1]?.props.autoFocus).toBeUndefined()
 	expect(view.html.includes('autofocus=""')).toBe(focused)
 })
 
@@ -298,7 +404,7 @@ it.each([null, new Date(now + 60_000)])(
 		expect(removeQuest).not.toHaveBeenCalled()
 		expect(view.html).toContain("Remove Harbour map?")
 		expect(view.html).toContain("Its answers, hints and image go too.")
-		hooks.effects[2]?.()
+		for (const effect of hooks.effects) effect()
 		expect(hooks.showModal).toHaveBeenCalledOnce()
 		expect(hooks.focus).toHaveBeenCalledOnce()
 		view.confirm?.props.onClick()
@@ -328,28 +434,32 @@ it("cancels without calling removal", () => {
 	expect(hooks.push).not.toHaveBeenCalled()
 })
 
-it.each([now, now + 60_000])(
-	"hides removal for ended or live season ending at %i but keeps all fields editable",
-	(end) => {
-		const view = render({ start: new Date(now - 60_000), end: new Date(end) })
+it.each(["live", "ended"] as const)("shows removal only while live and keeps all fields editable: %s", (state) => {
+	const end = new Date(state === "ended" ? now : now + 60_000)
+	const view = render({ start: new Date(now - 60_000), end })
+	if (state === "live") expect(view.remove).toBeDefined()
+	else {
 		expect(view.remove).toBeUndefined()
 		expect(view.html).not.toContain("Remove quest")
-		expect(view.html.match(/<input/g)).toHaveLength(5)
-		expect(view.html.match(/<textarea/g)).toHaveLength(2)
-		expect(view.html).not.toContain('disabled=""')
-		expect(view.html).not.toContain('readonly=""')
-	},
-)
+	}
+	expect(view.html.match(/<input/g)).toHaveLength(5)
+	expect(view.html.match(/<textarea/g)).toHaveLength(2)
+	expect(view.html).not.toContain('disabled=""')
+	expect(view.html).not.toContain('readonly=""')
+})
 
-it("hides removal and blocks already opened confirmation at start without reload", async () => {
+it("keeps removal visible and loads impact for an open confirmation at start", async () => {
 	const props = { start: new Date(now + 1000), end: new Date(now + 60_000) }
 	render(props).remove?.props.onClick()
 	render(props)
 	cleanup = hooks.effects[0]?.()
 	await vi.advanceTimersByTimeAsync(1000)
 	const view = render(props)
-	expect(view.remove).toBeUndefined()
+	expect(view.remove).toBeDefined()
 	expect(view.confirm?.props.disabled).toBe(true)
+	expect(view.html).toContain("Counting teams…")
+	hooks.effects[2]?.()
+	expect(getRemoveQuestImpact).toHaveBeenCalledWith("s1", "a1", "q1")
 	view.confirm?.props.onClick()
 	expect(removeQuest).not.toHaveBeenCalled()
 })

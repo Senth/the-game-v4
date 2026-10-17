@@ -21,7 +21,7 @@ vi.mock("react", async (importOriginal) => ({
 }))
 vi.mock("react-dom", () => ({ createPortal: vi.fn((node: ReactNode) => node) }))
 
-type ButtonProps = { children?: ReactNode; onClick: () => void }
+type ButtonProps = { children?: ReactNode; className?: string; onClick: () => void }
 type DialogProps = {
 	"aria-labelledby"?: string
 	"aria-describedby"?: string
@@ -106,4 +106,18 @@ it("keeps async confirmation open and announces failure inside dialog", () => {
 	expect(html).toContain('role="alert"')
 	expect(html).toContain("Not saved, retry")
 	expect(html.indexOf('role="alert"')).toBeLessThan(html.indexOf("</dialog>"))
+})
+
+it("renders node bodies and accent confirmation buttons", () => {
+	const view = render({
+		body: (
+			<div>
+				<strong>2 teams affected</strong>
+			</div>
+		),
+		confirmTone: "accent",
+	})
+	const html = renderToStaticMarkup(view.dialog)
+	expect(html).toContain("2 teams affected")
+	expect(view.buttons[1]?.props.className).toContain("bg-accent")
 })

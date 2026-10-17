@@ -65,6 +65,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 							answers: quest.answers,
 							points: quest.points,
 							adminNotes: quest.adminNotes,
+							...(quest.hidden ? { hidden: true } : {}),
 						}}
 						start={season.start}
 						end={season.end}

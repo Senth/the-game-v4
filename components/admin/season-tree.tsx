@@ -9,11 +9,13 @@ import type { ActionResult } from "@/app/admin/action-result"
 import {
 	addArc,
 	addQuest,
+	getRemoveArcImpact,
 	removeArc,
 	moveArc as saveArcMove,
 	moveQuest as saveQuestMove,
 } from "@/app/admin/tree-actions"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
+import type { StructuralEditImpact } from "@/lib/domain/game"
 import type { QuestLiveStats } from "@/lib/domain/quest-stats"
 import { moveArc, moveQuest } from "@/lib/domain/reorder"
 import type { Arc, Hint } from "@/lib/domain/schemas"
@@ -22,6 +24,7 @@ import { useAutosave, useAutosaveField } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { ConfirmDialog, outlineClass } from "./confirm-dialog"
 import { QuestCompletion, QuestLiveStatsBlock } from "./quest-live-stats"
+import { RemovalImpact } from "./removal-impact"
 import { SortableDragLayer, SortableRow } from "./sortable/drag-layer"
 import { useMoveQueue } from "./sortable/use-move-queue"
 import { useSeasonClock } from "./use-season-clock"
@@ -70,12 +73,18 @@ export function SeasonTree({
 	const segments = useSelectedLayoutSegments()
 	const currentNow = new Date(useSeasonClock(now, start, end))
 	const editable = canEditStructure({ start, end }, currentNow)
-	const liveStats = variant === "page" && seasonStatus({ start, end }, currentNow) === "live" ? stats : undefined
+	const live = seasonStatus({ start, end }, currentNow) === "live"
+	const canAddRemove = editable || live
+	const liveStats = live ? stats : undefined
 	const [expandedQuest, setExpandedQuest] = useState<string | null>(null)
 	const [editing, setEditing] = useState<{ arcId: string; selectTitle: boolean } | null>(null)
 	const [confirming, setConfirming] = useState<string | null>(null)
+	const [impactFor, setImpactFor] = useState<string | null>(null)
+	const [arcImpact, setArcImpact] = useState<Extract<StructuralEditImpact, { kind: "deleteQuest" }> | null>(null)
+	const [impactError, setImpactError] = useState<string | null>(null)
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<{ control: string; message: string } | null>(null)
+	const impactRequest = useRef(0)
 	const moves = useMoveQueue({ field: "arcs" }, tree.arcs, applyTreeMove, (target: TreeMove) =>
 		target.kind === "arc"
 			? saveArcMove({ seasonId, id: target.id, beforeId: target.beforeId })
@@ -144,6 +153,23 @@ export function SeasonTree({
 		moves.setDragging(false)
 	}, [editable, drag, moves.setDragging])
 	const confirmedArc = tree.arcs.find((arc) => arc.id === confirming)
+	useEffect(() => {
+		if (!live || !confirmedArc?.quests.some((quest) => !quest.hidden) || impactFor === confirmedArc.id) return
+		const arcId = confirmedArc.id
+		const request = ++impactRequest.current
+		setImpactFor(arcId)
+		setArcImpact(null)
+		setImpactError(null)
+		void getRemoveArcImpact(seasonId, arcId)
+			.then((result) => {
+				if (impactRequest.current !== request) return
+				if (result.ok && result.impact.kind === "deleteQuest") setArcImpact(result.impact)
+				else setImpactError(result.ok ? "Could not count affected teams." : result.error)
+			})
+			.catch(() => {
+				if (impactRequest.current === request) setImpactError("Not saved, retry")
+			})
+	}, [live, confirmedArc, impactFor, seasonId])
 	const previousTree = useRef(tree)
 	const discard = autosave?.discard
 	const drafts = autosave?.drafts
@@ -167,7 +193,7 @@ export function SeasonTree({
 	}, [tree, discard, drafts])
 
 	async function run(control: string, action: () => Promise<ActionResult>) {
-		if (pending || !editable) return
+		if (pending || !canAddRemove) return
 		setPending(true)
 		setError(null)
 		try {
@@ -192,6 +218,14 @@ export function SeasonTree({
 		})
 	}
 
+	function closeArcConfirmation() {
+		impactRequest.current += 1
+		setConfirming(null)
+		setImpactFor(null)
+		setArcImpact(null)
+		setImpactError(null)
+	}
+
 	const rows = (
 		<ul>
 			{arcs.map((arc) => (
@@ -209,6 +243,7 @@ export function SeasonTree({
 					onOpen={() => setEditing({ arcId: arc.id, selectTitle: false })}
 					onClose={() => setEditing(null)}
 					editable={editable}
+					live={live}
 					pending={pending}
 					folded={folded}
 					dragging={editable ? (drag ?? undefined) : undefined}
@@ -223,7 +258,7 @@ export function SeasonTree({
 							return result
 						})
 					}
-					onRemove={() => (arc.quests.length ? setConfirming(arc.id) : void deleteArc(arc.id))}
+					onRemove={() => setConfirming(arc.id)}
 				/>
 			))}
 		</ul>
@@ -251,7 +286,7 @@ export function SeasonTree({
 					className={`${variant === "menu" ? "mx-3" : "px-4"} ${tree.arcs.length ? "mt-4 border-t border-z1" : "py-8"}`}
 				>
 					{!tree.arcs.length && <p className="mb-3 text-sm text-muted">No arcs yet.</p>}
-					{editable && (
+					{canAddRemove && (
 						<button
 							type="button"
 							className={`${quietClass} text-link`}
@@ -322,13 +357,40 @@ export function SeasonTree({
 			<ConfirmDialog
 				open={!!confirmedArc}
 				title={`Remove ${confirmedArc?.title.trim() || "Untitled arc"}?`}
-				body={`This also removes ${confirmedArc?.quests.length === 1 ? "its quest" : `its ${confirmedArc?.quests.length ?? 0} quests`}.`}
+				body={
+					live && confirmedArc?.quests.some((quest) => !quest.hidden) ? (
+						<>
+							<p>This also removes its {confirmedArc.quests.length} quests.</p>
+							{impactFor === confirmedArc.id && arcImpact ? (
+								<div className="mt-3">
+									<RemovalImpact
+										impact={arcImpact}
+										onItLabel="On one of them now · skips it with 0 points"
+										notReachedLabel="Quests left in it · they leave their order"
+										solvedLabel={(count) => `${count} teams solved every quest in it and keep their points.`}
+									/>
+								</div>
+							) : impactError && impactFor === confirmedArc.id ? null : (
+								<p className="mt-2 font-cond text-xs text-muted">Counting teams…</p>
+							)}
+						</>
+					) : (
+						`This also removes ${confirmedArc?.quests.length === 1 ? "its quest" : `its ${confirmedArc?.quests.length ?? 0} quests`}.`
+					)
+				}
 				confirmLabel="Remove arc"
-				disabled={pending || !editable}
+				disabled={
+					pending ||
+					!canAddRemove ||
+					(Boolean(live && confirmedArc?.quests.some((quest) => !quest.hidden)) &&
+						(impactFor !== confirmedArc?.id || !arcImpact))
+				}
+				error={impactFor === confirmedArc?.id ? impactError : null}
 				onConfirm={() => {
-					if (confirmedArc) void deleteArc(confirmedArc.id)
+					if (confirmedArc && (!live || !confirmedArc.quests.some((quest) => !quest.hidden) || arcImpact))
+						void deleteArc(confirmedArc.id)
 				}}
-				onClose={() => setConfirming(null)}
+				onClose={closeArcConfirmation}
 			/>
 		</div>
 	)
@@ -344,6 +406,7 @@ function ArcTree({
 	onOpen,
 	onClose,
 	editable,
+	live,
 	pending,
 	addError,
 	removeError,
@@ -366,6 +429,7 @@ function ArcTree({
 	onOpen: () => void
 	onClose: () => void
 	editable: boolean
+	live: boolean
 	pending: boolean
 	addError?: string
 	removeError?: string
@@ -380,6 +444,7 @@ function ArcTree({
 	onToggleQuest: (id: string) => void
 }) {
 	const shuffle = useAutosaveField({ arcId: arc.id, field: "shuffleQuests" }, arc.shuffleQuests)
+	const canAddRemove = editable || live
 	const panel = useRef<HTMLFormElement>(null)
 	useEffect(() => {
 		if (!open) return
@@ -410,7 +475,7 @@ function ArcTree({
 					>
 						<AutosaveTextField label="Arc title" target={{ arcId: arc.id, field: "title" }} serverValue={arc.title} />
 						<div className="mt-3 flex items-center justify-between gap-2">
-							{editable && (
+							{canAddRemove && (
 								<button type="button" className={`${quietClass} text-muted`} disabled={pending} onClick={onRemove}>
 									Remove arc
 								</button>
@@ -462,7 +527,7 @@ function ArcTree({
 				{!folded && (
 					<ul>
 						{arc.quests.map((quest) => {
-							const questStats = stats?.[quest.id]
+							const questStats = quest.hidden ? undefined : stats?.[quest.id]
 							return (
 								<QuestTreeRow
 									key={quest.id}
@@ -473,7 +538,7 @@ function ArcTree({
 									onMove={onMove}
 								>
 									{(bindings) =>
-										questStats ? (
+										questStats && variant === "page" ? (
 											<>
 												<button
 													type="button"
@@ -513,13 +578,21 @@ function ArcTree({
 												role="link"
 												href={`/admin/seasons/${seasonId}/quests/${quest.id}`}
 												aria-current={selectedQuest === quest.id ? "page" : undefined}
-												className={`flex h-11 items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
+												className={`flex ${questStats ? "min-h-14" : "h-11"} items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
 											>
-												<span className={`min-w-0 truncate${quest.label ? "" : " text-muted"}`}>
-													{quest.label ?? "Untitled quest"}
+												<span className="min-w-0">
+													<span
+														className={`block min-w-0 truncate${quest.hidden || !quest.label ? " text-muted" : ""}`}
+													>
+														{quest.label ?? "Untitled quest"}
+													</span>
+													{quest.hidden && (
+														<span className="block font-cond text-xs text-muted">Draft · teams don't see it</span>
+													)}
+													{questStats && <QuestCompletion stats={questStats} />}
 												</span>
 												<span
-													className={`shrink-0 tabular-nums ${quest.points === null || variant === "menu" ? "text-xs text-muted" : dragging ? "text-sm text-muted" : "text-sm font-bold text-head"}`}
+													className={`shrink-0 tabular-nums ${quest.hidden || quest.points === null || variant === "menu" ? "text-xs text-muted" : dragging ? "text-sm text-muted" : "text-sm font-bold text-head"}`}
 												>
 													{quest.points === null ? "–" : `${quest.points}p`}
 												</span>
@@ -532,7 +605,7 @@ function ArcTree({
 						{editable && !arc.quests.length && <EmptyArcSlot arcId={arc.id} />}
 					</ul>
 				)}
-				{editable && !folded && (
+				{canAddRemove && !folded && (
 					<div className={`${gutter}${variant === "page" ? " border-t border-z1" : ""}`}>
 						<button type="button" className={`${quietClass} text-link`} disabled={pending} onClick={onAdd}>
 							{variant === "menu" ? "+ Quest" : `+ Quest in ${title}`}

@@ -12,6 +12,11 @@ Give each test file a fresh database. Cover create/get/list, per-path `$set`, th
 persistent hint history, guards and structural-edit writes. Concurrent field edits must preserve both values.
 The later first-finisher bonus needs an atomic concurrent-winner test.
 
+Cover hidden-draft exclusion from player data, rails, standings, board, order builds and live stats.
+Cover removal-dialog impact outcomes: current teams skip with zero points, unreached quests leave orders,
+and solved teams keep their points.
+Assert unbuilt orders are skipped and not counted, and arc removal counts each team once.
+
 Put reproducible rule and interaction cases in unit or component tests rather than adding browser flows.
 Write a red regression test first for a reproducible bug. On failure, rerun only affected tests while fixing.
 
