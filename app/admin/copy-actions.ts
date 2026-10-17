@@ -1,6 +1,7 @@
 "use server"
 
 import { z } from "zod"
+import { withAssetReferences } from "@/lib/assets/release"
 import { requireAdmin } from "@/lib/auth/guards"
 import { NotFoundError } from "@/lib/db/collections"
 import { copyArcToSeason, copyQuestToSeason, getSeason, listSeasons } from "@/lib/db/seasons"
@@ -41,12 +42,14 @@ export async function copyArc(
 		id.parse(arcId)
 		id.parse(destSeasonId)
 		if (sourceSeasonId === destSeasonId) return { ok: false, error: "Pick another season." }
-		const source = await getSeason(sourceSeasonId)
-		const arc = source?.arcs.find((arc) => arc.id === arcId)
-		if (!arc) throw new NotFoundError(`Arc ${arcId} not found`)
-		const copied = duplicateArc(arc)
-		await copyArcToSeason(destSeasonId, copied)
-		copiedArcId = copied.id
+		copiedArcId = await withAssetReferences(async () => {
+			const source = await getSeason(sourceSeasonId)
+			const arc = source?.arcs.find((arc) => arc.id === arcId)
+			if (!arc) throw new NotFoundError(`Arc ${arcId} not found`)
+			const copied = duplicateArc(arc)
+			await copyArcToSeason(destSeasonId, copied)
+			return copied.id
+		})
 	} catch (error) {
 		return actionFailure(error, now)
 	}
@@ -68,17 +71,21 @@ export async function copyQuest(
 		id.parse(questId)
 		const target = QuestDestination.parse(dest)
 		if (sourceSeasonId === target.seasonId) return { ok: false, error: "Pick another season." }
-		const source = await getSeason(sourceSeasonId)
-		const arc = source?.arcs.find((arc) => arc.quests.some((quest) => quest.id === questId))
-		const quest = arc?.quests.find((quest) => quest.id === questId)
-		if (!arc || !quest) throw new NotFoundError(`Quest ${questId} not found`)
-		const copied = duplicateQuest(quest)
-		copiedArcId = await copyQuestToSeason(
-			target.seasonId,
-			"arcId" in target ? { arcId: target.arcId } : { newArc: { title: arc.title, shuffleQuests: arc.shuffleQuests } },
-			copied,
-		)
-		copiedQuestId = copied.id
+		;[copiedArcId, copiedQuestId] = await withAssetReferences(async () => {
+			const source = await getSeason(sourceSeasonId)
+			const arc = source?.arcs.find((arc) => arc.quests.some((quest) => quest.id === questId))
+			const quest = arc?.quests.find((quest) => quest.id === questId)
+			if (!arc || !quest) throw new NotFoundError(`Quest ${questId} not found`)
+			const copied = duplicateQuest(quest)
+			const copiedArcId = await copyQuestToSeason(
+				target.seasonId,
+				"arcId" in target
+					? { arcId: target.arcId }
+					: { newArc: { title: arc.title, shuffleQuests: arc.shuffleQuests } },
+				copied,
+			)
+			return [copiedArcId, copied.id] as const
+		})
 	} catch (error) {
 		return actionFailure(error, now)
 	}

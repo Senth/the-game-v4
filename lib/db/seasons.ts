@@ -56,15 +56,14 @@ export class CopyTargetStartedError extends Error {
 
 async function writeCopy(seasonId: string, filter: Filter<Season>, update: UpdateFilter<Season>): Promise<void> {
 	const { seasons } = await collections()
-	const now = new Date()
 	const result = await seasons.updateOne(
-		{ ...filter, _id: seasonId, $or: [{ start: null }, { start: { $gt: now } }] },
+		{ ...filter, _id: seasonId, $or: [{ start: null }, { $expr: { $gt: ["$start", "$$NOW"] } }] },
 		update,
 	)
 	if (result.matchedCount === 0) {
 		const season = await seasons.findOne({ _id: seasonId })
 		if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
-		if (season.start && season.start <= now) throw new CopyTargetStartedError(season.title)
+		if (season.start && season.start <= new Date()) throw new CopyTargetStartedError(season.title)
 		throw new NotFoundError(`Arc ${filter["arcs.id"]} not found`)
 	}
 }

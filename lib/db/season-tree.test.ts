@@ -80,6 +80,27 @@ describe("copy writes", () => {
 		}
 	})
 
+	it.each(copies)("rejects $name when scheduled start passes while updateOne waits", async ({ run }) => {
+		const season = await createSeason(seasonInput())
+		const start = new Date(Date.now() + 200)
+		await setSeasonField(season._id, { field: "start" }, start)
+		season.start = start
+		const original = Collection.prototype.updateOne
+		const write = vi.spyOn(Collection.prototype, "updateOne").mockImplementationOnce(async function (
+			this: Collection,
+			...args
+		) {
+			await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.getTime() - Date.now()) + 50))
+			return original.apply(this, args)
+		})
+		try {
+			await expect(run(season._id)).rejects.toThrow("Cipher Night has started. Pick another season.")
+			expect(await getSeason(season._id)).toEqual(season)
+		} finally {
+			write.mockRestore()
+		}
+	})
+
 	it.each(copies)("appends $name in one updateOne without replacing concurrent fields", async ({ name, run }) => {
 		const season = await createSeason(seasonInput())
 		const write = vi.spyOn(Collection.prototype, "updateOne")
@@ -88,7 +109,7 @@ describe("copy writes", () => {
 			expect(write).toHaveBeenCalledTimes(1)
 			expect(write.mock.calls[0]?.[0]).toMatchObject({
 				_id: season._id,
-				$or: [{ start: null }, { start: { $gt: expect.any(Date) } }],
+				$or: [{ start: null }, { $expr: { $gt: ["$start", "$$NOW"] } }],
 			})
 			expect(write.mock.calls[0]?.[1]).toHaveProperty("$push")
 		} finally {

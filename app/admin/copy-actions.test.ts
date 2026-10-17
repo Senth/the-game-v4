@@ -2,6 +2,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { saveAsset } from "@/lib/assets/files"
+import * as assets from "@/lib/assets/release"
 import { getSession } from "@/lib/auth/session"
 import { collections } from "@/lib/db/collections"
 import * as seasons from "@/lib/db/seasons"
@@ -10,7 +11,7 @@ import { copyDestinations } from "@/lib/domain/copy"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { publish, seasonChannel } from "@/lib/events/bus"
 import { useTestDb } from "@/test/db"
-import { removeQuestAsset } from "./asset-actions"
+import { removeQuestAsset, uploadQuestAsset } from "./asset-actions"
 import { saveSeasonField } from "./autosave-actions"
 import { copyArc, copyQuest, getCopyDestinations } from "./copy-actions"
 
@@ -21,7 +22,7 @@ vi.mock("@/lib/events/bus", async (original) => ({
 }))
 
 useTestDb()
-const now = new Date("2026-10-24T16:00:00Z")
+const now = new Date()
 const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000)
 
 beforeEach(async () => {
@@ -180,6 +181,60 @@ describe.each(["arc", "quest"] as const)("copy %s", (kind) => {
 		write.mockRejectedValueOnce(error)
 		await expect(run()).rejects.toBe(error)
 		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each(["remove", "replace"])("keeps copied images during concurrent source image %s", async (change) => {
+		await setup("source")
+		await setup("destination")
+		const directory = await mkdtemp(path.resolve(".tmp", "copy-race-assets-"))
+		vi.stubEnv("ASSETS_DIR", directory)
+		const writing = Promise.withResolvers<void>()
+		const resume = Promise.withResolvers<void>()
+		const releasing = Promise.withResolvers<void>()
+		const originalRelease = assets.releaseAsset
+		vi.spyOn(assets, "releaseAsset").mockImplementation((assetPath) => {
+			const result = originalRelease(assetPath)
+			releasing.resolve()
+			return result
+		})
+		const referenced = vi.spyOn(seasons, "isAssetReferenced")
+		const writeName = kind === "arc" ? "copyArcToSeason" : "copyQuestToSeason"
+		const originalWrite = kind === "arc" ? seasons.copyArcToSeason : seasons.copyQuestToSeason
+		vi.spyOn(seasons, writeName).mockImplementation(async (...args: unknown[]) => {
+			writing.resolve()
+			await resume.promise
+			return Reflect.apply(originalWrite, seasons, args)
+		})
+		try {
+			const assetPath = await saveAsset(new Uint8Array([1]), "png")
+			await seasons.setQuestAsset("source", "arc", "quest", assetPath)
+			const copying = run()
+			await writing.promise
+			const form = new FormData()
+			form.set("file", new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], "new.png"))
+			const changing =
+				change === "remove"
+					? removeQuestAsset("source", "arc", "quest")
+					: uploadQuestAsset("source", "arc", "quest", form)
+			await releasing.promise
+			try {
+				expect(referenced).not.toHaveBeenCalled()
+			} finally {
+				resume.resolve()
+				await Promise.all([copying, changing])
+			}
+			expect(await copying).toMatchObject({ ok: true })
+			expect(await changing).toMatchObject({ ok: true })
+			const destination = await seasons.getSeason("destination")
+			const arc = kind === "arc" ? destination?.arcs.at(-1) : destination?.arcs[0]
+			expect(arc?.quests.at(-1)?.assetPath).toBe(assetPath)
+			expect(await readdir(directory)).toContain(path.basename(assetPath))
+			expect((await seasons.getSeason("source"))?.arcs[0]?.quests[0]?.assetPath).not.toBe(assetPath)
+		} finally {
+			resume.resolve()
+			vi.unstubAllEnvs()
+			await rm(directory, { recursive: true, force: true })
+		}
 	})
 })
 

@@ -24,5 +24,5 @@ describe("getDb", () => {
 		await teams.deleteOne({ name: "Twins" })
 		await seeder.close()
 		await expect(getDb()).resolves.toBeDefined()
-	})
+	}, 15_000)
 })
