@@ -1,18 +1,21 @@
+import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, expect, it, vi } from "vitest"
 import { HintsEditor } from "@/components/admin/hints-editor"
 import { QuestEditor } from "@/components/admin/quest-editor"
+import { QuestLiveStatsBlock } from "@/components/admin/quest-live-stats"
 import { QuestPreview } from "@/components/admin/quest-preview"
 import { QuestViewToggle } from "@/components/admin/quest-view-toggle"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
-import { listTeams } from "@/lib/db/teams"
+import { listSeasonTeams } from "@/lib/db/teams"
 import { hintRevealers } from "@/lib/domain/hints"
+import { questLiveStats } from "@/lib/domain/quest-stats"
 import { buildFixture } from "@/scripts/fixture"
 import QuestPage from "./page"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn() }))
-vi.mock("@/lib/db/teams", () => ({ listTeams: vi.fn() }))
+vi.mock("@/lib/db/teams", () => ({ listSeasonTeams: vi.fn() }))
 
 const fixture = buildFixture(new Date("2026-10-12T17:00:00Z"))
 const season = fixture.season
@@ -29,14 +32,14 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	vi.mocked(requireAdmin).mockResolvedValue({ _id: "admin", name: "admin", passwordHash: "hash" })
 	vi.mocked(getSeason).mockResolvedValue(season)
-	vi.mocked(listTeams).mockResolvedValue(fixture.teams.map((team) => ({ ...team, passwordHash: "hash" })))
+	vi.mocked(listSeasonTeams).mockResolvedValue(fixture.teams)
 })
 
 it("requires admin before reading quest data", async () => {
 	vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
 	await expect(QuestPage(props)).rejects.toThrow("Unauthorized")
 	expect(getSeason).not.toHaveBeenCalled()
-	expect(listTeams).not.toHaveBeenCalled()
+	expect(listSeasonTeams).not.toHaveBeenCalled()
 })
 
 it.each(["season", "arc", "quest"])("redirects to the Quests tab when %s disappears", async (missing) => {
@@ -54,7 +57,7 @@ it("selects the quest's own arc and passes editor fields without hints across th
 	const header = element.props.children[0]
 	const toggle = element.props.children[1]
 	const content = toggle.props.children
-	const titles = content.props.children[1]
+	const titles = content.props.children[2]
 	expect(getSeason).toHaveBeenCalledWith(season._id)
 	expect(header.props).toEqual({ seasonId: season._id, arcTitle: arc.title, label: quest.internalTitle })
 	expect(toggle.key).toBe(quest.id)
@@ -100,7 +103,7 @@ it("selects the quest's own arc and passes editor fields without hints across th
 		quest,
 		now: titles.props.now,
 	})
-	expect(listTeams).toHaveBeenCalledExactlyOnceWith(season._id)
+	expect(listSeasonTeams).toHaveBeenCalledExactlyOnceWith(season._id)
 })
 
 it.each([
@@ -121,6 +124,37 @@ it.each([
 	expect(heading.props.className).toContain(label ? "text-head" : "text-muted")
 })
 
+it.each(["live", "upcoming", "ended"] as const)("shows desktop live stats only while %s", async (state) => {
+	const now = Date.now()
+	const liveSeason = {
+		...season,
+		start: new Date(state === "upcoming" ? now + 60_000 : now - 60_000),
+		end: new Date(state === "ended" ? now - 1 : now + 60_000),
+	}
+	vi.mocked(getSeason).mockResolvedValue(liveSeason)
+	const element = await QuestPage(props)
+	const content = element.props.children[1].props.children
+	const liveBlock = content.props.children[1]
+
+	if (state === "live") {
+		expect(liveBlock.props.className).toBe("hidden lg:block")
+		expect(liveBlock.props.children.type).toBe(QuestLiveStatsBlock)
+		expect(liveBlock.props.children.props.stats).toEqual(questLiveStats(liveSeason, fixture.teams)[quest.id])
+		const html = renderToStaticMarkup(liveBlock)
+		expect(html).toContain(">Live<")
+		const stats = questLiveStats(liveSeason, fixture.teams)[quest.id]
+		if (!stats) throw new Error("Fixture quest needs live stats")
+		expect(html).toContain(`${stats.done}/${stats.total} done`)
+		expect(html).toContain("w-40")
+		expect(html).toContain("mb-8 rounded-md py-4")
+		expect(html).toContain("Completed by")
+		expect(html).not.toContain("Edit quest")
+	} else {
+		expect(liveBlock).toBeFalsy()
+	}
+	expect(listSeasonTeams).toHaveBeenCalledExactlyOnceWith(season._id)
+})
+
 it("loads a quest outside the first arc", async () => {
 	const element = await QuestPage({
 		...props,
@@ -138,14 +172,14 @@ it.each(["unstarted", "live", "ended"])(
 			end: state === "ended" ? new Date(Date.now() - 1) : new Date(Date.now() + 60_000),
 		})
 		const element = await QuestPage(props)
-		const hints = element.props.children[1].props.children.props.children[1].props.children
+		const hints = element.props.children[1].props.children.props.children[2].props.children
 		expect(hints.props.revealers).toEqual(hintRevealers(fixture.teams, quest.id))
 		expect(hints.props.start).toEqual(state === "unstarted" ? null : expect.any(Date))
 		expect(hints.props.end).toEqual(expect.any(Date))
 		expect(hints.props.now).toEqual(expect.any(Number))
 		expect(hints.props).not.toHaveProperty("teams")
 		expect(JSON.stringify(hints.props)).not.toContain("passwordHash")
-		expect(listTeams).toHaveBeenCalledExactlyOnceWith(season._id)
+		expect(listSeasonTeams).toHaveBeenCalledExactlyOnceWith(season._id)
 	},
 )
 
@@ -160,12 +194,12 @@ it("contains an accepted unbroken 100-character desktop heading without shorteni
 	const heading = content.props.children[0]
 	expect(heading.props.children).toBe(displayTitle)
 	expect(heading.props.className.split(" ")).toContain("truncate")
-	expect(content.props.children[1].props.quest.displayTitle).toBe(displayTitle)
+	expect(content.props.children[2].props.quest.displayTitle).toBe(displayTitle)
 })
 
 it("includes Ninjas in Backwards log's first hint revealers from the dev fixture", async () => {
 	const element = await QuestPage(props)
-	const editor = element.props.children[1].props.children.props.children[1].props.children
+	const editor = element.props.children[1].props.children.props.children[2].props.children
 	const firstHint = quest.hints[0]
 	if (!firstHint) throw new Error("Fixture needs a hint")
 	expect(editor.props.start).toEqual(season.start)
@@ -176,7 +210,7 @@ it("passes future season timing to derive revealer visibility on the client", as
 	const start = new Date(Date.now() + 60_000)
 	vi.mocked(getSeason).mockResolvedValue({ ...season, start })
 	const element = await QuestPage(props)
-	const hints = element.props.children[1].props.children.props.children[1].props.children
+	const hints = element.props.children[1].props.children.props.children[2].props.children
 	expect(hints.props.start).toBe(start)
 	expect(hints.props.now).toBeLessThan(start.getTime())
 	expect(hints.props).not.toHaveProperty("hasStarted")

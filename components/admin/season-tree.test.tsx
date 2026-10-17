@@ -253,6 +253,66 @@ it("marks only the selected desktop quest and keeps points subordinate", () => {
 	expect(render({ variant: "menu" }).html).not.toContain("aria-current")
 })
 
+const liveStats = { done: 7, total: 10, completedBy: ["Ninjas"], hintRevealers: {}, hints: [] }
+const liveProps = { start: new Date(now - 60_000), end: new Date(now + 60_000), stats: { q1: liveStats } }
+
+function questButton(view: ReturnType<typeof render>, id: string) {
+	const button = view.all.find((node) => node.type === "button" && node.props["aria-controls"] === `quest-stats-${id}`)
+	if (!button) throw new Error(`Missing quest button ${id}`)
+	return button
+}
+
+it("expands live quest rows instead of navigating and keeps their state on refreshed server data", () => {
+	const closed = render(liveProps)
+	expect(closed.html).toContain("7/10 done")
+	expect(closed.html).not.toContain('href="/admin/seasons/s1/quests/q1"')
+	expect(questButton(closed, "q1").props["aria-expanded"]).toBe(false)
+	expect(questButton(closed, "q1").props.className).toContain("min-h-14")
+	questButton(closed, "q1").props.onClick?.()
+	const refreshed = render({ ...liveProps, stats: { q1: { ...liveStats, done: 8 } }, now: now + 1000 })
+	expect(questButton(refreshed, "q1").props["aria-expanded"]).toBe(true)
+	expect(refreshed.html).toContain("8/10 done")
+	expect(refreshed.html).toContain("Completed by")
+	expect(refreshed.html).toContain("Edit quest ›")
+	expect(hooks.push).not.toHaveBeenCalled()
+	questButton(refreshed, "q1").props.onClick?.()
+	expect(render(liveProps).html).not.toContain("Completed by")
+})
+
+it("keeps only one live quest expanded across arcs", () => {
+	const props = {
+		...liveProps,
+		stats: { q1: liveStats, q2: { ...liveStats, completedBy: ["Lagom"] } },
+		tree: { arcs: [arc, { ...arc, id: "a2", quests: [{ id: "q2", label: "Last word", points: 20 }] }] },
+	}
+	questButton(render(props), "q1").props.onClick?.()
+	questButton(render(props), "q2").props.onClick?.()
+	const view = render(props)
+	expect(questButton(view, "q1").props["aria-expanded"]).toBe(false)
+	expect(questButton(view, "q2").props["aria-expanded"]).toBe(true)
+	expect(view.html.match(/Completed by/g)).toHaveLength(1)
+	expect(view.html).toContain("Lagom")
+})
+
+it("leaves the desktop menu unchanged even when stats are supplied", () => {
+	const view = render({ ...liveProps, variant: "menu" })
+	expect(view.html).toContain('href="/admin/seasons/s1/quests/q1"')
+	expect(view.html).not.toContain("done")
+	expect(view.html).not.toContain("quest-stats-q1")
+})
+
+it("hides live stats when the client clock reaches the season end", async () => {
+	const props = { ...liveProps, end: new Date(now + 1000) }
+	questButton(render(props), "q1").props.onClick?.()
+	render(props)
+	cleanup = hooks.effects[0]?.()
+	await vi.advanceTimersByTimeAsync(1000)
+	const view = render(props)
+	expect(view.html).not.toContain("done")
+	expect(view.html).not.toContain("Completed by")
+	expect(view.html).toContain('href="/admin/seasons/s1/quests/q1"')
+})
+
 it.each([true, false])("saves the flipped shuffle value from %s with an accessible quiet target", (shuffleQuests) => {
 	const view = render({ tree: { arcs: [{ ...arc, shuffleQuests }] } })
 	const button = view.button(shuffleQuests ? "Random" : "Ordered")
