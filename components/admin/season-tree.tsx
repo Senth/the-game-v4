@@ -24,6 +24,7 @@ import { useAutosave, useAutosaveField } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { ConfirmDialog, outlineClass } from "./confirm-dialog"
 import { CopyDialog } from "./copy-dialog"
+import { MissingIcon } from "./missing-icon"
 import { QuestCompletion, QuestLiveStatsBlock } from "./quest-live-stats"
 import { RemovalImpact } from "./removal-impact"
 import { SortableDragLayer, SortableRow } from "./sortable/drag-layer"
@@ -560,8 +561,11 @@ function ArcTree({
 														className={`flex min-h-14 w-full items-center gap-3 border-t border-z1 ${gutter} text-left hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent`}
 													>
 														<span className="min-w-0 flex-1">
-															<span className={`block truncate text-sm${quest.label ? "" : " text-muted"}`}>
-																{quest.label ?? "Untitled quest"}
+															<span className="flex min-w-0 items-center gap-2">
+																<span className={`block min-w-0 truncate text-sm${quest.label ? "" : " text-muted"}`}>
+																	{quest.label ?? "Untitled quest"}
+																</span>
+																{quest.missing.length > 0 && <MissingIcon missing={quest.missing} />}
 															</span>
 															<QuestCompletion stats={questStats} />
 														</span>
@@ -593,10 +597,13 @@ function ArcTree({
 													className={`flex ${questStats ? "min-h-14" : "h-11"} items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
 												>
 													<span className="min-w-0">
-														<span
-															className={`block min-w-0 truncate${quest.hidden || !quest.label ? " text-muted" : ""}`}
-														>
-															{quest.label ?? "Untitled quest"}
+														<span className="flex min-w-0 items-center gap-2">
+															<span
+																className={`block min-w-0 truncate${quest.hidden || !quest.label ? " text-muted" : ""}`}
+															>
+																{quest.label ?? "Untitled quest"}
+															</span>
+															{quest.missing.length > 0 && <MissingIcon missing={quest.missing} />}
 														</span>
 														{quest.hidden && (
 															<span className="block font-cond text-xs text-muted">Draft · teams don't see it</span>

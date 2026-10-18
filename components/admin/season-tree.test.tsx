@@ -244,6 +244,39 @@ it.each(["menu", "page"] as const)("renders quiet fallbacks, missing points and 
 	view.button(variant === "menu" ? "+ Quest" : "+ Quest in Untitled arc")
 })
 
+it.each(["menu", "page"] as const)("shows missing-field marker in %s quest links only when incomplete", (variant) => {
+	const missing = render({
+		variant,
+		tree: {
+			arcs: [{ ...arc, quests: [{ id: "q1", label: "Harbour map", points: 40, missing: ["answers", "points"] }] }],
+		},
+	})
+	expect(missing.html).toContain('role="img" aria-label="Missing answers and points"')
+	expect(missing.html).toContain("size-3.5 text-warn shrink-0")
+	expect(render({ variant }).html).not.toContain('role="img" aria-label="Missing')
+})
+
+it("shows missing-field marker on hidden drafts and live-stats rows", () => {
+	const draft = render({
+		...liveProps,
+		tree: {
+			arcs: [
+				{ ...arc, quests: [{ id: "q1", label: "Lantern code", points: null, missing: ["answers"], hidden: true }] },
+			],
+		},
+	})
+	expect(draft.html).toContain('role="img" aria-label="Missing answers"')
+	expect(draft.html).toContain("Draft · teams don&#x27;t see it")
+	const live = render({
+		...liveProps,
+		tree: {
+			arcs: [{ ...arc, quests: [{ id: "q1", label: "Harbour map", points: 40, missing: ["answers", "points"] }] }],
+		},
+	})
+	expect(live.html).toContain('role="img" aria-label="Missing answers and points"')
+	expect(live.html).toContain('aria-controls="quest-stats-q1"')
+})
+
 it("renders hidden drafts as muted editor links without live stats or a chevron", () => {
 	const view = render({
 		...liveProps,
