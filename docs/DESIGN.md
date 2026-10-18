@@ -191,6 +191,34 @@ Only one quest stays open at a time. Phone shows "Edit quest ›". Desktop block
 with no Edit link.
 PROJECT.md owns the visibility window for these stats.
 
+### Missing-field warnings
+
+Final variant A:
+
+- [Phone](https://artifacts.senth.org/a-phone-e8d3dc.png)
+- [Desktop](https://artifacts.senth.org/a-desktop-d4d944.png)
+
+Use [PROJECT.md's completeness rule](PROJECT.md#nested-types), shared with Add to game.
+Warnings show from first open, in every season state, including ended seasons and hidden drafts. Keep the draft note.
+Use the complete seed and isolated incomplete-drafts variant from [TESTS.md](TESTS.md#development-fixture).
+
+Tree rows place an inline SVG `warn` triangle immediately after the quest name on phone and desktop.
+Keep quest names and markers on one line, truncating names as needed. No arc markers or season count.
+Quest labels follow the tree rule above: internal title, else display title, else "Untitled quest".
+The icon has `role="img"` and `aria-label="Missing <fields>"`. Use lowercase field names joined as "a, b and c".
+The tree follows the saved season; editor warnings follow each field's local value and clear while typing.
+
+Missing editor fields get a `warn` border and a `mt-1.5 font-cond text-xs text-warn` line below:
+
+- Display title: "Needs a display title".
+- Content: "Needs content".
+- Answers: "Needs an answer".
+- Points: "Needs points".
+
+Link the line with `aria-describedby`. Missing-only fields use neither `aria-invalid` nor `role="alert"`.
+A failed save's "Not saved" line replaces the missing line while the failure lasts.
+See [Start now confirmation](#start-now-confirmation) for the live strip dialog.
+
 ### Live structural edits
 
 Final mocks supersede M1 and M2 for these states:
@@ -498,6 +526,18 @@ Read first season title, second start and length, third shuffle and registration
 Must not look like a CMS form with a Save bar or preferences dashboard.
 Stack fields in M2's field style; booleans are switches. Quiet locked fields once live.
 Show errors as `warn` lines at the field.
+
+#### Start now confirmation
+
+Follow [PROJECT.md's Start now rule](PROJECT.md#lifecycle-and-season-lookup) and the [missing-field mocks](#missing-field-warnings).
+Use the existing native `<dialog>` style on phone and desktop.
+Title: `Start with <N> incomplete quests?`, or `Start with 1 incomplete quest?`.
+List quests in authored arc and quest order, including hidden drafts.
+Each row shows the [tree quest label](#missing-field-warnings) and its missing fields in `warn`.
+Missing-field text may wrap. Show at most five quest rows, then muted `and <K> more` for the remainder.
+Body: "Teams get them as they are. A quest without answers can't be solved."
+Buttons: "Cancel" and accent "Start anyway". Cancel leaves the season unstarted; Start anyway starts it.
+Complete seasons start in one click without this dialog. Scheduling a future start shows no warning.
 
 ### Public TV board
 

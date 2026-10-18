@@ -55,11 +55,13 @@ A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
 A quest and each hint must have a stable id. Assign ids to hints that lack them, including on import.
 `Quest` also has `hidden?: boolean`; absent means visible.
 Draft quests may have empty content, empty answers or missing points.
+A quest is complete when it has a display title, content, at least one answer and points.
+Whitespace-only text is empty; 0 points is set. `missingForGame` defines this shared rule.
 Quest points are a whole number from 0 to 10000, or null on a draft.
 Hint points are a whole number from 0 to 10000.
 Answers are stored trimmed and NFC-normalized, 1 to 200 characters.
 Sequential additions deduplicate by `normalizeAnswer`; concurrent near-duplicates are possible and harmless.
-Warn in the tree and beside missing fields; starting an incomplete season warns the admin.
+Warn in the tree and beside missing fields, following [missing-field warnings](DESIGN.md#missing-field-warnings).
 Content is Markdown with trusted, admin-authored raw HTML. Use `react-markdown` with `rehype-raw`
 and Shiki for fenced code. There is no separate v3 `code` field.
 
@@ -138,6 +140,9 @@ Self-registration trims names, accepts 1 to 30 characters and needs a password o
 The first game, standings or board load after start builds a team's empty order.
 Exactly one concurrent load writes it.
 "Start now" sets `start` 20 seconds from now and `end` to `start` plus `lengthMinutes`. It needs at least one quest.
+Start now asks for confirmation when any quest is incomplete, including hidden drafts.
+The server action does not block on incompleteness.
+Complete seasons start in one click. Scheduling a future start shows no missing-field warning.
 Admins may schedule a future start on Settings or clear it while upcoming.
 A scheduled `end` always follows `start` plus `lengthMinutes`.
 Length locks once the season is live. While live, −5 min needs more than 5 minutes left; +5 min always works.
@@ -250,7 +255,7 @@ Text, answers, hints and points apply immediately during play, including hint re
 Revealed-hint snapshots remain unchanged.
 Quests added while live are hidden drafts.
 Players, rails, standings, board, order builds and live stats skip hidden drafts.
-"Add to game" clears `hidden` once display title, content, at least one answer and points are set.
+"Add to game" clears `hidden` only when the quest meets the [completeness rule](#nested-types).
 It then applies the new-quest rule below. Removing a hidden draft affects no team.
 
 Adding a quest to the game and removals touching teams require confirmation naming the affected team count.
