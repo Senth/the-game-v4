@@ -18,8 +18,18 @@ export function scheduleWindow(start: Date | null, lengthMinutes: number): Pick<
 	return { start, end: start ? new Date(start.getTime() + lengthMinutes * 60_000) : null }
 }
 
-export function startNowWindow(season: Pick<Season, "lengthMinutes">, now: Date): Pick<Season, "start" | "end"> {
-	return scheduleWindow(new Date(now.getTime() + 20_000), season.lengthMinutes)
+export function startCountdownMs(raw: string | undefined): number {
+	if (raw === undefined || raw.trim() === "") return 20_000
+	const countdownMs = Number(raw)
+	return Number.isInteger(countdownMs) && countdownMs >= 0 && countdownMs <= 20_000 ? countdownMs : 20_000
+}
+
+export function startNowWindow(
+	season: Pick<Season, "lengthMinutes">,
+	now: Date,
+	countdownMs = 20_000,
+): Pick<Season, "start" | "end"> {
+	return scheduleWindow(new Date(now.getTime() + countdownMs), season.lengthMinutes)
 }
 
 export function shiftEndWindow(

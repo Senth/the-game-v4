@@ -10,6 +10,7 @@ import {
 	scheduleWindow,
 	seasonStatus,
 	shiftEndWindow,
+	startCountdownMs,
 	startNowWindow,
 } from "./admin-seasons"
 
@@ -25,6 +26,24 @@ describe("season windows", () => {
 		const start = new Date(now.getTime() + 20_000)
 		expect(startNowWindow(season, now)).toEqual({ start, end: new Date(start.getTime() + lengthMinutes * 60_000) })
 		expect({ season, now }).toEqual(original)
+	})
+
+	it("uses an overridden start countdown", () => {
+		expect(startNowWindow({ lengthMinutes: 60 }, now, 0)).toEqual({ start: now, end: minutesFromNow(60) })
+	})
+
+	it.each([
+		[undefined, 20_000],
+		["0", 0],
+		["1234", 1234],
+		["20000", 20_000],
+		["", 20_000],
+		["-1", 20_000],
+		["1.5", 20_000],
+		["20001", 20_000],
+		["nope", 20_000],
+	] as const)("parses start countdown %j", (raw, expected) => {
+		expect(startCountdownMs(raw)).toBe(expected)
 	})
 
 	it.each([1, 60, 1440])("schedules start plus length %i without mutation", (lengthMinutes) => {

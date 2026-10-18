@@ -11,6 +11,7 @@
 		"typecheck": "next typegen && tsc --noEmit",
 		"test": "vitest run --passWithNoTests",
 		"build": "next build",
+		"e2e": "TMPDIR=\"$PWD/.tmp/e2e\" playwright test",
 		"seed": "tsx scripts/seed.ts",
 		"admin:create": "tsx scripts/admin-create.ts",
 		"import:v3": "tsx scripts/import-v3.ts",
@@ -35,6 +36,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.15",
 		"@next/env": "16.3.8",
+		"@playwright/test": "1.64.0",
 		"@tailwindcss/postcss": "^4",
 		"@types/node": "^24",
 		"@types/qrcode": "^1.5.6",

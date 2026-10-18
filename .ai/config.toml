@@ -1,6 +1,5 @@
 [gates]
-# I-28 appends "pnpm e2e" once the core-loop smoke test exists.
-commands = ["pnpm lint --write", "pnpm typecheck", "pnpm test", "pnpm build"]
+commands = ["pnpm lint --write", "pnpm typecheck", "pnpm test", "pnpm build", "pnpm e2e"]
 
 [review]
 visible_paths = ["app/**", "components/**", "styles/**", "public/**"]

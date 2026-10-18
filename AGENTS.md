@@ -21,7 +21,7 @@ MongoDB access lives in `lib/db/`, zod schemas in `lib/domain/`, and dev boot an
 | `pnpm typecheck` | Run `tsc --noEmit` |
 | `pnpm test` | Run Vitest domain and database tests |
 | `pnpm build` | Build the standalone Next.js application |
-| `pnpm e2e` | Run the headless core-loop smoke test once I-28 adds it |
+| `pnpm e2e` | Run the headless core-loop smoke test after `pnpm build` |
 
 Run configured gates in order.
 
