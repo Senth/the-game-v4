@@ -639,7 +639,15 @@ it.each(["quest", "arc"] as const)(
 		await vi.advanceTimersByTimeAsync(0)
 		expect(provider(owner.state).context.status).toBe("failed")
 		const view = scope()
-		const props = { seasonId: "season-1", start: null, end: null, now: Date.now() }
+		const props = {
+			seasonId: "season-1",
+			seasonTitle: "Test season",
+			arcTitle: "Arc",
+			hintCount: 0,
+			start: null,
+			end: null,
+			now: Date.now(),
+		}
 		if (kind === "quest") {
 			const element = render(view, () =>
 				QuestEditor({

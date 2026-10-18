@@ -23,13 +23,15 @@ import { canEditStructure, type treeView } from "@/lib/domain/season-tree"
 import { useAutosave, useAutosaveField } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { ConfirmDialog, outlineClass } from "./confirm-dialog"
+import { CopyDialog } from "./copy-dialog"
 import { QuestCompletion, QuestLiveStatsBlock } from "./quest-live-stats"
 import { RemovalImpact } from "./removal-impact"
 import { SortableDragLayer, SortableRow } from "./sortable/drag-layer"
 import { useMoveQueue } from "./sortable/use-move-queue"
 import { useSeasonClock } from "./use-season-clock"
 
-type Tree = ReturnType<typeof treeView>
+type TreeArc = ReturnType<typeof treeView>["arcs"][number]
+type Tree = { arcs: (Omit<TreeArc, "hintCount"> & { hintCount?: number })[] }
 type Variant = "menu" | "page"
 type LiveStats = Record<string, QuestLiveStats & { hints: Hint[] }>
 type TreeMove =
@@ -53,6 +55,7 @@ const quietClass =
 
 export function SeasonTree({
 	seasonId,
+	seasonTitle,
 	tree,
 	start,
 	end,
@@ -61,6 +64,7 @@ export function SeasonTree({
 	stats,
 }: {
 	seasonId: string
+	seasonTitle?: string
 	tree: Tree
 	start: Date | null
 	end: Date | null
@@ -233,6 +237,7 @@ export function SeasonTree({
 					key={arc.id}
 					arc={arc}
 					seasonId={seasonId}
+					seasonTitle={seasonTitle ?? seasonId}
 					variant={variant}
 					stats={liveStats}
 					expandedQuest={expandedQuest}
@@ -399,6 +404,7 @@ export function SeasonTree({
 function ArcTree({
 	arc,
 	seasonId,
+	seasonTitle,
 	variant,
 	selectedQuest,
 	open,
@@ -422,6 +428,7 @@ function ArcTree({
 }: {
 	arc: Tree["arcs"][number]
 	seasonId: string
+	seasonTitle: string
 	variant: Variant
 	selectedQuest?: string
 	open: boolean
@@ -446,6 +453,7 @@ function ArcTree({
 	const shuffle = useAutosaveField({ arcId: arc.id, field: "shuffleQuests" }, arc.shuffleQuests)
 	const canAddRemove = editable || live
 	const panel = useRef<HTMLFormElement>(null)
+	const [copyOpen, setCopyOpen] = useState(false)
 	useEffect(() => {
 		if (!open) return
 		const input = panel.current?.querySelector("input")
@@ -457,167 +465,180 @@ function ArcTree({
 
 	function content(bindings?: SortableBindings) {
 		return (
-			<section>
-				{open ? (
-					<form
-						ref={panel}
-						className={`mt-2 bg-z1 py-3 ${gutter}`}
-						onSubmit={(event) => {
-							event.preventDefault()
-							onClose()
-						}}
-						onKeyDown={(event) => {
-							if (event.key === "Escape") {
+			<>
+				<section>
+					{open ? (
+						<form
+							ref={panel}
+							className={`mt-2 bg-z1 py-3 ${gutter}`}
+							onSubmit={(event) => {
 								event.preventDefault()
 								onClose()
-							}
-						}}
-					>
-						<AutosaveTextField label="Arc title" target={{ arcId: arc.id, field: "title" }} serverValue={arc.title} />
-						<div className="mt-3 flex items-center justify-between gap-2">
-							{canAddRemove && (
-								<button type="button" className={`${quietClass} text-muted`} disabled={pending} onClick={onRemove}>
-									Remove arc
-								</button>
-							)}
-							<button type="submit" className={`${outlineClass} ml-auto border-z2`}>
-								Done
-							</button>
-						</div>
-						{removeError && (
-							<p role="alert" className="font-cond text-xs text-warn">
-								{removeError}
-							</p>
-						)}
-					</form>
-				) : (
-					<div className={`flex ${folded ? "h-11" : "min-h-14 pt-2"} items-center justify-between gap-2 ${gutter}`}>
-						<button
-							{...bindings}
-							type="button"
-							className={`min-h-11 min-w-0 ${folded ? "flex flex-1 items-center justify-between gap-3" : "truncate"} text-left text-xs uppercase tracking-wider text-muted hover:text-head active:text-link focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""}`}
-							aria-expanded={open}
-							onClick={onOpen}
+							}}
+							onKeyDown={(event) => {
+								if (event.key === "Escape") {
+									event.preventDefault()
+									onClose()
+								}
+							}}
 						>
-							{folded ? <ArcSummary arc={{ ...arc, shuffleQuests: shuffle.value }} /> : title}
-						</button>
-						{!folded && (
-							<div className="shrink-0">
-								<button
-									type="button"
-									className={`${outlineClass} text-xs text-muted ${shuffle.failed ? "border-warn" : "border-z2"}`}
-									aria-label={`Shuffle quests in ${title}`}
-									aria-pressed={shuffle.value}
-									aria-invalid={shuffle.failed}
-									onClick={() => shuffle.onChange(!shuffle.value)}
-									onFocus={shuffle.onFocus}
-									onBlur={() => void shuffle.onBlur()}
-								>
-									{shuffle.value ? "Random" : "Ordered"}
-								</button>
-								{shuffle.failed && (
-									<p role="alert" className="mt-1.5 font-cond text-xs text-warn">
-										{shuffle.error ?? "Not saved"}
-									</p>
+							<AutosaveTextField label="Arc title" target={{ arcId: arc.id, field: "title" }} serverValue={arc.title} />
+							<button type="button" className={`${quietClass} mt-2 text-link`} onClick={() => setCopyOpen(true)}>
+								Copy to another season…
+							</button>
+							<div className="mt-3 flex items-center justify-between gap-2">
+								{canAddRemove && (
+									<button type="button" className={`${quietClass} text-muted`} disabled={pending} onClick={onRemove}>
+										Remove arc
+									</button>
 								)}
+								<button type="submit" className={`${outlineClass} ml-auto border-z2`}>
+									Done
+								</button>
 							</div>
-						)}
-					</div>
-				)}
-				{!folded && (
-					<ul>
-						{arc.quests.map((quest) => {
-							const questStats = quest.hidden ? undefined : stats?.[quest.id]
-							return (
-								<QuestTreeRow
-									key={quest.id}
-									quest={quest}
-									arcId={arc.id}
-									editable={editable}
-									keyboardArcs={keyboardArcs}
-									onMove={onMove}
-								>
-									{(bindings) =>
-										questStats && variant === "page" ? (
-											<>
-												<button
-													type="button"
-													aria-expanded={expandedQuest === quest.id}
-													aria-controls={`quest-stats-${quest.id}`}
-													onClick={() => onToggleQuest(quest.id)}
-													className={`flex min-h-14 w-full items-center gap-3 border-t border-z1 ${gutter} text-left hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent`}
+							{removeError && (
+								<p role="alert" className="font-cond text-xs text-warn">
+									{removeError}
+								</p>
+							)}
+						</form>
+					) : (
+						<div className={`flex ${folded ? "h-11" : "min-h-14 pt-2"} items-center justify-between gap-2 ${gutter}`}>
+							<button
+								{...bindings}
+								type="button"
+								className={`min-h-11 min-w-0 ${folded ? "flex flex-1 items-center justify-between gap-3" : "truncate"} text-left text-xs uppercase tracking-wider text-muted hover:text-head active:text-link focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""}`}
+								aria-expanded={open}
+								onClick={onOpen}
+							>
+								{folded ? <ArcSummary arc={{ ...arc, shuffleQuests: shuffle.value }} /> : title}
+							</button>
+							{!folded && (
+								<div className="shrink-0">
+									<button
+										type="button"
+										className={`${outlineClass} text-xs text-muted ${shuffle.failed ? "border-warn" : "border-z2"}`}
+										aria-label={`Shuffle quests in ${title}`}
+										aria-pressed={shuffle.value}
+										aria-invalid={shuffle.failed}
+										onClick={() => shuffle.onChange(!shuffle.value)}
+										onFocus={shuffle.onFocus}
+										onBlur={() => void shuffle.onBlur()}
+									>
+										{shuffle.value ? "Random" : "Ordered"}
+									</button>
+									{shuffle.failed && (
+										<p role="alert" className="mt-1.5 font-cond text-xs text-warn">
+											{shuffle.error ?? "Not saved"}
+										</p>
+									)}
+								</div>
+							)}
+						</div>
+					)}
+					{!folded && (
+						<ul>
+							{arc.quests.map((quest) => {
+								const questStats = quest.hidden ? undefined : stats?.[quest.id]
+								return (
+									<QuestTreeRow
+										key={quest.id}
+										quest={quest}
+										arcId={arc.id}
+										editable={editable}
+										keyboardArcs={keyboardArcs}
+										onMove={onMove}
+									>
+										{(bindings) =>
+											questStats && variant === "page" ? (
+												<>
+													<button
+														type="button"
+														aria-expanded={expandedQuest === quest.id}
+														aria-controls={`quest-stats-${quest.id}`}
+														onClick={() => onToggleQuest(quest.id)}
+														className={`flex min-h-14 w-full items-center gap-3 border-t border-z1 ${gutter} text-left hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent`}
+													>
+														<span className="min-w-0 flex-1">
+															<span className={`block truncate text-sm${quest.label ? "" : " text-muted"}`}>
+																{quest.label ?? "Untitled quest"}
+															</span>
+															<QuestCompletion stats={questStats} />
+														</span>
+														<span
+															className={`shrink-0 text-sm tabular-nums ${quest.points === null ? "text-muted" : "text-head"}`}
+														>
+															{quest.points === null ? "–" : `${quest.points}p`}
+														</span>
+														<span aria-hidden="true" className="w-4 text-center text-muted">
+															{expandedQuest === quest.id ? "▴" : "▾"}
+														</span>
+													</button>
+													{expandedQuest === quest.id && (
+														<div id={`quest-stats-${quest.id}`}>
+															<QuestLiveStatsBlock
+																stats={questStats}
+																hints={questStats.hints}
+																editHref={`/admin/seasons/${seasonId}/quests/${quest.id}`}
+															/>
+														</div>
+													)}
+												</>
+											) : (
+												<Link
+													{...bindings}
+													role="link"
+													href={`/admin/seasons/${seasonId}/quests/${quest.id}`}
+													aria-current={selectedQuest === quest.id ? "page" : undefined}
+													className={`flex ${questStats ? "min-h-14" : "h-11"} items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
 												>
-													<span className="min-w-0 flex-1">
-														<span className={`block truncate text-sm${quest.label ? "" : " text-muted"}`}>
+													<span className="min-w-0">
+														<span
+															className={`block min-w-0 truncate${quest.hidden || !quest.label ? " text-muted" : ""}`}
+														>
 															{quest.label ?? "Untitled quest"}
 														</span>
-														<QuestCompletion stats={questStats} />
+														{quest.hidden && (
+															<span className="block font-cond text-xs text-muted">Draft · teams don't see it</span>
+														)}
+														{questStats && <QuestCompletion stats={questStats} />}
 													</span>
 													<span
-														className={`shrink-0 text-sm tabular-nums ${quest.points === null ? "text-muted" : "text-head"}`}
+														className={`shrink-0 tabular-nums ${quest.hidden || quest.points === null || variant === "menu" ? "text-xs text-muted" : dragging ? "text-sm text-muted" : "text-sm font-bold text-head"}`}
 													>
 														{quest.points === null ? "–" : `${quest.points}p`}
 													</span>
-													<span aria-hidden="true" className="w-4 text-center text-muted">
-														{expandedQuest === quest.id ? "▴" : "▾"}
-													</span>
-												</button>
-												{expandedQuest === quest.id && (
-													<div id={`quest-stats-${quest.id}`}>
-														<QuestLiveStatsBlock
-															stats={questStats}
-															hints={questStats.hints}
-															editHref={`/admin/seasons/${seasonId}/quests/${quest.id}`}
-														/>
-													</div>
-												)}
-											</>
-										) : (
-											<Link
-												{...bindings}
-												role="link"
-												href={`/admin/seasons/${seasonId}/quests/${quest.id}`}
-												aria-current={selectedQuest === quest.id ? "page" : undefined}
-												className={`flex ${questStats ? "min-h-14" : "h-11"} items-center justify-between gap-3 ${gutter} hover:bg-z1/50 active:bg-z1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${bindings?.className ?? ""} ${variant === "page" ? "border-t border-z1 text-base" : "text-sm"} ${dragging ? "text-muted" : selectedQuest === quest.id ? "border-l-2 border-accent bg-accent/15 text-head" : "text-ink"}`}
-											>
-												<span className="min-w-0">
-													<span
-														className={`block min-w-0 truncate${quest.hidden || !quest.label ? " text-muted" : ""}`}
-													>
-														{quest.label ?? "Untitled quest"}
-													</span>
-													{quest.hidden && (
-														<span className="block font-cond text-xs text-muted">Draft · teams don't see it</span>
-													)}
-													{questStats && <QuestCompletion stats={questStats} />}
-												</span>
-												<span
-													className={`shrink-0 tabular-nums ${quest.hidden || quest.points === null || variant === "menu" ? "text-xs text-muted" : dragging ? "text-sm text-muted" : "text-sm font-bold text-head"}`}
-												>
-													{quest.points === null ? "–" : `${quest.points}p`}
-												</span>
-											</Link>
-										)
-									}
-								</QuestTreeRow>
-							)
-						})}
-						{editable && !arc.quests.length && <EmptyArcSlot arcId={arc.id} />}
-					</ul>
-				)}
-				{canAddRemove && !folded && (
-					<div className={`${gutter}${variant === "page" ? " border-t border-z1" : ""}`}>
-						<button type="button" className={`${quietClass} text-link`} disabled={pending} onClick={onAdd}>
-							{variant === "menu" ? "+ Quest" : `+ Quest in ${title}`}
-						</button>
-						{addError && (
-							<p role="alert" className="font-cond text-xs text-warn">
-								{addError}
-							</p>
-						)}
-					</div>
-				)}
-			</section>
+												</Link>
+											)
+										}
+									</QuestTreeRow>
+								)
+							})}
+							{editable && !arc.quests.length && <EmptyArcSlot arcId={arc.id} />}
+						</ul>
+					)}
+					{canAddRemove && !folded && (
+						<div className={`${gutter}${variant === "page" ? " border-t border-z1" : ""}`}>
+							<button type="button" className={`${quietClass} text-link`} disabled={pending} onClick={onAdd}>
+								{variant === "menu" ? "+ Quest" : `+ Quest in ${title}`}
+							</button>
+							{addError && (
+								<p role="alert" className="font-cond text-xs text-warn">
+									{addError}
+								</p>
+							)}
+						</div>
+					)}
+				</section>
+				<CopyDialog
+					mode="arc"
+					open={copyOpen}
+					sourceSeasonId={seasonId}
+					sourceSeasonTitle={seasonTitle}
+					arc={arc}
+					onClose={() => setCopyOpen(false)}
+				/>
+			</>
 		)
 	}
 	return editable ? (

@@ -222,6 +222,60 @@ Live Remove arc dialog:
 - Footnote: `<K> teams solved every quest in it and keep their points.`. Omit when K is zero.
 - Confirm: "Remove arc". Empty arcs and arcs containing only hidden drafts keep the plain confirmation.
 
+### Copy to another season
+
+Final mocks cover arc panels, both copy dialogs and their results:
+
+- [Phone, panels 1 to 6](https://artifacts.senth.org/final-phone-1b87be.png)
+- [Desktop arc dialog](https://artifacts.senth.org/final-desktop-arc-afb4fd.png)
+- [Desktop quest dialog](https://artifacts.senth.org/final-desktop-quest-e155e3.png)
+
+Use [PROJECT.md's copy rules](PROJECT.md#authoring-and-live-edits) for destinations and copied data.
+Show a quiet `text-link` "Copy to another season…" button in every source season state, on phone and desktop.
+In the arc title panel, put it between Arc title and Remove arc.
+At the quest editor's bottom, put it above Remove quest when present. Keep removal's existing visibility rules.
+
+Arc copy's primary action is "Copy arc". Read source arc and summary first, destination season second, result third.
+Quest copy's primary action is "Copy quest".
+Read source quest and summary first, destination arc under its season second, result third.
+Neither dialog suggests linked content. Avoid "link", "sync", "share" and "import" in dialog copy.
+Show no per-season stats or separate season step. Quest copy must not look like a file picker.
+Quiet summaries, independence lines, season headers, New arc rows and Cancel. Emphasize the selected destination.
+
+Use the existing native `<dialog>` style with an accent confirm button.
+While loading, show muted "Finding seasons…" and disable confirm.
+With no destination, show muted "No season is waiting to start. Create one first." and Close only.
+Errors use the dialog's existing error slot. Keep it open so the admin can choose another destination.
+Radio rows use `min-h-12`, titles `text-sm`, and status `font-cond text-xs text-muted`.
+Status reads "Not started" or `Upcoming · <d MMM>`.
+Selected rows use `bg-accent/15`, `text-head` and an accent radio.
+Pluralize summary and result counts, including "1 quest" and "1 hint".
+
+Arc dialog, panels 1 to 3:
+
+- Title: `Copy <arc>`.
+- Summary: `From <season> · <n> quests · <h> hints`, in `font-cond text-sm text-muted`.
+- Label: "To season". List destination seasons as radio rows; select the first initially.
+- Independence line: "The copy gets its own quests. Editing one season never changes the other."
+- Style the independence line `font-cond text-xs text-muted`. Confirm: "Copy arc".
+- Result body: `<arc> is now the last arc there, with <n> new quests.`
+- "Open it ›" goes to `/admin/seasons/<dest>`.
+
+Quest dialog, panels 4 to 6:
+
+- Title: `Copy <label>`. Use internal title, else display title, else "this quest".
+- Summary: `From <season> · <arc> · <h> hints`, in `font-cond text-sm text-muted`.
+- Label: "Into arc". Each season is a header with `font-cond text-sm text-head` title and right-aligned muted status.
+- Indent its arc radio rows, then a `text-link` "New arc" row with the source arc title in muted quotes.
+- Select the first arc of the first season initially, or its New arc row when it has no arcs.
+- Independence line: "The copy is a new quest. Editing one season never changes the other."
+- Style the independence line `font-cond text-xs text-muted`. Confirm: "Copy quest".
+- Result body: `<label> is now the last quest in <arc>.`
+- "Open it ›" goes to `/admin/seasons/<dest>/quests/<newQuestId>`.
+
+Success replaces either dialog's contents with title `Copied to <season>` and its result body.
+Show Close and outline "Open it ›" in `text-link`.
+
 ## M2: mobile quest editor
 
 Mock: [HTML](mocks/M2-quest-editor.html), [PNG](mocks/M2-quest-editor.png).

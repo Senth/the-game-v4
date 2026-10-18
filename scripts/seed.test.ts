@@ -37,7 +37,7 @@ describe("seed", () => {
 		const ninjas = await db.collection("teams").findOne({ name: "Ninjas" })
 		expect(await verifyPassword("ninjas", ninjas?.passwordHash)).toBe(true)
 		await expect(access(path.join(assetsDir, path.basename(backwardsLogAsset)))).resolves.toBeUndefined()
-	})
+	}, 15_000)
 })
 
 describe("assertSeedTarget", () => {

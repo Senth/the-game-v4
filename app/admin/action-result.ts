@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { NotFoundError } from "@/lib/db/collections"
 import {
+	CopyTargetStartedError,
 	MoveConflictError,
 	QuestNotReadyError,
 	RegistrationConflictError,
@@ -41,6 +42,7 @@ export function actionFailure(error: unknown, now: Date): Extract<ActionResult, 
 	if (error instanceof z.ZodError) return { ok: false, error: "Invalid value." }
 	if (
 		error instanceof NotFoundError ||
+		error instanceof CopyTargetStartedError ||
 		error instanceof RegistrationConflictError ||
 		error instanceof SeasonStartedError ||
 		error instanceof SeasonEndedError ||

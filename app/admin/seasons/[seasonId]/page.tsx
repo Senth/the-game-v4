@@ -30,6 +30,7 @@ export default async function SeasonPage({ params }: PageProps<"/admin/seasons/[
 			<div className="lg:hidden">
 				<SeasonTree
 					seasonId={seasonId}
+					seasonTitle={season.title}
 					tree={treeView(season)}
 					start={season.start}
 					end={season.end}

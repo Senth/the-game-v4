@@ -1,5 +1,6 @@
 import { Collection } from "mongodb"
 import { describe, expect, it, vi } from "vitest"
+import { copyArc, copyQuest } from "@/lib/domain/copy"
 import type { SeasonInput } from "@/lib/domain/schemas"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { useTestDb } from "@/test/db"
@@ -7,6 +8,9 @@ import { NotFoundError } from "./collections"
 import {
 	addArc,
 	addQuest,
+	CopyTargetStartedError,
+	copyArcToSeason,
+	copyQuestToSeason,
 	createSeason,
 	getSeason,
 	removeArc,
@@ -43,6 +47,91 @@ const writes = [
 	{ name: "removeArc", run: (id: string) => removeArc(id, "a2", now) },
 	{ name: "removeQuest", run: (id: string) => removeQuest(id, "a1", "q2", now) },
 ]
+
+describe("copy writes", () => {
+	const arc = copyArc({ ...newArc(true), quests: [newQuest()] })
+	const quest = copyQuest(newQuest())
+	const copies = [
+		{ name: "arc", run: (id: string) => copyArcToSeason(id, arc) },
+		{ name: "existing arc quest", run: (id: string) => copyQuestToSeason(id, { arcId: "a1" }, quest) },
+		{
+			name: "new arc quest",
+			run: (id: string) => copyQuestToSeason(id, { newArc: { title: "Lighthouse", shuffleQuests: true } }, quest),
+		},
+	]
+
+	it.each(copies)("atomically rejects $name if destination starts before updateOne", async ({ run }) => {
+		const season = await createSeason(seasonInput())
+		const original = Collection.prototype.updateOne
+		const write = vi.spyOn(Collection.prototype, "updateOne").mockImplementationOnce(async function (
+			this: Collection,
+			...args
+		) {
+			await setSeasonField(season._id, { field: "start" }, new Date(0))
+			return original.apply(this, args)
+		})
+		try {
+			const copying = run(season._id)
+			await expect(copying).rejects.toThrow(CopyTargetStartedError)
+			await expect(copying).rejects.toThrow("Cipher Night has started. Pick another season.")
+			expect(await getSeason(season._id)).toEqual({ ...season, start: new Date(0) })
+		} finally {
+			write.mockRestore()
+		}
+	})
+
+	it.each(copies)("rejects $name when scheduled start passes while updateOne waits", async ({ run }) => {
+		const season = await createSeason(seasonInput())
+		const start = new Date(Date.now() + 200)
+		await setSeasonField(season._id, { field: "start" }, start)
+		season.start = start
+		const original = Collection.prototype.updateOne
+		const write = vi.spyOn(Collection.prototype, "updateOne").mockImplementationOnce(async function (
+			this: Collection,
+			...args
+		) {
+			await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.getTime() - Date.now()) + 50))
+			return original.apply(this, args)
+		})
+		try {
+			await expect(run(season._id)).rejects.toThrow("Cipher Night has started. Pick another season.")
+			expect(await getSeason(season._id)).toEqual(season)
+		} finally {
+			write.mockRestore()
+		}
+	})
+
+	it.each(copies)("appends $name in one updateOne without replacing concurrent fields", async ({ name, run }) => {
+		const season = await createSeason(seasonInput())
+		const write = vi.spyOn(Collection.prototype, "updateOne")
+		try {
+			await run(season._id)
+			expect(write).toHaveBeenCalledTimes(1)
+			expect(write.mock.calls[0]?.[0]).toMatchObject({
+				_id: season._id,
+				$or: [{ start: null }, { $expr: { $gt: ["$start", "$$NOW"] } }],
+			})
+			expect(write.mock.calls[0]?.[1]).toHaveProperty("$push")
+		} finally {
+			write.mockRestore()
+		}
+		await Promise.all([run(season._id), setSeasonField(season._id, { arcId: "a1", field: "title" }, "Updated")])
+		const stored = await getSeason(season._id)
+		expect(stored?.arcs[0]?.title).toBe("Updated")
+		if (name === "existing arc quest") expect(stored?.arcs[0]?.quests.slice(-2)).toEqual([quest, quest])
+		else expect(stored?.arcs).toHaveLength(season.arcs.length + 2)
+	})
+
+	it.each(copies)("rejects missing season for $name", async ({ run }) => {
+		await expect(run("missing")).rejects.toThrow(NotFoundError)
+	})
+
+	it("rejects missing destination arc without writing", async () => {
+		const season = await createSeason(seasonInput())
+		await expect(copyQuestToSeason(season._id, { arcId: "missing" }, quest)).rejects.toThrow(NotFoundError)
+		expect(await getSeason(season._id)).toEqual(season)
+	})
+})
 
 describe("season tree writes", () => {
 	it.each([

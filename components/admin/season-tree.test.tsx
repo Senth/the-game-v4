@@ -285,6 +285,25 @@ it("marks only the selected desktop quest and keeps points subordinate", () => {
 const liveStats = { done: 7, total: 10, completedBy: ["Ninjas"], hintRevealers: {}, hints: [] }
 const liveProps = { start: new Date(now - 60_000), end: new Date(now + 60_000), stats: { q1: liveStats } }
 
+it.each([
+	["unstarted", "menu"],
+	["unstarted", "page"],
+	["live", "menu"],
+	["live", "page"],
+	["ended", "menu"],
+	["ended", "page"],
+] as const)("shows arc copy in the title panel for %s seasons in %s", (status, variant) => {
+	const state =
+		status === "unstarted"
+			? { start: null, end: null }
+			: status === "live"
+				? liveProps
+				: { start: new Date(now - 120_000), end: new Date(now - 60_000) }
+	const props = { ...state, variant }
+	render(props).button("Old Town").props.onClick?.()
+	expect(render(props).button("Copy to another season…")).toBeDefined()
+})
+
 function questButton(view: ReturnType<typeof render>, id: string) {
 	const button = view.all.find((node) => node.type === "button" && node.props["aria-controls"] === `quest-stats-${id}`)
 	if (!button) throw new Error(`Missing quest button ${id}`)

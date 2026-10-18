@@ -14,13 +14,17 @@ import { useAssetDraft, useAutosave } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { AutosaveTextarea } from "./autosave-textarea"
 import { ConfirmDialog, primaryClass } from "./confirm-dialog"
+import { CopyDialog } from "./copy-dialog"
 import { QuestAsset, type QuestAssetHandle } from "./quest-asset"
 import { RemovalImpact } from "./removal-impact"
 import { useSeasonClock } from "./use-season-clock"
 
 export function QuestEditor({
 	seasonId,
+	seasonTitle,
 	arcId,
+	arcTitle,
+	hintCount,
 	quest,
 	start,
 	end,
@@ -28,7 +32,10 @@ export function QuestEditor({
 	children,
 }: {
 	seasonId: string
+	seasonTitle: string
 	arcId: string
+	arcTitle: string
+	hintCount: number
 	quest: Omit<Quest, "hints">
 	start: Date | null
 	end: Date | null
@@ -47,6 +54,7 @@ export function QuestEditor({
 	const missingLabel =
 		missing.length > 1 ? `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}` : missing[0]
 	const [confirming, setConfirming] = useState<"add" | "remove" | null>(null)
+	const [copyOpen, setCopyOpen] = useState(false)
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [impactFor, setImpactFor] = useState<"add" | "remove" | null>(null)
@@ -287,23 +295,31 @@ export function QuestEditor({
 				/>
 				{children}
 			</div>
-			{canAddRemove && (
-				<div className="mt-8 border-t border-z1 pt-2">
+			<div className="mt-8 border-t border-z1 pt-2">
+				<button
+					type="button"
+					className="min-h-11 font-cond text-sm text-link hover:underline active:text-head focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+					disabled={pending}
+					onClick={() => setCopyOpen(true)}
+				>
+					Copy to another season…
+				</button>
+				{canAddRemove && (
 					<button
 						type="button"
-						className="min-h-11 font-cond text-sm text-muted hover:underline active:text-head focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+						className="block min-h-11 font-cond text-sm text-muted hover:underline active:text-head focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
 						disabled={pending}
 						onClick={() => openConfirmation("remove")}
 					>
 						Remove quest
 					</button>
-					{error && (
-						<p role="alert" className="font-cond text-xs text-warn">
-							{error}
-						</p>
-					)}
-				</div>
-			)}
+				)}
+				{error && (
+					<p role="alert" className="font-cond text-xs text-warn">
+						{error}
+					</p>
+				)}
+			</div>
 			<ConfirmDialog
 				open={confirming !== null}
 				title={dialogTitle}
@@ -314,6 +330,15 @@ export function QuestEditor({
 				error={impactErrorForDialog}
 				onConfirm={() => void (confirming === "add" ? addToGame() : remove())}
 				onClose={closeConfirmation}
+			/>
+			<CopyDialog
+				mode="quest"
+				open={copyOpen}
+				sourceSeasonId={seasonId}
+				sourceSeasonTitle={seasonTitle}
+				sourceArc={{ id: arcId, title: arcTitle }}
+				quest={{ id: quest.id, label: dialogLabel, hintCount }}
+				onClose={() => setCopyOpen(false)}
 			/>
 			{dragging && (
 				<div className="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center rounded-md border-2 border-dashed border-accent bg-z0/85 lg:flex">

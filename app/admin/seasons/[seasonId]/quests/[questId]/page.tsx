@@ -55,7 +55,10 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 					)}
 					<QuestEditor
 						seasonId={seasonId}
+						seasonTitle={season.title}
 						arcId={arc.id}
+						arcTitle={arc.title}
+						hintCount={quest.hints.length}
 						quest={{
 							id: quest.id,
 							displayTitle: quest.displayTitle,
