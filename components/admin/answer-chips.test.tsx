@@ -23,9 +23,9 @@ vi.mock("./autosave-provider", () => ({ useAutosaveList: vi.fn(() => list) }))
 
 const props = { arcId: "arc", questId: "quest", answers: ["lighthouse", "fyren"] }
 const list = { items: [] as string[], add: vi.fn(), remove: vi.fn(), failed: false }
-function view() {
+function view(missing?: string) {
 	hooks.cursor = 0
-	return AnswerChips(props)
+	return AnswerChips({ ...props, missing })
 }
 function input() {
 	return view().props.children[1].props.children[1]
@@ -198,4 +198,43 @@ it("keeps optimistic chips visible and marks failed list with warn border and No
 	expect(html).toContain('aria-invalid="true" aria-describedby="answers-error"')
 	expect(html).toContain('id="answers-error" role="alert"')
 	expect(html).toContain("Not saved")
+})
+
+it("follows local chips for missing warnings before autosave", () => {
+	list.items = []
+	let html = renderToStaticMarkup(view("Needs an answer"))
+	expect(html).toContain("border-warn")
+	expect(html).toContain("focus-within:border-warn")
+	expect(html).toContain('aria-describedby="answers-missing"')
+	expect(html).toContain('id="answers-missing" class="mt-1.5 font-cond text-xs text-warn">Needs an answer')
+	expect(html).not.toContain("aria-invalid")
+	expect(html).not.toContain('role="alert"')
+	type("keeper")
+	expect(renderToStaticMarkup(view("Needs an answer"))).toContain("Needs an answer")
+	key("Enter")
+	html = renderToStaticMarkup(view("Needs an answer"))
+	expect(html).not.toContain("Needs an answer")
+	expect(html).not.toContain("border-warn")
+	expect(html).not.toContain("aria-describedby")
+	key("Backspace")
+	expect(renderToStaticMarkup(view("Needs an answer"))).toContain("Needs an answer")
+})
+
+it("keeps duplicate notice beside missing warning with both descriptions linked", () => {
+	type("LIGHTHOUSE")
+	key("Enter")
+	list.items = []
+	const html = renderToStaticMarkup(view("Needs an answer"))
+	expect(html).toContain("Needs an answer")
+	expect(html).toContain("Already an answer")
+	expect(html).toContain('aria-describedby="answers-missing answers-duplicate"')
+})
+
+it("shows save failure instead of missing answer warning", () => {
+	list.items = []
+	list.failed = true
+	const html = renderToStaticMarkup(view("Needs an answer"))
+	expect(html).toContain("Not saved")
+	expect(html).toContain('aria-describedby="answers-error"')
+	expect(html).not.toContain("Needs an answer")
 })

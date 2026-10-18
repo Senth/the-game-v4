@@ -246,6 +246,7 @@ export function QuestEditor({
 						}
 						target={{ arcId, questId: quest.id, field: "displayTitle" }}
 						serverValue={quest.displayTitle}
+						missing="Needs a display title"
 						autoFocus={label === null}
 					/>
 					<AutosaveTextField
@@ -266,6 +267,7 @@ export function QuestEditor({
 					}
 					target={{ arcId, questId: quest.id, field: "content" }}
 					serverValue={quest.content}
+					missing="Needs content"
 					minRows={5}
 					mono
 				/>
@@ -278,8 +280,8 @@ export function QuestEditor({
 					onChange={setAssetPath}
 				/>
 				<div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
-					<AnswerChips arcId={arcId} questId={quest.id} answers={quest.answers} />
-					<AutosavePointsField arcId={arcId} questId={quest.id} serverValue={quest.points} />
+					<AnswerChips arcId={arcId} questId={quest.id} answers={quest.answers} missing="Needs an answer" />
+					<AutosavePointsField arcId={arcId} questId={quest.id} serverValue={quest.points} missing="Needs points" />
 				</div>
 				<AutosaveTextarea
 					label={

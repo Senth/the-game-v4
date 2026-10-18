@@ -81,3 +81,39 @@ it("keeps inline label notes and forwards autofocus for newly added quest titles
 	expect(html).toContain("players see this</span></label>")
 	expect(html).toContain('autofocus=""')
 })
+
+it("follows trimmed local text for missing warnings before autosave", () => {
+	for (const value of ["", " \n ", "Local title", ""]) {
+		vi.mocked(useAutosaveField).mockReturnValue({ ...field, value })
+		const html = renderToStaticMarkup(
+			<AutosaveTextField
+				label="Display title"
+				target={target}
+				serverValue="Saved title"
+				missing="Needs a display title"
+			/>,
+		)
+		if (!value.trim()) {
+			expect(html).toContain("border-warn")
+			expect(html).toContain("focus:border-warn")
+			expect(html).toContain('aria-describedby="title-missing"')
+			expect(html).toContain('id="title-missing" class="mt-1.5 font-cond text-xs text-warn">Needs a display title')
+		} else {
+			expect(html).not.toContain("Needs a display title")
+			expect(html).not.toContain("border-warn")
+			expect(html).not.toContain("aria-describedby")
+		}
+		expect(html).not.toContain("aria-invalid")
+		expect(html).not.toContain('role="alert"')
+	}
+})
+
+it("shows save failure instead of missing title warning", () => {
+	vi.mocked(useAutosaveField).mockReturnValue({ ...field, value: "", failed: true })
+	const html = renderToStaticMarkup(
+		<AutosaveTextField label="Display title" target={target} serverValue="" missing="Needs a display title" />,
+	)
+	expect(html).toContain("Not saved")
+	expect(html).toContain('aria-describedby="title-error"')
+	expect(html).not.toContain("Needs a display title")
+})

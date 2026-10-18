@@ -55,3 +55,28 @@ it("keeps failed input and shows the server validation message with a warn borde
 	expect(html).toContain(error)
 	expect(html).not.toContain("Not saved")
 })
+
+it("warns only for local null points, preserving zero before autosave", () => {
+	for (const value of [null, 0, 25, null]) {
+		vi.mocked(useAutosaveField).mockReturnValue({ ...field, value })
+		const html = renderToStaticMarkup(<AutosavePointsField {...props} missing="Needs points" />)
+		if (value === null) {
+			expect(html).toContain("border-warn")
+			expect(html).toMatch(/aria-describedby="[^"]+-missing"/)
+			expect(html).toContain('class="mt-1.5 font-cond text-xs text-warn">Needs points')
+		} else {
+			expect(html).not.toContain("Needs points")
+			expect(html).not.toContain("border-warn")
+			expect(html).not.toContain("aria-describedby")
+		}
+		expect(html).not.toContain("aria-invalid")
+		expect(html).not.toContain('role="alert"')
+	}
+})
+
+it("shows save failure instead of missing points warning", () => {
+	vi.mocked(useAutosaveField).mockReturnValue({ ...field, value: null, failed: true })
+	const html = renderToStaticMarkup(<AutosavePointsField {...props} missing="Needs points" />)
+	expect(html).toContain("Not saved")
+	expect(html).not.toContain("Needs points")
+})

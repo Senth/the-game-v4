@@ -6,7 +6,17 @@ import { normalizeAnswer } from "@/lib/domain/game"
 import { AnswerAddValue } from "@/lib/domain/schemas"
 import { useAutosaveList } from "./autosave-provider"
 
-export function AnswerChips({ arcId, questId, answers }: { arcId: string; questId: string; answers: string[] }) {
+export function AnswerChips({
+	arcId,
+	questId,
+	answers,
+	missing,
+}: {
+	arcId: string
+	questId: string
+	answers: string[]
+	missing?: string
+}) {
 	const list = useAutosaveList({ arcId, questId, field: "answers" }, answers)
 	const [text, setText] = useState("")
 	const [duplicate, setDuplicate] = useState(false)
@@ -36,6 +46,7 @@ export function AnswerChips({ arcId, questId, answers }: { arcId: string; questI
 		setInvalid(rejected.length > 0)
 	}
 	const failed = list.failed || invalid
+	const isMissing = !!missing && list.items.length === 0
 	const style = inputClass.replace("h-11", "min-h-11").replace("px-3", "p-2").replace("focus:", "focus-within:")
 	return (
 		<div>
@@ -43,7 +54,7 @@ export function AnswerChips({ arcId, questId, answers }: { arcId: string; questI
 				Answers <span className="ml-2 font-body normal-case tracking-normal">any match, case-insensitive</span>
 			</label>
 			<div
-				className={`${failed ? style.replaceAll("border-z2", "border-warn").replaceAll("focus-within:border-accent", "focus-within:border-warn") : style} flex flex-wrap items-center gap-2`}
+				className={`${failed || isMissing ? style.replaceAll("border-z2", "border-warn").replaceAll("focus-within:border-accent", "focus-within:border-warn") : style} flex flex-wrap items-center gap-2`}
 			>
 				{list.items.map((answer) => (
 					<span key={answer} className="inline-flex min-w-0 items-center rounded bg-z2 pl-2 font-cond text-sm">
@@ -63,8 +74,15 @@ export function AnswerChips({ arcId, questId, answers }: { arcId: string; questI
 					value={text}
 					placeholder="Add answer"
 					maxLength={200}
-					aria-invalid={failed}
-					aria-describedby={failed ? `${id}-error` : duplicate ? `${id}-duplicate` : undefined}
+					aria-invalid={failed || undefined}
+					aria-describedby={
+						[
+							failed ? `${id}-error` : isMissing ? `${id}-missing` : undefined,
+							duplicate ? `${id}-duplicate` : undefined,
+						]
+							.filter(Boolean)
+							.join(" ") || undefined
+					}
 					className="min-h-11 w-20 min-w-0 flex-1 bg-field font-cond text-sm outline-hidden placeholder:text-muted"
 					onChange={(event) => {
 						setDuplicate(false)
@@ -102,11 +120,15 @@ export function AnswerChips({ arcId, questId, answers }: { arcId: string; questI
 					}}
 				/>
 			</div>
-			{failed && (
+			{failed ? (
 				<p id={`${id}-error`} role="alert" className="mt-1.5 font-cond text-xs text-warn">
 					{invalid ? "Use 1 to 200 characters per answer." : "Not saved"}
 				</p>
-			)}
+			) : isMissing ? (
+				<p id={`${id}-missing`} className="mt-1.5 font-cond text-xs text-warn">
+					{missing}
+				</p>
+			) : null}
 			{duplicate && (
 				<p id={`${id}-duplicate`} role="status" className="mt-1.5 font-cond text-xs text-muted">
 					Already an answer

@@ -7,15 +7,18 @@ export function AutosavePointsField({
 	arcId,
 	questId,
 	serverValue,
+	missing,
 }: {
 	arcId: string
 	questId: string
 	serverValue: number | null
+	missing?: string
 }) {
 	const field = useAutosaveField({ arcId, questId, field: "points" }, serverValue)
 	return (
 		<AutosaveInput
 			label="Points"
+			missing={field.value === null ? missing : undefined}
 			type="number"
 			inputMode="numeric"
 			step={1}

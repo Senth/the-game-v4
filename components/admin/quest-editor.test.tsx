@@ -240,6 +240,33 @@ it("shows missing draft fields above Display title and disables Add to game", ()
 	expect(view.add?.props.disabled).toBe(true)
 })
 
+it.each([
+	["unscheduled", { start: null, end: null }],
+	["upcoming", { start: new Date(now + 60_000), end: new Date(now + 3_660_000) }],
+	["live", live],
+	["ended", { start: new Date(now - 60_000), end: new Date(now) }],
+])("warns on all four missing fields from first open in %s seasons, including drafts", (_state, timing) => {
+	for (const hidden of [false, true]) {
+		const view = render({
+			...timing,
+			quest: { ...defaults.quest, hidden, displayTitle: " \n ", content: "", answers: [], points: null },
+		})
+		for (const message of ["Needs a display title", "Needs content", "Needs an answer", "Needs points"]) {
+			expect(view.html).toContain(message)
+		}
+		expect(view.html.match(/-missing" class="mt-1.5 font-cond text-xs text-warn"/g)).toHaveLength(4)
+		expect(view.html).not.toContain("aria-invalid")
+		expect(view.html).not.toContain('role="alert"')
+	}
+})
+
+it("keeps complete quests quiet, including zero points", () => {
+	const view = render({ quest: { ...defaults.quest, points: 0 } })
+	expect(view.html).not.toContain("Needs ")
+	expect(view.html).not.toContain("-missing")
+	expect(view.html).not.toContain("border-warn")
+})
+
 it("shows ready draft copy and enables Add to game", () => {
 	const view = render({ ...live, quest: { ...defaults.quest, hidden: true } })
 	expect(view.html).toContain("Teams don&#x27;t see this quest yet.")
