@@ -36,7 +36,7 @@ vi.mock("@/app/admin/live-actions", () => ({ startSeasonNow: vi.fn(), shiftSeaso
 vi.mock("react-dom", () => ({ createPortal: vi.fn((node: ReactNode) => node) }))
 
 const now = new Date("2026-10-12T17:00:00Z").getTime()
-const defaults = { seasonId: "s1", start: null, end: null, now, teamCount: 10, hasQuests: true }
+const defaults = { seasonId: "s1", start: null, end: null, now, teamCount: 10, hasQuests: true, incomplete: [] }
 type ButtonProps = { children?: ReactNode; disabled?: boolean; className: string; onClick: () => void }
 let cleanup: ReturnType<EffectCallback>
 
@@ -97,12 +97,59 @@ afterEach(() => {
 it.each([null, new Date(now + 20_000)])("offers Start now before play, including upcoming %s", async (start) => {
 	const view = render({ start, end: start ? new Date(now + 3_620_000) : null })
 	expect(view.strip).toHaveLength(1)
+	expect(view.html).not.toContain("<dialog")
 	expect(view.button(0).props.children).toBe("Start now")
 	expect(view.button(0).props.className).toContain("col-span-3")
 	expect(view.button(0).props.className).toContain("h-11")
 	expect(view.button(0).props.className).toContain("lg:h-9")
 	expect(view.button(0).props.className).toContain("lg:after:-inset-y-1.5")
 	view.button(0).props.onClick()
+	await vi.waitFor(() => expect(startSeasonNow).toHaveBeenCalledWith("s1"))
+})
+
+it.each([
+	{ count: 1, title: "Start with 1 incomplete quest?" },
+	{ count: 2, title: "Start with 2 incomplete quests?" },
+])("confirms Start now for $count incomplete quests", ({ count, title }) => {
+	const incomplete = Array.from({ length: count }, (_, index) => ({
+		id: `q${index + 1}`,
+		label: `Quest ${index + 1}`,
+		missing: ["answers"],
+	}))
+	render({ incomplete }).button(0).props.onClick()
+	const view = render({ incomplete })
+	expect(view.html).toContain(title)
+	expect(view.html).toContain("Quest 1")
+	expect(view.html).toContain('class="font-cond text-xs text-warn">answers</div>')
+	expect(view.html).toContain("Teams get them as they are. A quest without answers can&#x27;t be solved.")
+	expect(view.confirm.props.children).toBe("Start anyway")
+	expect(view.confirm.props.className).toContain("bg-accent")
+	expect(startSeasonNow).not.toHaveBeenCalled()
+})
+
+it("lists five incomplete quests then a muted remainder", () => {
+	const incomplete = Array.from({ length: 7 }, (_, index) => ({
+		id: `q${index + 1}`,
+		label: `Quest ${index + 1}`,
+		missing: ["content"],
+	}))
+	render({ incomplete }).button(0).props.onClick()
+	const view = render({ incomplete })
+	expect(view.html).toContain("Quest 5")
+	expect(view.html).not.toContain("Quest 6")
+	expect(view.html).toContain('class="font-cond text-xs text-muted">and 2 more</li>')
+})
+
+it("starts only after Start anyway and leaves start untouched on Cancel", async () => {
+	const incomplete = [{ id: "q1", label: "Quest", missing: ["answers"] }]
+	render({ incomplete }).button(0).props.onClick()
+	const view = render({ incomplete })
+	expect(view.cancel.props.children).toBe("Cancel")
+	view.cancel.props.onClick()
+	expect(startSeasonNow).not.toHaveBeenCalled()
+
+	render({ incomplete }).button(0).props.onClick()
+	render({ incomplete }).confirm.props.onClick()
 	await vi.waitFor(() => expect(startSeasonNow).toHaveBeenCalledWith("s1"))
 })
 
