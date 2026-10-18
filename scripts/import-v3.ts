@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises"
 import { loadEnvConfig } from "@next/env"
 import { saveAsset } from "@/lib/assets/files"
 import { closeDb } from "@/lib/db/client"
-import { createSeason, getSeason } from "@/lib/db/seasons"
+import { createSeason, getSeasonForImport } from "@/lib/db/seasons"
 import { detectAssetExtension, maxAssetBytes } from "@/lib/domain/assets"
 import { parseV3Export, type V3AssetJob } from "@/lib/domain/v3-import"
 
@@ -66,7 +66,7 @@ export async function runV3Import(input: unknown, dryRun = false): Promise<Impor
 
 	for (const mapped of mappedSeasons) {
 		const { season, assetJobs } = mapped
-		const existing = await getSeason(season._id)
+		const existing = await getSeasonForImport(season._id)
 		const total = counts(season)
 		const urls = existing ? [] : assetUrls(assetJobs)
 		console.log(

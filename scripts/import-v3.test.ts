@@ -1,4 +1,5 @@
 import { access, readdir, rm } from "node:fs/promises"
+import { MongoClient } from "mongodb"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { getDb } from "@/lib/db/client"
 import { getSeason } from "@/lib/db/seasons"
@@ -15,6 +16,24 @@ describe("runV3Import", () => {
 	afterAll(async () => {
 		vi.unstubAllGlobals()
 		await rm(assetsDir, { recursive: true, force: true })
+	})
+
+	it("dry-runs without creating collections or changing indexes", async () => {
+		const client = new MongoClient(process.env.MONGODB_URI ?? "")
+		await client.connect()
+		const db = client.db()
+		const teams = db.collection("teams")
+		await teams.createIndex({ seasonId: 1, name: 1 })
+		const collectionsBefore = (await db.listCollections().toArray()).map(({ name }) => name).toSorted()
+		const indexesBefore = await teams.listIndexes().toArray()
+
+		try {
+			await runV3Import(fixture, true)
+			expect((await db.listCollections().toArray()).map(({ name }) => name).toSorted()).toEqual(collectionsBefore)
+			expect(await teams.listIndexes().toArray()).toEqual(indexesBefore)
+		} finally {
+			await client.close()
+		}
 	})
 
 	it("dry-runs without writes, imports assets once, skips existing seasons, and records download failures", async () => {
