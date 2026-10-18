@@ -4,7 +4,13 @@ import { z } from "zod"
 import { requireAdmin } from "@/lib/auth/guards"
 import { NotFoundError } from "@/lib/db/collections"
 import { getSeason, setRegistrationOpen, setSeasonWindow } from "@/lib/db/seasons"
-import { liveControls, seasonStatus, shiftEndWindow, startNowWindow } from "@/lib/domain/admin-seasons"
+import {
+	liveControls,
+	seasonStatus,
+	shiftEndWindow,
+	startCountdownMs,
+	startNowWindow,
+} from "@/lib/domain/admin-seasons"
 import type { Season } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
 import { type ActionResult, actionFailure } from "./action-result"
@@ -37,7 +43,7 @@ export async function startSeasonNow(seasonId: string): Promise<ActionResult> {
 		const controls = liveControls(season, now)
 		if (controls.state !== "start") return "Set at start. Use −5 / +5 min while live."
 		if (!controls.hasQuests) return "Add a quest first."
-		return startNowWindow(season, now)
+		return startNowWindow(season, now, startCountdownMs(process.env.E2E_START_COUNTDOWN_MS))
 	})
 }
 

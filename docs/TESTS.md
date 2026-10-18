@@ -25,6 +25,7 @@ Write a red regression test first for a reproducible bug. On failure, rerun only
 Playwright global setup boots `mongodb-memory-server`, supplies `MONGODB_URI`, starts the app,
 and global teardown stops both. Run headless, without Docker, production data or manual browser driving.
 Keep the I-28 core-loop smoke test under 60 seconds locally and in CI.
+Only e2e setup sets `E2E_START_COUNTDOWN_MS` to override the 20-second start countdown.
 
 The core flow is one connected scenario:
 
