@@ -153,7 +153,7 @@ const arc = {
 	id: "a1",
 	title: "Old Town",
 	shuffleQuests: true,
-	quests: [{ id: "q1", label: "Harbour map", points: 40 }],
+	quests: [{ id: "q1", label: "Harbour map", points: 40, missing: [] }],
 }
 const defaults = { seasonId: "s1", tree: { arcs: [arc] }, start: null, end: null, now, variant: "page" as const }
 type Props = { children?: ReactNode; onClick?: () => void; className?: string; [key: string]: unknown }
@@ -232,7 +232,7 @@ afterEach(() => {
 it.each(["menu", "page"] as const)("renders quiet fallbacks, missing points and 44 px quest links in %s", (variant) => {
 	const view = render({
 		variant,
-		tree: { arcs: [{ ...arc, title: " ", quests: [{ id: "q1", label: null, points: null }] }] },
+		tree: { arcs: [{ ...arc, title: " ", quests: [{ id: "q1", label: null, points: null, missing: [] }] }] },
 	})
 	expect(view.html).toContain("Untitled arc")
 	expect(view.html).toContain("Untitled quest")
@@ -247,7 +247,9 @@ it.each(["menu", "page"] as const)("renders quiet fallbacks, missing points and 
 it("renders hidden drafts as muted editor links without live stats or a chevron", () => {
 	const view = render({
 		...liveProps,
-		tree: { arcs: [{ ...arc, quests: [{ id: "q1", label: "Lantern code", points: null, hidden: true }] }] },
+		tree: {
+			arcs: [{ ...arc, quests: [{ id: "q1", label: "Lantern code", points: null, missing: [], hidden: true }] }],
+		},
 	})
 	expect(view.html).toContain("Draft · teams don&#x27;t see it")
 	expect(view.html).toContain('href="/admin/seasons/s1/quests/q1"')
@@ -331,7 +333,7 @@ it("keeps only one live quest expanded across arcs", () => {
 	const props = {
 		...liveProps,
 		stats: { q1: liveStats, q2: { ...liveStats, completedBy: ["Lagom"] } },
-		tree: { arcs: [arc, { ...arc, id: "a2", quests: [{ id: "q2", label: "Last word", points: 20 }] }] },
+		tree: { arcs: [arc, { ...arc, id: "a2", quests: [{ id: "q2", label: "Last word", points: 20, missing: [] }] }] },
 	}
 	questButton(render(props), "q1").props.onClick?.()
 	questButton(render(props), "q2").props.onClick?.()
@@ -435,7 +437,9 @@ it("adds a quest and navigates to its returned id", async () => {
 it.each(["navigation first", "refresh first"])("marks a newly added desktop quest when %s commits", async (order) => {
 	render({ variant: "menu" }).button("+ Quest").props.onClick?.()
 	await vi.waitFor(() => expect(hooks.push).toHaveBeenCalledWith("/admin/seasons/s1/quests/new-quest"))
-	const tree = { arcs: [{ ...arc, quests: [...arc.quests, { id: "new-quest", label: null, points: null }] }] }
+	const tree = {
+		arcs: [{ ...arc, quests: [...arc.quests, { id: "new-quest", label: null, points: null, missing: [] }] }],
+	}
 	if (order === "navigation first") {
 		hooks.segments = ["quests", "new-quest"]
 		expect(render({ variant: "menu" }).html).not.toContain('aria-current="page"')
@@ -455,7 +459,12 @@ it.each([1, 5])("confirms removal of an arc with %i quests before writing", asyn
 			arcs: [
 				{
 					...arc,
-					quests: Array.from({ length: count }, (_, index) => ({ label: "Harbour map", points: 40, id: `q${index}` })),
+					quests: Array.from({ length: count }, (_, index) => ({
+						label: "Harbour map",
+						points: 40,
+						id: `q${index}`,
+						missing: [],
+					})),
 				},
 			],
 		},
@@ -513,7 +522,7 @@ it("loads live arc impact before enabling removal", async () => {
 it("keeps a plain confirmation for arcs containing only hidden drafts", () => {
 	const props = {
 		...liveProps,
-		tree: { arcs: [{ ...arc, quests: [{ id: "draft", label: "Draft", points: null, hidden: true }] }] },
+		tree: { arcs: [{ ...arc, quests: [{ id: "draft", label: "Draft", points: null, missing: [], hidden: true }] }] },
 	}
 	render(props).button("Old Town").props.onClick?.()
 	render(props).button("Remove arc").props.onClick?.()
@@ -635,12 +644,18 @@ const dragTree = {
 			...arc,
 			quests: [
 				...arc.quests,
-				{ id: "q2", label: "Church bells", points: 20 },
-				{ id: "q3", label: "Clock tower", points: 30 },
-				{ id: "q4", label: "Cobblestones", points: 10 },
+				{ id: "q2", label: "Church bells", points: 20, missing: [] },
+				{ id: "q3", label: "Clock tower", points: 30, missing: [] },
+				{ id: "q4", label: "Cobblestones", points: 10, missing: [] },
 			],
 		},
-		{ ...arc, id: "a2", title: "Finale", shuffleQuests: false, quests: [{ id: "q5", label: "Last word", points: 50 }] },
+		{
+			...arc,
+			id: "a2",
+			title: "Finale",
+			shuffleQuests: false,
+			quests: [{ id: "q5", label: "Last word", points: 50, missing: [] }],
+		},
 		{ ...arc, id: "a3", title: "Empty arc", shuffleQuests: false, quests: [] },
 	],
 }

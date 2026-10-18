@@ -1,4 +1,5 @@
 import { seasonStatus } from "./admin-seasons"
+import { missingForGame } from "./playable-quests"
 import { Arc, Quest, type Season } from "./schemas"
 
 export function newArc(shuffleArcs: boolean): Arc {
@@ -44,6 +45,7 @@ export function treeView(season: Season) {
 				id: quest.id,
 				label: questLabel(quest),
 				points: quest.points,
+				missing: missingForGame(quest),
 				...(quest.hidden ? { hidden: true } : {}),
 			})),
 		})),

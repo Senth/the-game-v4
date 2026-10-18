@@ -5,7 +5,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react"
 import { addQuestToGame, getAddQuestImpact, getRemoveQuestImpact, removeQuest } from "@/app/admin/tree-actions"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
 import type { StructuralEditImpact } from "@/lib/domain/game"
-import { missingForGame } from "@/lib/domain/playable-quests"
+import { missingLabel as formatMissingFields, missingForGame } from "@/lib/domain/playable-quests"
 import type { Quest } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
 import { AnswerChips } from "./answer-chips"
@@ -51,8 +51,7 @@ export function QuestEditor({
 	const label = questLabel(quest)
 	const dialogLabel = label ?? "this quest"
 	const missing = quest.hidden ? missingForGame(quest) : []
-	const missingLabel =
-		missing.length > 1 ? `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}` : missing[0]
+	const missingLabel = formatMissingFields(missing)
 	const [confirming, setConfirming] = useState<"add" | "remove" | null>(null)
 	const [copyOpen, setCopyOpen] = useState(false)
 	const [pending, setPending] = useState(false)
