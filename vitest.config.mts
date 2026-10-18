@@ -7,6 +7,6 @@ export default defineConfig({
 	test: {
 		environment: "node",
 		globalSetup: ["test/mongo.global.ts"],
-		exclude: [...configDefaults.exclude, ".tmp/**", ".next/**"],
+		exclude: [...configDefaults.exclude, ".tmp/**", ".next/**", "e2e/**"],
 	},
 })

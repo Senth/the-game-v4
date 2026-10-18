@@ -34,7 +34,7 @@ The core flow is one connected scenario:
 3. Team reveals a hint, submits a wrong answer, then answers both quests correctly.
 4. Team sees completed; admin team view shows the hint penalty and retained reveal history.
 
-I-28 appends `pnpm e2e` to `.ai/config.toml` gates. Once present, it runs in every implementation phase.
+`pnpm e2e` runs after `pnpm build` in every implementation phase and needs its standalone output.
 That gate run is also the UI self-test; do not run the suite again merely for a final green tree.
 Keep detailed lifecycle, hold cancellation, autosave and ordering cases in unit or component tests when possible.
 
@@ -96,4 +96,4 @@ Run in the configured order:
 | `pnpm typecheck` | Strict TypeScript with `tsc --noEmit` |
 | `pnpm test` | Pure rules, database writes and regression/component tests |
 | `pnpm build` | Next.js standalone production build |
-| `pnpm e2e`, added in I-28 | Real admin-to-player core loop against an isolated database |
+| `pnpm e2e` | Real admin-to-player core loop against an isolated database; runs after and needs `pnpm build` output |
