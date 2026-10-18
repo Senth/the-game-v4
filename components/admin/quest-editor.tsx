@@ -246,8 +246,6 @@ export function QuestEditor({
 						}
 						target={{ arcId, questId: quest.id, field: "displayTitle" }}
 						serverValue={quest.displayTitle}
-						missing="Needs a display title"
-						autoFocus={label === null}
 					/>
 					<AutosaveTextField
 						label={
@@ -267,7 +265,7 @@ export function QuestEditor({
 					}
 					target={{ arcId, questId: quest.id, field: "content" }}
 					serverValue={quest.content}
-					missing="Needs content"
+					missing={assetPath?.trim() ? undefined : "Needs content or an image"}
 					minRows={5}
 					mono
 				/>

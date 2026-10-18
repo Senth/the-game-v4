@@ -236,40 +236,47 @@ describe("live structural actions", () => {
 		})
 	}
 
-	it("publishes a ready draft once after each built, unfinished team's current quest", async () => {
-		await setup(now)
-		await seasons.setSeasonField(ids[0], { arcId: ids[1], questId: ids[2], field: "hidden" }, true)
-		const active = await playing("Active", { questOrder: ["current", "next"] })
-		const finished = await playing("Finished", { questOrder: ["current"], questIndex: 1, completed: true })
-		const unbuilt = await playing("Unbuilt", { questOrder: [] })
-		const other = await playing("Other", { seasonId: "other" })
-		expect(await getAddQuestImpact(...ids)).toEqual({
-			ok: true,
-			impact: { kind: "addQuest", added: ["Active"], completed: 1 },
-		})
-		expect(await addQuestToGame(...ids)).toEqual({
-			ok: false,
-			error: "Fill in display title, content, answers and points first.",
-		})
-		expect(publish).not.toHaveBeenCalled()
-		for (const [field, value] of [
-			["displayTitle", "Beacon"],
-			["content", "Find the light"],
-			["answers", ["lamp"]],
-			["points", 0],
-		] as const) {
-			await seasons.setSeasonField(ids[0], { arcId: ids[1], questId: ids[2], field }, value)
-		}
-		expect(await addQuestToGame(...ids)).toEqual({ ok: true })
-		const order = (await getTeam(active._id))?.questOrder ?? []
-		expect(order[0]).toBe("current")
-		expect(order.slice(1).toSorted()).toEqual(["next", ids[2]].toSorted())
-		for (const team of [finished, unbuilt, other]) expect(await getTeam(team._id)).toEqual(team)
-		expect((await seasons.getSeason(ids[0]))?.arcs[0]?.quests[0]?.hidden).toBe(false)
-		expect(vi.mocked(publish).mock.calls).toEqual([[teamChannel(active._id)], [seasonChannel(ids[0])], [boardChannel]])
-		expect(await addQuestToGame(...ids)).toEqual({ ok: true })
-		expect((await getTeam(active._id))?.questOrder).toEqual(order)
-	})
+	it.each(["content", "asset"])(
+		"publishes a ready %s-only draft once after each built, unfinished team's current quest",
+		async (source) => {
+			await setup(now)
+			await seasons.setSeasonField(ids[0], { arcId: ids[1], questId: ids[2], field: "hidden" }, true)
+			const active = await playing("Active", { questOrder: ["current", "next"] })
+			const finished = await playing("Finished", { questOrder: ["current"], questIndex: 1, completed: true })
+			const unbuilt = await playing("Unbuilt", { questOrder: [] })
+			const other = await playing("Other", { seasonId: "other" })
+			expect(await getAddQuestImpact(...ids)).toEqual({
+				ok: true,
+				impact: { kind: "addQuest", added: ["Active"], completed: 1 },
+			})
+			expect(await addQuestToGame(...ids)).toEqual({
+				ok: false,
+				error: "Fill in content, answers and points first.",
+			})
+			expect(publish).not.toHaveBeenCalled()
+			for (const [field, value] of [
+				["content", source === "content" ? "Find the light" : ""],
+				["answers", ["lamp"]],
+				["points", 0],
+			] as const) {
+				await seasons.setSeasonField(ids[0], { arcId: ids[1], questId: ids[2], field }, value)
+			}
+			if (source === "asset") await seasons.setQuestAsset(...ids, "/assets/clue.png")
+			expect(await addQuestToGame(...ids)).toEqual({ ok: true })
+			const order = (await getTeam(active._id))?.questOrder ?? []
+			expect(order[0]).toBe("current")
+			expect(order.slice(1).toSorted()).toEqual(["next", ids[2]].toSorted())
+			for (const team of [finished, unbuilt, other]) expect(await getTeam(team._id)).toEqual(team)
+			expect((await seasons.getSeason(ids[0]))?.arcs[0]?.quests[0]?.hidden).toBe(false)
+			expect(vi.mocked(publish).mock.calls).toEqual([
+				[teamChannel(active._id)],
+				[seasonChannel(ids[0])],
+				[boardChannel],
+			])
+			expect(await addQuestToGame(...ids)).toEqual({ ok: true })
+			expect((await getTeam(active._id))?.questOrder).toEqual(order)
+		},
+	)
 
 	it("counts each arc-removal team once and removes all remaining visible quests", async () => {
 		await setup(now)

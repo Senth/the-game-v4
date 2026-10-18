@@ -55,7 +55,7 @@ A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
 A quest and each hint must have a stable id. Assign ids to hints that lack them, including on import.
 `Quest` also has `hidden?: boolean`; absent means visible.
 Draft quests may have empty content, empty answers or missing points.
-A quest is complete when it has a display title, content, at least one answer and points.
+A quest is complete with content or an asset, at least one answer and points. Display title is optional.
 Whitespace-only text is empty; 0 points is set. `missingForGame` defines this shared rule.
 Quest points are a whole number from 0 to 10000, or null on a draft.
 Hint points are a whole number from 0 to 10000.

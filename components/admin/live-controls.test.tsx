@@ -3,6 +3,8 @@ import { createPortal } from "react-dom"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { endSeason, shiftSeasonEnd, startSeasonNow } from "@/app/admin/live-actions"
+import { incompleteQuests } from "@/lib/domain/playable-quests"
+import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { LiveControls } from "./live-controls"
 
 const hooks = vi.hoisted(() => ({
@@ -125,6 +127,15 @@ it.each([
 	expect(view.confirm.props.children).toBe("Start anyway")
 	expect(view.confirm.props.className).toContain("bg-accent")
 	expect(startSeasonNow).not.toHaveBeenCalled()
+})
+
+it("starts image-only quests without incomplete-quest confirmation", async () => {
+	const quest = { ...newQuest(), assetPath: "/assets/clue.png", answers: ["clue"], points: 0 }
+	const incomplete = incompleteQuests({ arcs: [{ ...newArc(false), quests: [quest] }] })
+	const view = render({ incomplete })
+	expect(view.html).not.toContain("<dialog")
+	view.button(0).props.onClick()
+	await vi.waitFor(() => expect(startSeasonNow).toHaveBeenCalledWith("s1"))
 })
 
 it("lists five incomplete quests then a muted remainder", () => {

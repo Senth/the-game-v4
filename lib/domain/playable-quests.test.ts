@@ -38,17 +38,16 @@ describe("Quest hidden flag", () => {
 })
 
 describe("missingForGame", () => {
-	const complete = { displayTitle: "Title", content: "Content", answers: ["answer"], points: 10 }
+	const complete = { displayTitle: "Title", content: "Content", assetPath: null, answers: ["answer"], points: 10 }
 
 	it("lists missing fields in display order without changing inputs", () => {
 		const quest = newQuest()
 		const original = structuredClone(quest)
-		expect(missingForGame(quest)).toEqual(["display title", "content", "answers", "points"])
+		expect(missingForGame(quest)).toEqual(["content", "answers", "points"])
 		expect(quest).toEqual(original)
 	})
 
 	it.each([
-		{ field: "display title", quest: { ...complete, displayTitle: " \t\n" } },
 		{ field: "content", quest: { ...complete, content: " \t\n" } },
 		{ field: "answers", quest: { ...complete, answers: [] } },
 		{ field: "points", quest: { ...complete, points: null } },
@@ -59,6 +58,18 @@ describe("missingForGame", () => {
 	it.each([0, 10, 10000])("accepts a complete quest with %i points", (points) => {
 		expect(missingForGame({ ...complete, points })).toEqual([])
 	})
+
+	it.each(["", " \t\n"])("accepts content-only and asset-only quests without a display title %j", (displayTitle) => {
+		const quest = { ...complete, displayTitle }
+		expect(missingForGame(quest)).toEqual([])
+		for (const assetPath of ["/assets/clue.png", "/assets/clue.pdf"]) {
+			expect(missingForGame({ ...quest, content: " \t\n", assetPath })).toEqual([])
+		}
+	})
+
+	it("still requires content when both content and asset path are whitespace", () => {
+		expect(missingForGame({ ...complete, content: " \n", assetPath: " \t" })).toEqual(["content"])
+	})
 })
 
 describe("missingLabel", () => {
@@ -67,8 +78,8 @@ describe("missingLabel", () => {
 		{ missing: ["answers"], expected: "answers" },
 		{ missing: ["content", "answers"], expected: "content and answers" },
 		{
-			missing: ["display title", "content", "answers", "points"],
-			expected: "display title, content, answers and points",
+			missing: ["content", "answers", "points"],
+			expected: "content, answers and points",
 		},
 	])("joins missing fields as $expected", ({ missing, expected }) => {
 		expect(missingLabel(missing)).toBe(expected)
@@ -111,6 +122,13 @@ describe("incompleteQuests", () => {
 						},
 						{
 							...newQuest(),
+							id: "image-only",
+							assetPath: "/assets/clue.png",
+							answers: ["answer"],
+							points: 10,
+						},
+						{
+							...newQuest(),
 							id: "hidden",
 							displayTitle: "Hidden draft",
 							content: "Content",
@@ -125,7 +143,7 @@ describe("incompleteQuests", () => {
 		const original = structuredClone(season)
 
 		expect(incompleteQuests(season)).toEqual([
-			{ id: "fresh", label: "Untitled quest", missing: ["display title", "content", "answers", "points"] },
+			{ id: "fresh", label: "Untitled quest", missing: ["content", "answers", "points"] },
 			{ id: "answers", label: "Internal answers", missing: ["answers"] },
 			{ id: "whitespace", label: "Whitespace", missing: ["content"] },
 			{ id: "hidden", label: "Hidden draft", missing: ["answers"] },
