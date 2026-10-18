@@ -109,7 +109,8 @@ Use G2's header, with the shorter "2 behind" wording rather than the mock's "2 q
 Timer color follows PROJECT.md. Keep the arc rail and standings strip subordinate to quest content.
 The strip itself opens standings; rank is muted, names regular, points bold, and your team tinted.
 
-Quest content has a display title, image or asset, and Markdown with highlighted fences.
+Quest content has an optional display title, image or asset, and Markdown with highlighted fences.
+Omit the title heading when its trimmed text is empty.
 Intel shows current/full worth, revealed hints with right-aligned penalties, and locked hold-to-reveal rows.
 The fixed answer dock contains only the input and Send. It remains visible at every scroll position.
 Wrong-answer feedback is an orange line fading over 4 seconds; correct feedback uses success green.
@@ -210,8 +211,8 @@ The tree follows the saved season; editor warnings follow each field's local val
 
 Missing editor fields get a `warn` border and a `mt-1.5 font-cond text-xs text-warn` line below:
 
-- Display title: "Needs a display title".
-- Content: "Needs content".
+- Display title is optional and never gets a missing-field warning.
+- Content: "Needs content or an image", only when both content and asset are empty.
 - Answers: "Needs an answer".
 - Points: "Needs points".
 
@@ -350,6 +351,7 @@ Use the [final structural-edit mocks](#live-structural-edits), panels 2 through 
 Put a `bg-z1 rounded-md p-3` draft note above Display title.
 
 - Not ready: `Fill in <fields> to add it to the game.`. Use lowercase field names joined as "a, b and c".
+- Display title never counts as missing. Content counts as missing only without content or an asset.
 - Disable the accent "Add to game" button until ready. Missing fields keep their warn border and line.
 - Ready: "Teams don't see this quest yet.". Enable "Add to game".
 - After adding succeeds, remove the note on `season:<id>` refresh and show the tree row's live stats.
@@ -534,6 +536,7 @@ Use the existing native `<dialog>` style on phone and desktop.
 Title: `Start with <N> incomplete quests?`, or `Start with 1 incomplete quest?`.
 List quests in authored arc and quest order, including hidden drafts.
 Each row shows the [tree quest label](#missing-field-warnings) and its missing fields in `warn`.
+Display title never counts as missing. Content counts as missing only without content or an asset.
 Missing-field text may wrap. Show at most five quest rows, then muted `and <K> more` for the remainder.
 Body: "Teams get them as they are. A quest without answers can't be solved."
 Buttons: "Cancel" and accent "Start anyway". Cancel leaves the season unstarted; Start anyway starts it.

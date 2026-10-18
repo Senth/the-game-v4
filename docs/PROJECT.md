@@ -55,7 +55,7 @@ A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
 A quest and each hint must have a stable id. Assign ids to hints that lack them, including on import.
 `Quest` also has `hidden?: boolean`; absent means visible.
 Draft quests may have empty content, empty answers or missing points.
-A quest is complete when it has a display title, content, at least one answer and points.
+A quest is complete with content or an asset, at least one answer and points. Display title is optional.
 Whitespace-only text is empty; 0 points is set. `missingForGame` defines this shared rule.
 Quest points are a whole number from 0 to 10000, or null on a draft.
 Hint points are a whole number from 0 to 10000.
@@ -329,10 +329,48 @@ deleting the old one. Remove, Replace, Remove quest and Remove arc delete a file
 quest in any season still references its path.
 
 `pnpm import:v3 <export.json>` imports seasons and reusable quests, not teams or users.
-Map themes to arcs, `answer "a|b"` to `["a", "b"]`, and `code` plus `content` to fenced Markdown.
-Keep trusted HTML. Map v3 `Random All` and `Random Theme` to `shuffleArcs: true` and retain each theme's
-`random` flag as `shuffleQuests`. Download old asset URLs into `ASSETS_DIR`.
-Use source season ids so repeated imports do not duplicate seasons. The human exports production Firestore data.
+Use `--dry-run` to inspect counts, skips and warnings without fetching assets or writing data.
+Set `MONGODB_URI`; real imports also require `ASSETS_DIR` for downloaded assets.
+Export Firestore seasons with
+`pnpm export:v3 --project <gcp-id> [--collection game_seasons] --out <file>`; credentials use Application Default
+Credentials or `GOOGLE_APPLICATION_CREDENTIALS`.
+The human exports production Firestore data as JSON, not Firestore's binary backup format:
+`{ "<collection>": { "<docId>": season } }`. The collection name may have any prefix.
+Exactly one top-level collection is required; zero or several is an error.
+Ignore `__collections__` metadata keys wherever present.
+
+`lib/domain/v3-import.ts` maps this JSON without network, filesystem or database access.
+Each result contains a validated v4 `season`, `assetJobs` keyed by its new quest ids, and `warnings`.
+Inputs stay unchanged. Mapping rules:
+
+- Use the source document id as season `_id` so repeated imports do not duplicate seasons.
+  Keep the season title; always set `registrationOpen: false`. Missing `length` becomes 60 minutes.
+- Keep `start` and `end`. Accept ISO timestamps, `{ "_seconds": 1704067200 }`,
+  `{ "seconds": 1704067200 }`, and
+  `{ "__datatype__": "timestamp", "value": { "_seconds": 1704067200 } }`.
+  Missing dates become null. With a start but no end, derive end as start plus length in minutes.
+- `Random All` and `Random Theme` set `shuffleArcs: true`.
+  `Ordered` and `Random Quest` set it false. Preserve authored array order.
+- Each theme becomes an arc with a new UUID, its original title and `shuffleQuests` from `random`.
+  Every quest and retained hint gets a new UUID, including quests copied between v3 seasons with identical ids.
+- Quest `title` becomes `internalTitle`, `description` becomes `adminNotes`, and `displayTitle` stays as is.
+  Missing quest text fields become empty strings. Missing answers and hints become empty arrays.
+- Split `answer` on `|`, trim and NFC-normalize each part, drop empty parts and deduplicate by `normalizeAnswer`.
+  Keep the first spelling. Drop answers longer than 200 characters with a warning.
+- Quest points must be a whole number from 0 to 10000; otherwise set them to null with a warning.
+- Nonempty `code` with nonempty `content` becomes a Markdown fenced block whose language is `code`'s value.
+  Use at least three backticks and a fence longer than every backtick run inside the content.
+  Other content stays raw trusted HTML. Do not add a fence when content is absent.
+- Drop hints whose text is missing, empty or whitespace-only. Preserve remaining text.
+  Clamp out-of-range hint points to 0-10000 with a warning.
+- A nonempty `asset` queues `{ url: asset, target: "assetPath" }`.
+  With no asset, a nonempty `imageUrl` queues the same job using its URL.
+  With both, also queue `{ url: imageUrl, target: "content" }` and warn that it will append a Markdown image.
+  `assetPath` stays null until the jobs run; content-append jobs leave content unchanged until then.
+  The downloader saves old asset URLs into `ASSETS_DIR` before applying their local paths.
+- Every warning names the season title and source id, arc and quest.
+  Validate every mapped season with `lib/domain/schemas.ts`; reject malformed input or any remaining schema violation,
+  including invalid lengths, invalid timestamps and non-whole hint points within range.
 
 Production runs compose with app and MongoDB 8 on fenrir, persistent mongo and asset volumes, and GHCR images
 published on `v*` tags. Build a non-root standalone app on `node:24-alpine`; gates run in PR CI.

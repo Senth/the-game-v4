@@ -232,11 +232,19 @@ it.each([
 it("shows missing draft fields above Display title and disables Add to game", () => {
 	const view = render({
 		...live,
-		quest: { ...defaults.quest, hidden: true, displayTitle: "", content: "", answers: [], points: null },
+		quest: {
+			...defaults.quest,
+			hidden: true,
+			displayTitle: "",
+			content: "",
+			assetPath: null,
+			answers: [],
+			points: null,
+		},
 	})
-	expect(view.html).toContain("Fill in display title, content, answers and points to add it to the game.")
+	expect(view.html).toContain("Fill in content, answers and points to add it to the game.")
 	expect(view.html).toContain("bg-z1 rounded-md p-3")
-	expect(view.html.indexOf("Fill in display title")).toBeLessThan(view.html.indexOf(">Display title"))
+	expect(view.html.indexOf("Fill in content")).toBeLessThan(view.html.indexOf(">Display title"))
 	expect(view.add?.props.disabled).toBe(true)
 })
 
@@ -245,16 +253,25 @@ it.each([
 	["upcoming", { start: new Date(now + 60_000), end: new Date(now + 3_660_000) }],
 	["live", live],
 	["ended", { start: new Date(now - 60_000), end: new Date(now) }],
-])("warns on all four missing fields from first open in %s seasons, including drafts", (_state, timing) => {
+])("warns on all three missing fields from first open in %s seasons, including drafts", (_state, timing) => {
 	for (const hidden of [false, true]) {
 		const view = render({
 			...timing,
-			quest: { ...defaults.quest, hidden, displayTitle: " \n ", content: "", answers: [], points: null },
+			quest: {
+				...defaults.quest,
+				hidden,
+				displayTitle: " \n ",
+				content: "",
+				assetPath: null,
+				answers: [],
+				points: null,
+			},
 		})
-		for (const message of ["Needs a display title", "Needs content", "Needs an answer", "Needs points"]) {
+		for (const message of ["Needs content or an image", "Needs an answer", "Needs points"]) {
 			expect(view.html).toContain(message)
 		}
-		expect(view.html.match(/-missing" class="mt-1.5 font-cond text-xs text-warn"/g)).toHaveLength(4)
+		expect(view.html).not.toContain("Needs a display title")
+		expect(view.html.match(/-missing" class="mt-1.5 font-cond text-xs text-warn"/g)).toHaveLength(3)
 		expect(view.html).not.toContain("aria-invalid")
 		expect(view.html).not.toContain('role="alert"')
 	}
@@ -267,9 +284,23 @@ it("keeps complete quests quiet, including zero points", () => {
 	expect(view.html).not.toContain("border-warn")
 })
 
+it("updates the content warning when the local image is added or removed", () => {
+	const props = { quest: { ...defaults.quest, displayTitle: "", content: " \n", assetPath: null } }
+	const empty = render(props)
+	expect(empty.html).toContain("Needs content or an image")
+	empty.asset.props.onChange("/assets/new.png")
+	const uploaded = render(props)
+	expect(uploaded.html).not.toContain("Needs ")
+	expect(uploaded.html).not.toContain("border-warn")
+	uploaded.asset.props.onChange(null)
+	expect(render(props).html).toContain("Needs content or an image")
+})
+
 it("shows ready draft copy and enables Add to game", () => {
-	const view = render({ ...live, quest: { ...defaults.quest, hidden: true } })
+	const view = render({ ...live, quest: { ...defaults.quest, hidden: true, displayTitle: "", content: "" } })
 	expect(view.html).toContain("Teams don&#x27;t see this quest yet.")
+	expect(view.html).not.toContain("Needs ")
+	expect(view.html).not.toContain("border-warn")
 	expect(view.add?.props.disabled).toBe(false)
 	expect(view.add?.props.className).toContain("bg-accent")
 })
@@ -439,17 +470,17 @@ it("syncs Image row from refreshed server props after another admin changes asse
 })
 
 it.each([
-	["", "", true],
-	[" ", " ", true],
-	["The map", "", false],
-	["", "Harbour map", false],
-])("autofocuses Display title only for unnamed quests %s / %s", (displayTitle, internalTitle, focused) => {
+	["", ""],
+	[" ", " "],
+	["The map", ""],
+	["", "Harbour map"],
+])("does not autofocus optional Display title for quests %s / %s", (displayTitle, internalTitle) => {
 	const view = render({
 		quest: { ...defaults.quest, displayTitle: displayTitle as string, internalTitle: internalTitle as string },
 	})
-	expect(view.fields[0]?.props.autoFocus).toBe(focused)
+	expect(view.fields[0]?.props.autoFocus).toBeUndefined()
 	expect(view.fields[1]?.props.autoFocus).toBeUndefined()
-	expect(view.html.includes('autofocus=""')).toBe(focused)
+	expect(view.html).not.toContain('autofocus=""')
 })
 
 it.each([null, new Date(now + 60_000)])(

@@ -150,6 +150,21 @@ describe("quest asset actions", () => {
 		expect(await readdir(directory)).toHaveLength(shared ? 2 : 1)
 	})
 
+	it("keeps a replaced asset referenced by another quest's Markdown", async () => {
+		const previous = await attach()
+		const season = await seasons.getSeason(ids[0])
+		const arc = season?.arcs.find((item) => item.id === ids[1])
+		if (!arc) throw new Error("Arc missing")
+		await seasons.setSeasonField(ids[0], { arcId: ids[1], field: "quests" }, [
+			...arc.quests,
+			{ ...newQuest(), id: "other-quest", content: `![](${previous})` },
+		])
+
+		await uploadQuestAsset(...ids, form())
+
+		expect(await readdir(directory)).toContain(path.basename(previous))
+	})
+
 	it.each([false, true])("remove clears path and releases file only when unreferenced, shared=%s", async (shared) => {
 		const previous = await attach()
 		if (shared) {
@@ -161,6 +176,28 @@ describe("quest asset actions", () => {
 		expect(await currentPath()).toBeNull()
 		expect(await readdir(directory)).toEqual(shared ? [path.basename(previous)] : [])
 		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(ids[0])], [boardChannel]])
+	})
+
+	it("keeps a removed asset referenced by another season's Markdown", async () => {
+		const previous = await attach()
+		const season = await seasons.getSeason(ids[0])
+		if (!season) throw new Error("Season missing")
+		await seasons.createSeason({
+			...season,
+			_id: "other-season",
+			arcs: season.arcs.map((arc) => ({
+				...arc,
+				quests: arc.quests.map((quest) => ({
+					...quest,
+					assetPath: null,
+					content: quest.id === ids[2] ? `![](${previous})` : quest.content,
+				})),
+			})),
+		})
+
+		await removeQuestAsset(...ids)
+
+		expect(await readdir(directory)).toContain(path.basename(previous))
 	})
 
 	it("removes a null asset without filesystem work", async () => {

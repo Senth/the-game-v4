@@ -25,6 +25,19 @@ const strip: StripEntry[] = [
 const quest = { displayTitle: "The keeper's last log", assetPath: null, content: "Read the log." }
 
 describe("QuestContent", () => {
+	it.each([false, true])("omits empty and whitespace titles in player and admin preview=%s", (preview) => {
+		for (const displayTitle of ["", " \t\n"]) {
+			const html = renderToStaticMarkup(
+				<QuestContent quest={{ displayTitle, content: "", assetPath: "/assets/clue.png" }} preview={preview} />,
+			)
+			expect(html).not.toContain("<h1")
+			expect(html).not.toContain("mb-4")
+			expect(html).toContain('src="/assets/clue.png"')
+		}
+		const html = renderToStaticMarkup(<QuestContent quest={quest} preview={preview} />)
+		expect(html).toMatch(/<h1[^>]*>The keeper&#x27;s last log<\/h1>/)
+	})
+
 	it("renders Markdown and trusted raw HTML", () => {
 		const html = renderToStaticMarkup(
 			<QuestContent
