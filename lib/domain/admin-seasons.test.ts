@@ -122,7 +122,7 @@ describe("liveControls", () => {
 	])("returns $state and canShrink $canShrink for $start to $end", ({ start, end, state, canShrink }) => {
 		const season = { start, end, arcs: [] }
 		const original = structuredClone({ season, now })
-		expect(liveControls(season, now)).toEqual({ state, canShrink, hasQuests: false })
+		expect(liveControls(season, now)).toEqual({ state, canShrink, hasQuests: false, incomplete: [] })
 		expect({ season, now }).toEqual(original)
 	})
 
@@ -143,6 +143,43 @@ describe("liveControls", () => {
 		const original = structuredClone(season)
 		expect(liveControls(season, now).hasQuests).toBe(true)
 		expect(liveControls({ ...season, arcs: [empty] }, now).hasQuests).toBe(false)
+		expect(season).toEqual(original)
+	})
+
+	it("returns incomplete hidden drafts without changing the season", () => {
+		const season = {
+			start: null,
+			end: null,
+			arcs: [
+				{
+					id: "a1",
+					title: "Arc",
+					shuffleQuests: false,
+					quests: [
+						{
+							id: "q1",
+							displayTitle: "Draft",
+							internalTitle: "",
+							content: "",
+							assetPath: null,
+							answers: [],
+							points: null,
+							adminNotes: "",
+							hints: [],
+							hidden: true,
+						},
+					],
+				},
+			],
+		}
+		const original = structuredClone(season)
+
+		expect(liveControls(season, now)).toEqual({
+			state: "start",
+			canShrink: false,
+			hasQuests: false,
+			incomplete: [{ id: "q1", label: "Draft", missing: ["content", "answers", "points"] }],
+		})
 		expect(season).toEqual(original)
 	})
 })

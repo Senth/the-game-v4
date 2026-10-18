@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { missingForGame, playableArcs } from "./playable-quests"
+import { incompleteQuests, missingForGame, missingLabel, playableArcs } from "./playable-quests"
 import { Quest } from "./schemas"
 import { newQuest } from "./season-tree"
 
@@ -58,5 +58,78 @@ describe("missingForGame", () => {
 
 	it.each([0, 10, 10000])("accepts a complete quest with %i points", (points) => {
 		expect(missingForGame({ ...complete, points })).toEqual([])
+	})
+})
+
+describe("missingLabel", () => {
+	it.each([
+		{ missing: [], expected: "" },
+		{ missing: ["answers"], expected: "answers" },
+		{ missing: ["content", "answers"], expected: "content and answers" },
+		{
+			missing: ["display title", "content", "answers", "points"],
+			expected: "display title, content, answers and points",
+		},
+	])("joins missing fields as $expected", ({ missing, expected }) => {
+		expect(missingLabel(missing)).toBe(expected)
+	})
+})
+
+describe("incompleteQuests", () => {
+	it("lists incomplete quests in authored order, includes hidden drafts and leaves inputs unchanged", () => {
+		const season = {
+			arcs: [
+				{
+					id: "a1",
+					title: "Arc",
+					shuffleQuests: false,
+					quests: [
+						{ ...newQuest(), id: "fresh" },
+						{
+							...newQuest(),
+							id: "answers",
+							internalTitle: " Internal answers ",
+							displayTitle: "Display answers",
+							content: "Content",
+							points: 10,
+						},
+						{
+							...newQuest(),
+							id: "whitespace",
+							displayTitle: "Whitespace",
+							content: " \t\n ",
+							answers: ["answer"],
+							points: 10,
+						},
+						{
+							...newQuest(),
+							id: "zero-points",
+							displayTitle: "Zero points",
+							content: "Content",
+							answers: ["answer"],
+							points: 0,
+						},
+						{
+							...newQuest(),
+							id: "hidden",
+							displayTitle: "Hidden draft",
+							content: "Content",
+							answers: [],
+							points: 0,
+							hidden: true,
+						},
+					],
+				},
+			],
+		}
+		const original = structuredClone(season)
+
+		expect(incompleteQuests(season)).toEqual([
+			{ id: "fresh", label: "Untitled quest", missing: ["display title", "content", "answers", "points"] },
+			{ id: "answers", label: "Internal answers", missing: ["answers"] },
+			{ id: "whitespace", label: "Whitespace", missing: ["content"] },
+			{ id: "hidden", label: "Hidden draft", missing: ["answers"] },
+		])
+		expect(season).toEqual(original)
 	})
 })

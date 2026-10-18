@@ -95,3 +95,30 @@ it.each([undefined, "Invalid value."])("matches failed input styling and shows %
 	expect(html).toContain('id="textarea-error" role="alert"')
 	expect(html).toContain(error ?? "Not saved")
 })
+
+it("follows trimmed local content for missing warnings before autosave", () => {
+	for (const value of ["", " \n ", "Local content", ""]) {
+		vi.mocked(useAutosaveField).mockReturnValue({ ...field, value })
+		const html = renderToStaticMarkup(<AutosaveTextarea {...props} missing="Needs content" />)
+		if (!value.trim()) {
+			expect(html).toContain("border-warn")
+			expect(html).toContain("focus:border-warn")
+			expect(html).toContain('aria-describedby="textarea-missing"')
+			expect(html).toContain('id="textarea-missing" class="mt-1.5 font-cond text-xs text-warn">Needs content')
+		} else {
+			expect(html).not.toContain("Needs content")
+			expect(html).not.toContain("border-warn")
+			expect(html).not.toContain("aria-describedby")
+		}
+		expect(html).not.toContain("aria-invalid")
+		expect(html).not.toContain('role="alert"')
+	}
+})
+
+it("shows save failure instead of missing content warning", () => {
+	vi.mocked(useAutosaveField).mockReturnValue({ ...field, value: "", failed: true })
+	const html = renderToStaticMarkup(<AutosaveTextarea {...props} missing="Needs content" />)
+	expect(html).toContain("Not saved")
+	expect(html).toContain('aria-describedby="textarea-error"')
+	expect(html).not.toContain("Needs content")
+})

@@ -668,7 +668,14 @@ it.each(["quest", "arc"] as const)(
 			element.props.children[2].props.onConfirm()
 		} else {
 			const tree = {
-				arcs: [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [{ id: "quest", label: null, points: null }] }],
+				arcs: [
+					{
+						id: "arc",
+						title: "Arc",
+						shuffleQuests: false,
+						quests: [{ id: "quest", label: null, points: null, missing: [] }],
+					},
+				],
 			}
 			const element = render(view, () => SeasonTree({ ...props, tree, variant: "menu" }))
 			firstTreeArc(element)?.props.onRemove()
@@ -760,7 +767,9 @@ it.each(["retained layout", "unrelated tree refresh"])(
 		render(menu, () =>
 			SeasonTree({
 				...props,
-				tree: { arcs: [{ ...arc, quests: [{ id: "new-quest", label: "New quest title", points: null }] }] },
+				tree: {
+					arcs: [{ ...arc, quests: [{ id: "new-quest", label: "New quest title", points: null, missing: [] }] }],
+				},
 			}),
 		)
 		field().onChange("After refresh")
@@ -780,7 +789,12 @@ it.each(["quest", "arc"] as const)("discards only removed %s drafts after an ext
 			...props,
 			tree: {
 				arcs: [
-					{ id: "arc", title: "Arc", shuffleQuests: false, quests: [{ id: "quest", label: "First", points: null }] },
+					{
+						id: "arc",
+						title: "Arc",
+						shuffleQuests: false,
+						quests: [{ id: "quest", label: "First", points: null, missing: [] }],
+					},
 				],
 			},
 		}),
@@ -830,7 +844,12 @@ it.each(["menu", "page"] as const)(
 		const title = scope()
 		const tree = {
 			arcs: [
-				{ id: "arc", title: "Arc", shuffleQuests: false, quests: [{ id: "quest", label: "First", points: 10 }] },
+				{
+					id: "arc",
+					title: "Arc",
+					shuffleQuests: false,
+					quests: [{ id: "quest", label: "First", points: 10, missing: [] }],
+				},
 				{ id: "next", title: "Next arc", shuffleQuests: false, quests: [] },
 			],
 		}
@@ -869,7 +888,7 @@ it.each(["tree first", "editor first", "source arc removed"])(
 		const answers = scope()
 		const hints = scope()
 		const hintText = scope()
-		const quest = { id: "quest", label: "Quest", points: 10 }
+		const quest = { id: "quest", label: "Quest", points: 10, missing: [] }
 		const source = { id: "arc", title: "Arc", shuffleQuests: false, quests: [quest] }
 		const destination = { id: "next", title: "Next", shuffleQuests: false, quests: [] as (typeof quest)[] }
 		const props = { seasonId: "season-1", start: null, end: null, now: Date.now(), variant: "menu" as const }

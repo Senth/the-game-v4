@@ -9,16 +9,19 @@ export function AutosaveTextField({
 	target,
 	serverValue,
 	autoFocus,
+	missing,
 }: {
 	label: ReactNode
 	target: Parameters<typeof useAutosaveField>[0]
 	serverValue: string
 	autoFocus?: boolean
+	missing?: string
 }) {
 	const field = useAutosaveField(target, serverValue)
 	return (
 		<AutosaveInput
 			label={label}
+			missing={missing}
 			autoFocus={autoFocus}
 			type="text"
 			value={field.value}
@@ -35,6 +38,7 @@ export function AutosaveInput({
 	label,
 	failed,
 	error,
+	missing,
 	helper,
 	suffix,
 	children,
@@ -43,16 +47,19 @@ export function AutosaveInput({
 	label: ReactNode
 	failed: boolean
 	error?: string
+	missing?: string
 	helper?: string
 	suffix?: string
 	children?: ReactNode
 }) {
 	const id = useId()
-	const style = failed
-		? inputClass.replaceAll("border-z2", "border-warn").replaceAll("focus:border-accent", "focus:border-warn")
-		: input.readOnly
-			? inputClass.replaceAll("border-z2", "border-z1")
-			: inputClass
+	const isMissing = !!missing && !String(input.value ?? "").trim()
+	const style =
+		failed || isMissing
+			? inputClass.replaceAll("border-z2", "border-warn").replaceAll("focus:border-accent", "focus:border-warn")
+			: input.readOnly
+				? inputClass.replaceAll("border-z2", "border-z1")
+				: inputClass
 	return (
 		<div>
 			<label htmlFor={id} className={labelClass}>
@@ -62,8 +69,8 @@ export function AutosaveInput({
 				<input
 					id={id}
 					{...input}
-					aria-invalid={failed}
-					aria-describedby={failed ? `${id}-error` : helper ? `${id}-helper` : undefined}
+					aria-invalid={failed || undefined}
+					aria-describedby={failed ? `${id}-error` : isMissing ? `${id}-missing` : helper ? `${id}-helper` : undefined}
 					className={`${style} min-w-0 text-sm${input.readOnly ? " text-muted" : ""}`}
 				/>
 				{suffix && <span className="font-cond text-sm text-muted">{suffix}</span>}
@@ -72,6 +79,10 @@ export function AutosaveInput({
 			{failed ? (
 				<p id={`${id}-error`} role="alert" className="mt-1.5 font-cond text-xs text-warn">
 					{error ?? "Not saved"}
+				</p>
+			) : isMissing ? (
+				<p id={`${id}-missing`} className="mt-1.5 font-cond text-xs text-warn">
+					{missing}
 				</p>
 			) : (
 				helper && (

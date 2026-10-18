@@ -25,6 +25,7 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 	const [seasons, teams] = await Promise.all([listSeasons(), listSeasonTeams(seasonId)])
 	const teamCount = teams.length
 	const now = Date.now()
+	const liveControlState = liveControls(season, new Date(now))
 	const liveStats = seasonStatus(season, new Date(now)) === "live" ? questLiveStats(season, teams) : undefined
 	const stats =
 		liveStats &&
@@ -44,7 +45,8 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 			end={season.end}
 			now={now}
 			teamCount={teamCount}
-			hasQuests={liveControls(season, new Date(now)).hasQuests}
+			hasQuests={liveControlState.hasQuests}
+			incomplete={liveControlState.incomplete}
 		/>
 	)
 	return (

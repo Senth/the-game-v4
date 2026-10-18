@@ -121,15 +121,21 @@ describe("treeView", () => {
 					shuffleQuests: true,
 					hintCount: 1,
 					quests: [
-						{ id: "q1", label: "Internal", points: null, hidden: true },
-						{ id: "q2", label: "Display only", points: 20 },
+						{
+							id: "q1",
+							label: "Internal",
+							points: null,
+							missing: ["points"],
+							hidden: true,
+						},
+						{ id: "q2", label: "Display only", points: 20, missing: ["content", "answers"] },
 					],
 				},
 			],
 		})
 		expect(Object.keys(view.arcs[0] ?? {}).sort()).toEqual(["hintCount", "id", "quests", "shuffleQuests", "title"])
-		expect(Object.keys(view.arcs[0]?.quests[0] ?? {}).sort()).toEqual(["hidden", "id", "label", "points"])
-		expect(JSON.stringify(view)).not.toMatch(/answers|content|adminNotes|hints|assetPath/)
+		expect(Object.keys(view.arcs[0]?.quests[0] ?? {}).sort()).toEqual(["hidden", "id", "label", "missing", "points"])
+		expect(JSON.stringify(view)).not.toMatch(/private content|private asset|secret|private notes|private hint/)
 		expect(season).toEqual(original)
 	})
 })
