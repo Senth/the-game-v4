@@ -331,6 +331,9 @@ quest in any season still references its path.
 `pnpm import:v3 <export.json>` imports seasons and reusable quests, not teams or users.
 Use `--dry-run` to inspect counts, skips and warnings without fetching assets or writing data.
 Set `MONGODB_URI`; real imports also require `ASSETS_DIR` for downloaded assets.
+Export Firestore seasons with
+`pnpm export:v3 --project <gcp-id> [--collection game_seasons] --out <file>`; credentials use Application Default
+Credentials or `GOOGLE_APPLICATION_CREDENTIALS`.
 The human exports production Firestore data as JSON, not Firestore's binary backup format:
 `{ "<collection>": { "<docId>": season } }`. The collection name may have any prefix.
 Exactly one top-level collection is required; zero or several is an error.
