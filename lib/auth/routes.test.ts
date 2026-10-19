@@ -21,6 +21,7 @@ describe("routeFor", () => {
 		["/api/events", null, null],
 		["/api/events", team, null],
 		["/api/events", admin, null],
+		["/api/health", null, null],
 		["/assets/q1/map.png", null, null],
 		["/_next/static/chunk.js", null, null],
 		["/icon.svg", null, null],
