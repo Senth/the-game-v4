@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-memory-server-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      - name: Upload end-to-end artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: .tmp/e2e/
+          if-no-files-found: ignore
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - name: Write compose environment
+        run: |
+          printf 'SESSION_SECRET=%s\nAPP_UID=%s\nAPP_GID=%s\n' \
+            "$(openssl rand -base64 48)" "$(id -u)" "$(id -g)" > .env
+      - run: mkdir -p data/assets data/mongo
+      - run: docker compose build app
+      - run: docker compose up -d --wait --wait-timeout 120
+      - run: curl -fsS http://127.0.0.1:5009/api/health
+      - run: curl -fsS -o /dev/null http://127.0.0.1:5009/login
+      - name: Create CI admin
+        run: printf 'ci-admin-pass\n' | docker compose exec -T app node scripts/admin-create.mjs ci-admin
+      - name: Verify asset volume is writable
+        run: |
+          docker compose exec -T app sh -c 'touch /data/assets/.probe'
+          test -f data/assets/.probe
+      - name: Show compose logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop compose stack
+        if: always()
+        run: docker compose down -v
