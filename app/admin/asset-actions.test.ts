@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises"
 import path from "node:path"
 import { redirect } from "next/navigation"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -28,6 +28,7 @@ beforeEach(async () => {
 	vi.restoreAllMocks()
 	vi.mocked(requireAdmin).mockReset().mockResolvedValue({ _id: "admin", name: "admin", passwordHash: "hash" })
 	vi.mocked(publish).mockClear()
+	await mkdir(path.resolve(".tmp"), { recursive: true })
 	directory = await mkdtemp(path.resolve(".tmp", "asset-actions-"))
 	vi.stubEnv("ASSETS_DIR", directory)
 	await (await collections()).seasons.deleteMany({})

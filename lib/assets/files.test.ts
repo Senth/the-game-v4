@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises"
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { GET } from "../../app/assets/[file]/route"
@@ -17,6 +17,7 @@ let previousAssetsDir: string | undefined
 
 beforeAll(async () => {
 	previousAssetsDir = process.env.ASSETS_DIR
+	await mkdir(path.resolve(".tmp"), { recursive: true })
 	assetsDir = await mkdtemp(path.resolve(".tmp", "asset-route-"))
 	process.env.ASSETS_DIR = assetsDir
 	await writeFile(path.join(assetsDir, filename), content)
