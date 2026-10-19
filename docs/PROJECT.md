@@ -374,6 +374,10 @@ Inputs stay unchanged. Mapping rules:
 
 Production runs compose with app and MongoDB 8 on fenrir, persistent mongo and asset volumes, and GHCR images
 published on `v*` tags. Build a non-root standalone app on `node:24-alpine`; gates run in PR CI.
+Production admin creation and v3 imports run inside the image through bundled scripts,
+`scripts/admin-create.mjs` and `scripts/import-v3.mjs`.
+MongoDB has no host port; compose binds the app to `127.0.0.1:5009` by default.
+See [README.md](../README.md#deploying-with-compose) for environment variables, deployment commands and releases.
 The human handles DNS, nginx at `game.senth.org`, SSE proxy settings, compose and production seed/import.
 Agents never run Docker because fenrir requires sudo. Development and tests use `mongodb-memory-server`.
 After the first real v4 game, the human decommissions GCP, points v3's README to v4 and archives v3.

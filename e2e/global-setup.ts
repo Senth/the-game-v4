@@ -9,7 +9,12 @@ import { allocPorts } from "@/scripts/dev-ports"
 import teardown, { type E2eStack } from "./global-teardown"
 
 export default async function setup() {
-	if (!existsSync(".next/standalone/server.js")) throw new Error("run pnpm build first")
+	if (
+		!existsSync(".next/standalone/server.js") ||
+		!existsSync(".next/standalone/scripts/admin-create.mjs") ||
+		!existsSync(".next/standalone/scripts/import-v3.mjs")
+	)
+		throw new Error("run pnpm build first")
 	const stack: E2eStack = {}
 	try {
 		await mkdir(".tmp/e2e/assets", { recursive: true })
@@ -18,7 +23,7 @@ export default async function setup() {
 		await stack.mongo.start()
 		stack.ports = await allocPorts(["web"], process.pid)
 		process.env.MONGODB_URI = stack.mongo.getUri()
-		const seed = spawn(process.execPath, ["--import", "tsx", "scripts/admin-create.ts", "e2e-admin"], {
+		const seed = spawn(process.execPath, [".next/standalone/scripts/admin-create.mjs", "e2e-admin"], {
 			stdio: ["pipe", "inherit", "inherit"],
 		})
 		seed.stdin.end("e2e-admin-pass\n")

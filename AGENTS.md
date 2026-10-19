@@ -24,6 +24,7 @@ MongoDB access lives in `lib/db/`, zod schemas in `lib/domain/`, and dev boot an
 | `pnpm e2e` | Run the headless core-loop smoke test after `pnpm build` |
 
 Run configured gates in order.
+CI runs `pnpm lint` without `--write` so formatting errors fail instead of changing files.
 
 Agents never run Docker on fenrir. Its `docker` command invokes `sudo docker` and needs a password.
 Development and tests use `mongodb-memory-server`; production images build in CI and the human runs compose.
@@ -45,6 +46,7 @@ Keep temporary artifacts under `.tmp/`. Do not use live databases or services in
 | `lib/events/` | Single-container event bus and live update support |
 | `lib/game/` | Player game flows that load state, write team progress and publish live events |
 | `scripts/` | Development boot, seed, admin creation and v3 import CLIs |
+| `.github/` | CI application gates, compose image checks and tagged GHCR releases |
 | `docs/mocks/` | Nine accepted HTML and PNG mock pairs |
 
 ## Contracts

@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises"
 import path from "node:path"
 import { refresh } from "next/cache"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -100,6 +100,7 @@ it("refreshes the season layout after quest creation before navigation can reuse
 describe("tree asset cleanup", () => {
 	let directory: string
 	beforeEach(async () => {
+		await mkdir(path.resolve(".tmp"), { recursive: true })
 		directory = await mkdtemp(path.resolve(".tmp", "tree-assets-"))
 		vi.stubEnv("ASSETS_DIR", directory)
 	})

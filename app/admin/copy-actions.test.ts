@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { saveAsset } from "@/lib/assets/files"
@@ -186,6 +186,7 @@ describe.each(["arc", "quest"] as const)("copy %s", (kind) => {
 	it.each(["remove", "replace"])("keeps copied images during concurrent source image %s", async (change) => {
 		await setup("source")
 		await setup("destination")
+		await mkdir(path.resolve(".tmp"), { recursive: true })
 		const directory = await mkdtemp(path.resolve(".tmp", "copy-race-assets-"))
 		vi.stubEnv("ASSETS_DIR", directory)
 		const writing = Promise.withResolvers<void>()
@@ -302,6 +303,7 @@ it.each([{}, { kind: "team", id: "team" }])(
 it("autosaves copies independently and keeps shared image files when removing the copy's image", async () => {
 	await setup("source")
 	await setup("destination")
+	await mkdir(path.resolve(".tmp"), { recursive: true })
 	const directory = await mkdtemp(path.resolve(".tmp", "copy-assets-"))
 	vi.stubEnv("ASSETS_DIR", directory)
 	try {
