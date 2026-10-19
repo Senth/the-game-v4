@@ -53,6 +53,12 @@ jobs:
       - run: mkdir -p data/assets data/mongo
       - run: docker compose build app
       - run: docker compose up -d --wait --wait-timeout 120
+      - name: Verify image contains no application TypeScript
+        run: |
+          sources=$(docker compose exec -T app find /app -type d -name node_modules -prune -o \
+            -type f \( -name '*.ts' -o -name '*.tsx' \) -print)
+          printf '%s\n' "$sources"
+          test -z "$sources"
       - run: curl -fsS http://127.0.0.1:5009/api/health
       - run: curl -fsS -o /dev/null http://127.0.0.1:5009/login
       - name: Create CI admin
