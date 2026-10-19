@@ -1,0 +1,36 @@
+services:
+  app:
+    image: ghcr.io/senth/the-game-v4:${IMAGE_TAG:-latest}
+    build: .
+    init: true
+    restart: unless-stopped
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    ports:
+      - "127.0.0.1:${APP_PORT:-5009}:3000"
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/the-game
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET to at least 32 characters}
+    volumes:
+      - ./data/assets:/data/assets
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - ./data/mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

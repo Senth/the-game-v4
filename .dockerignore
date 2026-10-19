@@ -1,0 +1,11 @@
+node_modules
+.next
+.tmp
+.git
+.github
+data
+.env*
+!.env.example
+coverage
+*.tsbuildinfo
+docs/mocks
