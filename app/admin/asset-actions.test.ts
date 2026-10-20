@@ -104,15 +104,15 @@ describe("quest asset actions", () => {
 		expect(publish).not.toHaveBeenCalled()
 	})
 
-	it.each([
-		[new File(["<svg></svg>"], "image.png", { type: "image/png" }), "image.png is not jpg, png, gif, webp or pdf."],
-		[new File([new Uint8Array(maxAssetBytes + 1)], "image.png"), "image.png is 10.0 MB. The limit is 10 MB."],
-	])("rejects invalid upload with exact copy: %s", async (file, error) => {
-		expect(await uploadQuestAsset(...ids, form(file))).toEqual({ ok: false, error })
-		expect(await currentPath()).toBeNull()
-		expect(await readdir(directory)).toEqual([])
-		expect(publish).not.toHaveBeenCalled()
-	})
+	it.each([[new File([new Uint8Array(maxAssetBytes + 1)], "image.png"), "image.png is 50.0 MB. The limit is 50 MB."]])(
+		"rejects invalid upload with exact copy: %s",
+		async (file, error) => {
+			expect(await uploadQuestAsset(...ids, form(file))).toEqual({ ok: false, error })
+			expect(await currentPath()).toBeNull()
+			expect(await readdir(directory)).toEqual([])
+			expect(publish).not.toHaveBeenCalled()
+		},
+	)
 
 	it.each([
 		["image.png", png, "png"],
@@ -121,6 +121,12 @@ describe("quest asset actions", () => {
 		["image.gif", new TextEncoder().encode("GIF89a"), "gif"],
 		["image.webp", new TextEncoder().encode("RIFF1234WEBP"), "webp"],
 		["file.pdf", new TextEncoder().encode("%PDF-"), "pdf"],
+		["image.png", new TextEncoder().encode("<svg></svg>"), "svg"],
+		["page.HTML", new TextEncoder().encode("<html></html>"), "html"],
+		["image.heic", new TextEncoder().encode("\x00\x00\x00\x18ftypheic"), "heic"],
+		["audio.wav", new TextEncoder().encode("RIFF1234WAVE"), "wav"],
+		["no-extension", new TextEncoder().encode("anything"), "bin"],
+		["bad.longextension", new TextEncoder().encode("anything"), "bin"],
 	])("uploads %s using detected %s bytes, ignoring client MIME", async (name, bytes, extension) => {
 		const result = await uploadQuestAsset(...ids, form(new File([bytes], name, { type: "text/plain" })))
 		expect(result).toEqual({ ok: true, assetPath: await currentPath() })
@@ -130,7 +136,7 @@ describe("quest asset actions", () => {
 		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(ids[0])], [boardChannel]])
 	})
 
-	it("accepts exactly 10 MB while live", async () => {
+	it("accepts exactly 50 MiB while live", async () => {
 		await seasons.setSeasonField(ids[0], { field: "start" }, new Date(Date.now() - 1000))
 		const bytes = new Uint8Array(maxAssetBytes)
 		bytes.set(png)

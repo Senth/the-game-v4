@@ -91,7 +91,6 @@ export function QuestAsset({
 				type="file"
 				className="hidden"
 				aria-label="Upload quest image or PDF"
-				accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,image/jpeg,image/png,image/gif,image/webp,application/pdf"
 				disabled={pending !== null}
 				onChange={(event) => {
 					const file = event.currentTarget.files?.[0]

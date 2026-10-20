@@ -11,7 +11,7 @@ vi.mock("node:fs/promises", async (original) => {
 })
 
 const filename = "01234567-89ab-cdef-0123-456789abcdef.png"
-const content = Buffer.from("asset contents")
+const content = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(248, 42)])
 let assetsDir: string
 let previousAssetsDir: string | undefined
 
@@ -34,7 +34,6 @@ describe("asset file storage", () => {
 			const assetPath = await saveAsset(content, "jpg")
 			expect(assetPath).toMatch(/^\/assets\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.jpg$/)
 			const asset = resolveAssetFile(path.basename(assetPath))
-			expect(asset?.contentType).toBe("image/jpeg")
 			if (!asset) throw new Error("Saved asset filename did not resolve")
 			expect(await readFile(asset.path)).toEqual(content)
 		} finally {
@@ -92,10 +91,13 @@ afterAll(async () => {
 	else process.env.ASSETS_DIR = previousAssetsDir
 })
 
-async function getAsset(file: string) {
-	return GET(new Request(`http://localhost/assets/${encodeURIComponent(file)}`), {
-		params: Promise.resolve({ file }),
-	})
+async function getAsset(file: string, range?: string) {
+	return GET(
+		new Request(`http://localhost/assets/${encodeURIComponent(file)}`, { headers: range ? { Range: range } : {} }),
+		{
+			params: Promise.resolve({ file }),
+		},
+	)
 }
 
 describe("GET /assets/[file]", () => {
@@ -106,6 +108,8 @@ describe("GET /assets/[file]", () => {
 		expect(response.headers.get("Content-Type")).toBe("image/png")
 		expect(response.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable")
 		expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff")
+		expect(response.headers.get("Accept-Ranges")).toBe("bytes")
+		expect(response.headers.get("Content-Length")).toBe(String(content.length))
 		expect(Buffer.from(await response.arrayBuffer())).toEqual(content)
 	})
 
@@ -113,8 +117,69 @@ describe("GET /assets/[file]", () => {
 		expect((await getAsset(file)).status).toBe(404)
 	})
 
-	it("returns 404 for a bad extension", async () => {
-		expect((await getAsset("01234567-89ab-cdef-0123-456789abcdef.svg")).status).toBe(404)
+	it.each(["toolongextension", "bad-ext", "html/secret", "png\r\nX-Evil: yes"])(
+		"returns 404 for bad extension %s",
+		async (extension) => {
+			expect((await getAsset(`01234567-89ab-cdef-0123-456789abcdef.${extension}`)).status).toBe(404)
+		},
+	)
+
+	it.each([
+		["bytes=0-99", 0, 99],
+		["bytes=100-", 100, 255],
+		["bytes=-20", 236, 255],
+		["bytes=240-999", 240, 255],
+		["bytes=-999", 0, 255],
+	])("streams single range %s", async (range, start, end) => {
+		const response = await getAsset(filename, range)
+		expect(response.status).toBe(206)
+		expect(response.headers.get("Content-Range")).toBe(`bytes ${start}-${end}/${content.length}`)
+		expect(response.headers.get("Accept-Ranges")).toBe("bytes")
+		expect(response.headers.get("Content-Length")).toBe(String(end - start + 1))
+		expect(Buffer.from(await response.arrayBuffer())).toEqual(content.subarray(start, end + 1))
+	})
+
+	it.each(["bytes=256-", "bytes=100-99", "bytes=-0"])("rejects unsatisfiable range %s", async (range) => {
+		const response = await getAsset(filename, range)
+		expect(response.status).toBe(416)
+		expect(response.headers.get("Content-Range")).toBe(`bytes */${content.length}`)
+		expect(await response.text()).toBe("")
+	})
+
+	it.each(["bytes=0-9,20-29", "bytes=wat", "items=0-1"])("ignores unsupported or malformed range %s", async (range) => {
+		const response = await getAsset(filename, range)
+		expect(response.status).toBe(200)
+		expect(Buffer.from(await response.arrayBuffer())).toEqual(content)
+	})
+
+	it.each(["html", "svg", "wav", "png", "mp4"])(
+		"serves unrecognized .%s bytes only as attachment",
+		async (extension) => {
+			const assetPath = await saveAsset(Buffer.from("<html><script>alert(1)</script></html>"), extension)
+			const response = await getAsset(path.basename(assetPath))
+			expect(response.status).toBe(200)
+			expect(response.headers.get("Content-Type")).toBe("application/octet-stream")
+			expect(response.headers.get("Content-Disposition")).toContain("attachment")
+			expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff")
+			await response.body?.cancel()
+		},
+	)
+
+	it("sandboxes SVG even on partial responses", async () => {
+		const assetPath = await saveAsset(Buffer.from('\ufeff<?xml version="1.0"?><!-- drawing --><svg/>'), "svg")
+		const response = await getAsset(path.basename(assetPath), "bytes=0-9")
+		expect(response.status).toBe(206)
+		expect(response.headers.get("Content-Type")).toBe("image/svg+xml")
+		expect(response.headers.get("Content-Security-Policy")).toBe("sandbox")
+		expect(response.headers.get("Content-Disposition")).toBeNull()
+		await response.body?.cancel()
+	})
+
+	it("serves empty files and rejects their ranges", async () => {
+		const assetPath = await saveAsset(new Uint8Array(), "bin")
+		const file = path.basename(assetPath)
+		expect(await (await getAsset(file)).text()).toBe("")
+		expect((await getAsset(file, "bytes=0-")).status).toBe(416)
 	})
 
 	it("returns 404 when an allowed asset is missing", async () => {

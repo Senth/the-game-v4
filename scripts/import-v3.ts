@@ -3,7 +3,7 @@ import { loadEnvConfig } from "@next/env"
 import { saveAsset } from "@/lib/assets/files"
 import { closeDb } from "@/lib/db/client"
 import { createSeason, getSeasonForImport } from "@/lib/db/seasons"
-import { detectAssetExtension, maxAssetBytes } from "@/lib/domain/assets"
+import { assetExtension, detectAssetExtension, maxAssetBytes } from "@/lib/domain/assets"
 import { parseV3Export, type V3AssetJob } from "@/lib/domain/v3-import"
 
 type ImportSummary = { imported: number; skipped: number; warnings: string[] }
@@ -15,7 +15,7 @@ async function downloadAsset(url: string): Promise<string> {
 	const contentLength = Number(response.headers.get("content-length"))
 	if (contentLength > maxAssetBytes) {
 		await response.body?.cancel().catch(() => {})
-		throw new Error("asset exceeds 10 MB")
+		throw new Error("asset exceeds 50 MB")
 	}
 	if (!response.body) throw new Error("empty response")
 
@@ -28,14 +28,13 @@ async function downloadAsset(url: string): Promise<string> {
 		size += value.byteLength
 		if (size > maxAssetBytes) {
 			await reader.cancel().catch(() => {})
-			throw new Error("asset exceeds 10 MB")
+			throw new Error("asset exceeds 50 MB")
 		}
 		chunks.push(value)
 	}
 
 	const bytes = Buffer.concat(chunks, size)
-	const extension = detectAssetExtension(bytes)
-	if (!extension) throw new Error("disallowed asset type")
+	const extension = detectAssetExtension(bytes) ?? assetExtension(new URL(url).pathname)
 	return saveAsset(bytes, extension)
 }
 
@@ -131,7 +130,7 @@ export async function runV3Import(input: unknown, dryRun = false): Promise<Impor
 						const issues: string[] = []
 						if (!response.ok) issues.push(`HTTP ${response.status}`)
 						if (Number(response.headers.get("content-length")) > maxAssetBytes) {
-							issues.push("asset exceeds 10 MB")
+							issues.push("asset exceeds 50 MB")
 						}
 						return issues.map((issue) => `${context}: asset preflight failed for ${url} (${issue})`)
 					} catch (error) {

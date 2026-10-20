@@ -347,10 +347,16 @@ Channel access must not expose another team's private data or admin-only content
 ## Assets, migration and deployment
 
 Assets live under `ASSETS_DIR` on a Docker volume and are served by a Next route handler at
-`/assets/<uuid>.<ext>`. Allow jpg, png, gif, webp and pdf up to 10 MB. The server checks a file's
-first bytes, ignores the client MIME type and sets the extension from the detected type. Store
-JPEG files with the `.jpg` extension. Reject path traversal; serve immutable assets with
-`Cache-Control: public, max-age=31536000, immutable`.
+`/assets/<uuid>.<ext>`. Accept any file up to 50 MB, where 1 MB is 1024 × 1024 bytes.
+The server checks the first bytes, ignores the client MIME type and detects images
+(jpg, png, gif, webp, svg), PDF, audio (mp3, m4a, ogg, wav) and video (mp4, webm).
+Store JPEG files as `.jpg`. Unrecognized files keep their original lowercased extension
+when it matches `^[a-z0-9]{1,10}$`, otherwise use `.bin`. Serve unrecognized bytes as
+`application/octet-stream` with `Content-Disposition: attachment`, even with a known extension.
+Serve SVG with `Content-Security-Policy: sandbox`. Reject path traversal. All assets have
+`X-Content-Type-Options: nosniff` and `Cache-Control: public, max-age=31536000, immutable`.
+Stream responses with `Accept-Ranges: bytes`; single byte ranges return 206 and
+`Content-Range`, unsatisfiable ranges return 416.
 
 Upload, replace and remove work before start and while live. Replace saves the new file before
 deleting the old one. Remove, Replace, Remove quest and Remove arc delete a file only when no

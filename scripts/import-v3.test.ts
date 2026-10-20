@@ -1,4 +1,5 @@
-import { access, readdir, rm } from "node:fs/promises"
+import { access, readdir, readFile, rm } from "node:fs/promises"
+import path from "node:path"
 import { MongoClient } from "mongodb"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { getDb } from "@/lib/db/client"
@@ -82,7 +83,7 @@ describe("runV3Import", () => {
 		expect(preflightWarnings.join("\n")).toContain("HTTP 403")
 		expect(preflightWarnings.join("\n")).toContain("HTTP 404")
 		expect(preflightWarnings.join("\n")).toContain("network down")
-		expect(preflightWarnings.join("\n")).toContain("asset exceeds 10 MB")
+		expect(preflightWarnings.join("\n")).toContain("asset exceeds 50 MB")
 		for (const warning of preflightWarnings) expect(warning).toMatch(/Season.*arc.*quest/)
 	})
 
@@ -133,5 +134,38 @@ describe("runV3Import", () => {
 		expect(fetchStub).not.toHaveBeenCalled()
 		expect(log).toHaveBeenCalledWith(expect.stringContaining("exists, skipped"))
 		log.mockRestore()
+	})
+
+	it("imports arbitrary file types, keeps safe URL extensions and falls back to bin", async () => {
+		const bodies = ["<svg/>", "<html></html>", "RIFF1234WAVE", "\x00\x00\x00\x18ftypheic", "unknown"]
+		const names = ["map.png", "page.HTML?token=secret", "audio.wav", "image.heic", "no-extension"]
+		const extensions = ["svg", "html", "wav", "heic", "bin"]
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (url: string) => new Response(bodies[names.findIndex((name) => url.endsWith(name))])),
+		)
+		const input = {
+			game_seasons: {
+				"any-files": {
+					title: "Files",
+					order: "Ordered",
+					themes: [
+						{
+							title: "Files",
+							random: false,
+							quests: names.map((name) => ({ title: name, points: 1, asset: `https://example.com/${name}` })),
+						},
+					],
+				},
+			},
+		}
+		const result = await runV3Import(input)
+		expect(result).toMatchObject({ imported: 1, warnings: [] })
+		const season = await getSeason("any-files")
+		for (const [index, quest] of (season?.arcs[0]?.quests ?? []).entries()) {
+			expect(quest.assetPath).toMatch(new RegExp(`\\.${extensions[index]}$`))
+			expect(await readFile(path.join(assetsDir, path.basename(quest.assetPath ?? "")), "utf8")).toBe(bodies[index])
+		}
+		expect(season?.arcs[0]?.quests).toHaveLength(names.length)
 	})
 })

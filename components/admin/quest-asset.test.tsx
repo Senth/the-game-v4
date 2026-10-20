@@ -121,13 +121,11 @@ it.each(["pdf", "PDF"])("shows PDF tile and matching confirmation for .%s", (ext
 	)
 })
 
-it("keeps short filenames short and opens hidden picker with exact accept list", () => {
+it("keeps short filenames short and opens unrestricted hidden picker", () => {
 	expect(html("/assets/log.png")).toContain(">log.png</span>")
 	expect(input().props.type).toBe("file")
 	expect(input().props.className).toBe("hidden")
-	expect(input().props.accept).toBe(
-		".jpg,.jpeg,.png,.gif,.webp,.pdf,image/jpeg,image/png,image/gif,image/webp,application/pdf",
-	)
+	expect(input().props.accept).toBeUndefined()
 	const click = vi.fn()
 	input().props.ref.current = { click }
 	controls().at(-2).props.onClick()
@@ -135,16 +133,23 @@ it("keeps short filenames short and opens hidden picker with exact accept list",
 	expect(click).toHaveBeenCalledTimes(2)
 })
 
-it.each([
-	[new File(["<svg/>"], "map.svg"), "map.svg is not jpg, png, gif, webp or pdf."],
-	[new File([new Uint8Array(maxAssetBytes + 1)], "scan.pdf"), "scan.pdf is 10.0 MB. The limit is 10 MB."],
-])("rejects invalid client file before action and announces exact error", async (file, error) => {
+it.each([[new File([new Uint8Array(maxAssetBytes + 1)], "scan.pdf"), "scan.pdf is 50.0 MB. The limit is 50 MB."]])(
+	"rejects invalid client file before action and announces exact error",
+	async (file, error) => {
+		view()
+		await handle.current?.upload(file)
+		expect(uploadQuestAsset).not.toHaveBeenCalled()
+		expect(props.onChange).not.toHaveBeenCalled()
+		expect(html()).toContain('role="alert" class="mt-1.5 font-cond text-xs text-warn"')
+		expect(html()).toContain(error)
+	},
+)
+
+it("passes SVG and arbitrary files to server validation", async () => {
 	view()
-	await handle.current?.upload(file)
-	expect(uploadQuestAsset).not.toHaveBeenCalled()
-	expect(props.onChange).not.toHaveBeenCalled()
-	expect(html()).toContain('role="alert" class="mt-1.5 font-cond text-xs text-warn"')
-	expect(html()).toContain(error)
+	await handle.current?.upload(new File(["<svg/>"], "map.svg"))
+	await handle.current?.upload(new File(["<html/>"], "page.html"))
+	expect(uploadQuestAsset).toHaveBeenCalledTimes(2)
 })
 
 it("disables both controls while uploading, ignores duplicate requests and reports success", async () => {
