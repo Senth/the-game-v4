@@ -41,6 +41,7 @@ export async function createSeasonTeam(
 			passwordHash: await hashPassword(password),
 			seasonId: season._id,
 			questOrder: season.start && season.start <= now ? buildQuestOrder(season) : [],
+			...(season.start && season.start <= now ? { reachedAt: now } : {}),
 			questIndex: 0,
 			score: 0,
 			completed: false,

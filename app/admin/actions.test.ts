@@ -50,6 +50,8 @@ describe("createSeasonAction", () => {
 			end: null,
 			shuffleArcs: false,
 			registrationOpen: false,
+			finisherBonuses: [],
+			finishers: [],
 			arcs: [],
 		})
 		await expect(result).rejects.toMatchObject({ digest: expect.stringContaining(`;/admin/seasons/${season?._id};`) })

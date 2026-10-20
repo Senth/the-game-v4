@@ -99,7 +99,15 @@ describe("loadGame", () => {
 				? { lifecycleState: "completed", score: 0 }
 				: { lifecycleState: "running", quest: { id: next }, score: 0, total: 1 },
 		)
-		expect(await getTeam(team._id)).toEqual(team)
+		expect(await getTeam(team._id)).toMatchObject({
+			questOrder: last ? [] : [next],
+			completed: last,
+		})
+		if (last) {
+			expect((await (await collections()).seasons.findOne({ _id: gapSeason._id }))?.finishers).toEqual([
+				{ teamId: team._id, place: 1, points: 0, at: expect.any(Date) },
+			])
+		}
 	})
 
 	it("returns waiting for a seasonless team", async () => {

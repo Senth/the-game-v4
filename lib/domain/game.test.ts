@@ -54,6 +54,8 @@ const arc = (id: string, questIds: string[], shuffleQuests = false): Arc => ({
 })
 
 const season = (arcs: Arc[], shuffleArcs = false): Season => ({
+	finisherBonuses: [],
+	finishers: [],
 	_id: "s1",
 	title: "Cipher Night",
 	lengthMinutes: 120,
@@ -825,10 +827,16 @@ describe("applyStructuralEdit", () => {
 
 	it("skips a deleted current quest with 0 points and keeps its revealed hints", () => {
 		const { frozen, original } = frozenCopy([onQ2])
-		const { teams, affected, impact } = applyStructuralEdit(frozen, { kind: "deleteQuest", questIds: ["q2"] })
+		const reachedAt = new Date("2026-10-20T18:10:00Z")
+		const { teams, affected, impact } = applyStructuralEdit(
+			frozen,
+			{ kind: "deleteQuest", questIds: ["q2"] },
+			Math.random,
+			reachedAt,
+		)
 		expect(affected).toEqual(["on-q2"])
 		expect(impact).toEqual({ kind: "deleteQuest", onIt: ["on-q2"], notReached: [], solved: 0 })
-		expect(teams[0]).toMatchObject({ questOrder: ["q1", "q3"], questIndex: 1, completed: false, score: 10 })
+		expect(teams[0]).toMatchObject({ questOrder: ["q1", "q3"], questIndex: 1, completed: false, score: 10, reachedAt })
 		expect(teams[0]?.progress).toEqual([
 			{ questId: "q1", solvedAt, hintsRevealed: [], pointsEarned: 10 },
 			{ questId: "q2", hintsRevealed: [snapshot], pointsEarned: 0 },

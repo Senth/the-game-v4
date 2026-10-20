@@ -35,6 +35,8 @@ function season(
 	arcs: Season["arcs"] = [],
 ): Season {
 	return {
+		finisherBonuses: [],
+		finishers: [],
 		_id,
 		title,
 		lengthMinutes: 60,

@@ -21,6 +21,8 @@ const hidden = {
 }
 const visible = { ...newQuest(), id: "visible-quest", hidden: false }
 const season: Season = {
+	finisherBonuses: [],
+	finishers: [],
 	_id: "season",
 	title: "Season",
 	lengthMinutes: 60,

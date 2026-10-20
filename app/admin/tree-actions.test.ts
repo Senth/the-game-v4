@@ -352,6 +352,10 @@ describe("live structural actions", () => {
 
 	it("keeps concurrent solve and remove consistent through the actions", async () => {
 		await setup(now)
+		await (await collections()).seasons.updateOne(
+			{ _id: ids[0] },
+			{ $push: { "arcs.0.quests": { ...newQuest(), id: "next" } } },
+		)
 		await seasons.setSeasonField(ids[0], { arcId: ids[1], questId: ids[2], field: "answers" }, ["lamp"])
 		await seasons.setSeasonField(ids[0], { arcId: ids[1], questId: ids[2], field: "points" }, 20)
 		const team = await playing("Ninjas")
@@ -362,6 +366,7 @@ describe("live structural actions", () => {
 			expect(stored).toEqual({
 				...team,
 				questIndex: 1,
+				reachedAt: now,
 				score: 20,
 				progress: [{ questId: ids[2], solvedAt: now, pointsEarned: 20, hintsRevealed: [] }],
 			})
@@ -370,6 +375,7 @@ describe("live structural actions", () => {
 			expect(stored).toEqual({
 				...team,
 				questOrder: ["next"],
+				reachedAt: now,
 				progress: [{ questId: ids[2], hintsRevealed: [], pointsEarned: 0 }],
 			})
 		}
@@ -426,7 +432,7 @@ describe("live structural actions", () => {
 			const unbuilt = await playing("Unbuilt", { questOrder: [] })
 			const other = await playing("Other season", { seasonId: "other" })
 			expect(await (kind === "quest" ? removeQuest(...ids) : removeArc(ids[0], ids[1]))).toEqual({ ok: true })
-			expect(await getTeam(onIt._id)).toEqual({ ...onIt, questOrder: ["next"] })
+			expect(await getTeam(onIt._id)).toEqual({ ...onIt, questOrder: ["next"], reachedAt: now })
 			expect(await getTeam(future._id)).toEqual({ ...future, questOrder: ["next"] })
 			for (const team of [solved, unbuilt, other]) expect(await getTeam(team._id)).toEqual(team)
 			expect(vi.mocked(publish).mock.calls).toEqual([

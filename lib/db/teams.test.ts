@@ -131,6 +131,7 @@ describe("teams", () => {
 			expect(await getTeam(_id)).toMatchObject({
 				score: 50,
 				questIndex: 1,
+				reachedAt: solvedAt,
 				completed: false,
 				progress: [{ questId: "q1", solvedAt, hintsRevealed: [], pointsEarned: 50 }],
 			})
@@ -187,6 +188,7 @@ describe("teams", () => {
 					expect(stored).toEqual({
 						...input,
 						questIndex: 1,
+						reachedAt: hint.revealedAt,
 						score: 50,
 						progress: [{ questId: "q1", solvedAt: hint.revealedAt, pointsEarned: 50, hintsRevealed: [] }],
 					})
@@ -195,6 +197,7 @@ describe("teams", () => {
 					expect(stored).toEqual({
 						...input,
 						questOrder: ["q2"],
+						reachedAt: expect.any(Date),
 						progress: [{ questId: "q1", hintsRevealed: [hint], pointsEarned: 0 }],
 					})
 				}
@@ -211,6 +214,7 @@ describe("teams", () => {
 			expect(await getTeam(input._id)).toEqual({
 				...input,
 				questOrder: ["q2"],
+				reachedAt: expect.any(Date),
 				progress: [{ questId: "q1", hintsRevealed: [], pointsEarned: 0 }],
 			})
 		})
@@ -228,6 +232,8 @@ describe("teams", () => {
 describe("fillQuestOrders", () => {
 	function season(): Season {
 		return {
+			finisherBonuses: [],
+			finishers: [],
 			_id: crypto.randomUUID(),
 			title: "Order fill",
 			start: new Date("2026-10-24T17:00:00Z"),
@@ -270,7 +276,7 @@ describe("fillQuestOrders", () => {
 		for (const original of teams) {
 			const filled = stored.find((value) => value._id === original._id)
 			expect(filled?.questOrder.toSorted()).toEqual(["a1-q1", "a1-q2", "a2-q1", "a2-q2"])
-			expect(filled).toEqual({ ...original, questOrder: filled?.questOrder })
+			expect(filled).toEqual({ ...original, questOrder: filled?.questOrder, reachedAt: expect.any(Date) })
 		}
 		expect(await fillQuestOrders(input, teams)).toBe(false)
 		expect({ input, teams }).toEqual(before)

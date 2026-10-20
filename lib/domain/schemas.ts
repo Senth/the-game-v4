@@ -36,6 +36,14 @@ export const Arc = z.object({
 })
 export type Arc = z.infer<typeof Arc>
 
+export const Finisher = z.object({
+	teamId: id,
+	place: z.number().int().positive(),
+	points: z.number().int().min(0).max(10000),
+	at: z.date(),
+})
+export type Finisher = z.infer<typeof Finisher>
+
 export const Season = z.object({
 	_id: id,
 	title: z.string(),
@@ -44,6 +52,8 @@ export const Season = z.object({
 	end: z.date().nullable(),
 	shuffleArcs: z.boolean(),
 	registrationOpen: z.boolean().default(false),
+	finisherBonuses: z.array(z.number().int().min(0).max(10000)).default([]),
+	finishers: z.array(Finisher).default([]),
 	arcs: z.array(Arc),
 })
 export type Season = z.infer<typeof Season>
@@ -58,7 +68,7 @@ export const ArcInput = Arc.extend({ quests: z.array(QuestInput) })
 export type ArcInput = z.infer<typeof ArcInput>
 
 export const SeasonInput = Season.extend({ arcs: z.array(ArcInput) })
-export type SeasonInput = z.infer<typeof SeasonInput>
+export type SeasonInput = z.input<typeof SeasonInput>
 
 export const RevealedHint = z.object({
 	hintId: id,
@@ -83,6 +93,9 @@ export const Team = z.object({
 	seasonId: id.nullable(),
 	questOrder: z.array(id),
 	questIndex: z.number().int().min(0),
+	reachedAt: z.date().optional(),
+	// Missing is legacy; false is pending, true is set atomically with the score award.
+	finisherBonusApplied: z.boolean().optional(),
 	score: z.number(),
 	completed: z.boolean(),
 	progress: z.array(TeamQuestProgress),
@@ -97,7 +110,7 @@ export const Admin = z.object({
 export type Admin = z.infer<typeof Admin>
 
 export function withHintIds(season: SeasonInput): Season {
-	return {
+	return Season.parse({
 		...season,
 		arcs: season.arcs.map((arc) => ({
 			...arc,
@@ -106,5 +119,5 @@ export function withHintIds(season: SeasonInput): Season {
 				hints: quest.hints.map((hint) => ({ ...hint, id: hint.id ?? crypto.randomUUID() })),
 			})),
 		})),
-	}
+	})
 }

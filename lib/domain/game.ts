@@ -326,7 +326,7 @@ export type StructuralEditImpact =
 	| { kind: "addQuest"; added: string[]; completed: number }
 	| { kind: "deleteQuest"; onIt: string[]; notReached: string[]; solved: number }
 
-type EditableTeam = Pick<Team, "_id" | "name" | "questOrder" | "questIndex" | "completed" | "progress">
+type EditableTeam = Pick<Team, "_id" | "name" | "questOrder" | "questIndex" | "completed" | "progress" | "reachedAt">
 
 type TeamEditOutcome = "added" | "completed" | "onIt" | "notReached" | "solved" | "unchanged"
 
@@ -334,6 +334,7 @@ function editTeam<T extends EditableTeam>(
 	team: T,
 	edit: StructuralEdit,
 	random: () => number,
+	now: Date,
 ): { team: T | null; outcome: TeamEditOutcome } {
 	const { questOrder, questIndex } = team
 	if (edit.kind === "addQuest") {
@@ -353,6 +354,7 @@ function editTeam<T extends EditableTeam>(
 				...team,
 				questOrder: remaining,
 				completed: questIndex >= remaining.length,
+				...(questIndex < remaining.length ? { reachedAt: now } : {}),
 				progress: [
 					...team.progress.filter((entry) => entry !== skipped),
 					{ questId: currentQuestId, hintsRevealed: skipped?.hintsRevealed ?? [], pointsEarned: 0 },
@@ -385,6 +387,7 @@ export function applyStructuralEdit<T extends EditableTeam>(
 	teams: T[],
 	edit: StructuralEdit,
 	random: () => number = Math.random,
+	now = new Date(),
 ): { teams: T[]; affected: string[]; impact: StructuralEditImpact } {
 	const affected: string[] = []
 	const impact: StructuralEditImpact =
@@ -392,7 +395,7 @@ export function applyStructuralEdit<T extends EditableTeam>(
 			? { kind: "addQuest", added: [], completed: 0 }
 			: { kind: "deleteQuest", onIt: [], notReached: [], solved: 0 }
 	const edited = teams.map((team) => {
-		const { team: changed, outcome } = editTeam(team, edit, random)
+		const { team: changed, outcome } = editTeam(team, edit, random, now)
 		if (impact.kind === "addQuest") {
 			if (outcome === "added") impact.added.push(team.name)
 			if (outcome === "completed") impact.completed++
