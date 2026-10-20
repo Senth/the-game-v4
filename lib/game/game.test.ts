@@ -94,7 +94,8 @@ describe("loadGame", () => {
 			score: 0,
 			progress: ninjas.progress.filter((entry) => entry.questId === current),
 		})
-		expect(await loadGame(team, now)).toMatchObject(
+		const game = await loadGame(team, now)
+		expect(game).toMatchObject(
 			last
 				? { lifecycleState: "completed", score: 0 }
 				: { lifecycleState: "running", quest: { id: next }, score: 0, total: 1 },
@@ -104,6 +105,7 @@ describe("loadGame", () => {
 			completed: last,
 		})
 		if (last) {
+			expect(game).toHaveProperty("finishers", [{ teamId: team._id, name: team.name, place: 1, points: 0 }])
 			expect((await (await collections()).seasons.findOne({ _id: gapSeason._id }))?.finishers).toEqual([
 				{ teamId: team._id, place: 1, points: 0, at: expect.any(Date) },
 			])
@@ -131,7 +133,14 @@ describe("loadGame", () => {
 		await setTeamField(team._id, "completed", team.completed)
 		try {
 			const game = await loadGame(team, season.end as Date)
-			expect(game).toEqual({ lifecycleState: state, score: team.score, rank: 7, teamCount: 10 })
+			expect(game).toEqual({
+				lifecycleState: state,
+				teamId: team._id,
+				finishers: [],
+				score: team.score,
+				rank: 7,
+				teamCount: 10,
+			})
 			expect(JSON.stringify(game)).not.toContain("secret-")
 		} finally {
 			await setTeamField(team._id, "completed", false)

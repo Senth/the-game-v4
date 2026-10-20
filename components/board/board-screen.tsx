@@ -45,7 +45,7 @@ export function BoardScreen({
 				<main className="flex h-full flex-col px-20 pt-10 pb-10">
 					<div className="flex min-h-0 flex-1 flex-col">
 						<h1 className="mb-4 shrink-0 font-cond text-[28px] text-muted uppercase tracking-wider">{board.title}</h1>
-						<BoardList rows={board.rows} />
+						<BoardList rows={board.rows} finishers={board.finishers} />
 					</div>
 					<div className="shrink-0">
 						{board.view === "running" ? (

@@ -1,5 +1,6 @@
 "use client"
 
+import type { PlayerFinisher } from "@/lib/domain/finishers"
 import type { PaceBand, PlayerQuest, RailArc, StripEntry } from "@/lib/domain/game"
 import { AnswerDock, type AnswerFeedback } from "./answer-dock"
 import { GameHeader } from "./game-header"
@@ -11,6 +12,7 @@ type GameViewProps = {
 	pace: { band: PaceBand; label: string } | null
 	rail: RailArc[]
 	strip?: StripEntry[]
+	finishers?: PlayerFinisher[]
 	quest: PlayerQuest | null
 } & (
 	| { preview: true | "team" }
@@ -38,6 +40,7 @@ export function GameView(props: GameViewProps) {
 				pace={props.preview === true ? null : pace}
 				rail={rail}
 				strip={props.preview === true ? undefined : strip}
+				finishers={props.finishers}
 				preview={props.preview === "team"}
 			/>
 			<main className="mx-auto max-w-2xl px-4 pt-5 pb-[calc(var(--spacing)*40+env(safe-area-inset-bottom))]">

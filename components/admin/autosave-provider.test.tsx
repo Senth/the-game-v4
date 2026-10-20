@@ -250,6 +250,7 @@ it.each(["direct", "via placeholder"])(
 			start: new Date(now - 60_000),
 			end: new Date(now + 60_000),
 			lengthMinutes: 2,
+			finishers: [],
 			arcs: [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [quest, next] }],
 		}
 		const layout = scope()

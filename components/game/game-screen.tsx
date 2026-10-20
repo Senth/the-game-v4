@@ -124,6 +124,7 @@ export function GameScreen({
 			pace={pace && { band: pace.band, label: paceLabel(pace.n) }}
 			rail={game.rail}
 			strip={game.strip}
+			finishers={game.finishers}
 			quest={game.quest}
 			answer={answer}
 			onAnswerChange={setAnswer}

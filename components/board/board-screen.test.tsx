@@ -55,7 +55,7 @@ const running = publicBoard([fixture.season], { [fixture.season._id]: teams }, n
 	{ view: "running" }
 >
 const props = { initial: running, initialNow: now.getTime(), channels: ["board"] }
-const final: PublicBoard = { view: "final", title: running.title, rows: running.rows, nextStart: null }
+const final: PublicBoard = { view: "final", title: running.title, rows: running.rows, finishers: [], nextStart: null }
 const rowsFor = (count: number) =>
 	Array.from({ length: count }, (_, index) => ({
 		...(running.rows[index % running.rows.length] as (typeof running.rows)[number]),
@@ -196,7 +196,13 @@ describe("BoardScreen", () => {
 
 	it("refetches at end without an event", async () => {
 		const initial = { ...running, end: new Date(now.getTime() + 1000), nextStart: new Date(now.getTime() + 2000) }
-		const final: PublicBoard = { view: "final", title: running.title, rows: running.rows, nextStart: null }
+		const final: PublicBoard = {
+			view: "final",
+			title: running.title,
+			rows: running.rows,
+			finishers: [],
+			nextStart: null,
+		}
 		vi.mocked(getBoard).mockResolvedValue(final)
 		mount(initial)
 		await vi.advanceTimersByTimeAsync(999)
@@ -233,7 +239,9 @@ describe("BoardScreen", () => {
 	it.each(["final", "idle"] as const)("adapts %s nextStart to countdown clock", async (view) => {
 		const nextStart = new Date(now.getTime() + 1000)
 		const initial: PublicBoard =
-			view === "idle" ? { view, nextStart } : { view, nextStart, rows: running.rows, title: running.title }
+			view === "idle"
+				? { view, nextStart }
+				: { view, nextStart, rows: running.rows, title: running.title, finishers: [] }
 		vi.mocked(getBoard).mockResolvedValue(running)
 		mount(initial)
 		expect(render(initial)).toContain(view === "idle" ? ">No game running<" : ">Final<")
@@ -277,7 +285,8 @@ describe("BoardList", () => {
 	it("truncates long names in narrower shrinkable two-column children", () => {
 		const name = "VeryLongTeamName".repeat(10)
 		const html = renderToStaticMarkup(<BoardList rows={rowsFor(14).map((row) => ({ ...row, name }))} />)
-		expect(html).toContain('class="w-[15rem] min-w-0 truncate text-4xl text-ink"')
+		expect(html).toContain('class="w-[15rem] flex min-w-0 items-center gap-2 text-4xl text-ink"')
+		expect(html).toContain('class="truncate"')
 		expect(html).toContain(name)
 	})
 })

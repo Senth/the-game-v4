@@ -35,8 +35,8 @@ describe("LifecycleScreen", () => {
 	it.each<LifecycleGame>([
 		{ lifecycleState: "waiting" },
 		{ lifecycleState: "countdown", start: new Date(now.getTime() + 60_000) },
-		{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 },
-		{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 },
+		{ lifecycleState: "completed", teamId: "team", finishers: [], score: 120, rank: 1, teamCount: 10 },
+		{ lifecycleState: "ended", teamId: "team", finishers: [], score: 64, rank: 7, teamCount: 10 },
 	])("keeps $lifecycleState previews inert even with a QR slot", (game) => {
 		const html = renderToStaticMarkup(<LifecycleScreen game={game} now={now} qr={<div>Test QR slot</div>} preview />)
 		expect(html).not.toContain("Test QR slot")
@@ -48,8 +48,18 @@ describe("LifecycleScreen", () => {
 		[{ lifecycleState: "waiting" }, "The game hasn&#x27;t been scheduled yet.", null, true],
 		[{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000) }, "The game starts in", "4:32", true],
 		[{ lifecycleState: "countdown", start: now }, "The game is starting…", null, true],
-		[{ lifecycleState: "completed", score: 120, rank: 1, teamCount: 10 }, "You solved every quest.", "120p", false],
-		[{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 }, "Time&#x27;s up.", "64p", false],
+		[
+			{ lifecycleState: "completed", teamId: "team", finishers: [], score: 120, rank: 1, teamCount: 10 },
+			"You solved every quest.",
+			"120p",
+			false,
+		],
+		[
+			{ lifecycleState: "ended", teamId: "team", finishers: [], score: 64, rank: 7, teamCount: 10 },
+			"Time&#x27;s up.",
+			"64p",
+			false,
+		],
 	])("renders $0.lifecycleState with sentence first, value second and bottom logout", (game, sentence, value, qr) => {
 		const html = renderToStaticMarkup(<LifecycleScreen game={game} now={now} qr={<div>Test QR slot</div>} />)
 		expect(html).toContain(sentence)
@@ -79,7 +89,10 @@ describe("LifecycleScreen", () => {
 				[7, "7th"],
 			] as const) {
 				const html = renderToStaticMarkup(
-					<LifecycleScreen game={{ lifecycleState, score: 64, rank, teamCount: 10 }} now={now} />,
+					<LifecycleScreen
+						game={{ lifecycleState, teamId: "team", finishers: [], score: 64, rank, teamCount: 10 }}
+						now={now}
+					/>,
 				)
 				expect(html).toContain(
 					`font-cond text-3xl font-bold text-head">${place} <span class="text-lg font-medium text-muted">of 10</span>`,

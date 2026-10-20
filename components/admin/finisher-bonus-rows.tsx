@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { addFinisherBonus, removeLastFinisherBonus } from "@/app/admin/autosave-actions"
 import { inputClass, labelClass } from "@/components/auth-form"
+import { FinishFlag } from "@/components/finish-flag"
 import { ordinal } from "@/lib/domain/game"
 import type { Season } from "@/lib/domain/schemas"
 import { useAutosaveField } from "./autosave-provider"
@@ -82,20 +83,7 @@ export function FinisherBonusRows({
 									<span className="ml-2">p</span>
 								</span>
 								<span className="flex min-w-0 items-center gap-2">
-									<svg
-										aria-label="Finished"
-										role="img"
-										viewBox="0 0 20 20"
-										fill="none"
-										className="h-4 w-4 shrink-0 text-pace-ok"
-									>
-										<path
-											d="M4 17V3m0 0h11l-3 4 3 4H4"
-											stroke="currentColor"
-											strokeWidth="1.5"
-											strokeLinejoin="round"
-										/>
-									</svg>
+									<FinishFlag />
 									<span className="truncate text-muted">
 										{teams.find((team) => team._id === finisher.teamId)?.name ?? "Deleted team"}
 									</span>

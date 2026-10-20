@@ -1,6 +1,8 @@
 "use client"
 
 import { Fragment } from "react"
+import { FinishFlag } from "@/components/finish-flag"
+import { ordinal } from "@/lib/domain/game"
 import { teamHistory } from "@/lib/domain/team-history"
 import { useSeasonClock } from "./use-season-clock"
 
@@ -36,6 +38,24 @@ export function TeamHistory({
 		state.kind === "running" ? paceColors[state.band] : state.kind === "finished" ? "text-pace-ok" : "text-muted"
 	const groups = [
 		...history.arcs.map((arc) => ({ ...arc, id: `arc-${arc.id}`, removed: false })),
+		...(history.bonus
+			? [
+					{
+						id: "bonus",
+						title: "Finisher bonus",
+						removed: false,
+						quests: [
+							{
+								id: "bonus",
+								label: `Finished ${ordinal(history.bonus.place)}`,
+								status: "bonus" as const,
+								pointsEarned: history.bonus.points,
+								hints: [],
+							},
+						],
+					},
+				]
+			: []),
 		...(history.removed.length
 			? [
 					{
@@ -87,7 +107,9 @@ export function TeamHistory({
 								className={`grid grid-cols-[1rem_minmax(0,1fr)_auto] gap-x-3 px-4 py-3 ${quest.status === "current" ? "bg-accent/10" : group.quests[index + 1]?.status === "current" ? "" : "border-b border-z1 last:border-0"}`}
 							>
 								<span className="flex justify-center items-center h-6">
-									{quest.status === "solved" ? (
+									{quest.status === "bonus" ? (
+										<FinishFlag points={quest.pointsEarned} />
+									) : quest.status === "solved" ? (
 										<span role="img" className="text-pace-ok" aria-label="Solved">
 											✓
 										</span>
@@ -113,8 +135,8 @@ export function TeamHistory({
 									{quest.label ?? "Untitled quest"}
 								</span>
 								<span className="font-cond text-sm text-right tabular-nums leading-6 whitespace-nowrap">
-									{quest.status === "solved" ? (
-										<span className="text-head font-bold">
+									{quest.status === "solved" || quest.status === "bonus" ? (
+										<span className={`${quest.status === "bonus" ? "text-pace-ok" : "text-head"} font-bold`}>
 											{quest.pointsEarned >= 0 ? "+" : ""}
 											{quest.pointsEarned}p
 										</span>

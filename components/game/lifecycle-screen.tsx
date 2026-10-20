@@ -2,7 +2,9 @@
 
 import Link from "next/link"
 import { type ReactNode, useEffect, useState } from "react"
+import { FinishFlag } from "@/components/finish-flag"
 import { LogOutButton } from "@/components/log-out-button"
+import { ordinal } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { lifecycleView } from "./lifecycle"
 
@@ -21,6 +23,10 @@ export function LifecycleScreen({
 	useEffect(() => setMounted(true), [])
 	const view = lifecycleView(game, now)
 	const value = view.value
+	const finisher =
+		game.lifecycleState === "completed"
+			? game.finishers.find((entry) => entry.teamId === game.teamId && entry.points > 0)
+			: null
 	let text = value?.text
 	if (mounted && value?.kind === "countdown" && value.band !== "under-24-hours") {
 		text = value.date.toLocaleString(undefined, {
@@ -40,6 +46,12 @@ export function LifecycleScreen({
 						<p className="mt-3 min-h-18 font-cond text-7xl font-bold text-ink tabular-nums text-balance">{text}</p>
 					)}
 					{view.helper && <p className="mt-3 font-cond text-sm text-muted">{view.helper}</p>}
+					{finisher && (
+						<p className="mt-3 flex items-center justify-center gap-1 font-cond text-sm text-pace-ok">
+							<FinishFlag points={finisher.points} />
+							{finisher.place === 1 ? "First" : ordinal(finisher.place)} to finish · +{finisher.points}p
+						</p>
+					)}
 					{value?.kind === "score" && (
 						<>
 							<p className="mt-3 font-cond text-3xl font-bold text-head">

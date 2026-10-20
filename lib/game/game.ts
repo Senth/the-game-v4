@@ -57,6 +57,7 @@ async function fillEmptyQuestOrders(season: Season | null, teams: Team[], now: D
 export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame> {
 	if (!team.seasonId) return playerGame(null, team, [], now)
 	const [season, listed] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
+	let freshSeason = season
 	let teams = await fillEmptyQuestOrders(season, listed, now)
 	let current = teams.find((candidate) => candidate._id === team._id) ?? team
 	if (season && lifecycleState(season, current, now) === "running") {
@@ -86,6 +87,7 @@ export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame
 				}
 			})
 			teams = await listTeams(season._id)
+			freshSeason = await getSeason(season._id)
 			current = teams.find((candidate) => candidate._id === team._id) ?? current
 		}
 	}
@@ -97,8 +99,9 @@ export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame
 		teams = await listTeams(season._id)
 		current = teams.find((candidate) => candidate._id === team._id) ?? current
 		publishTeamChange(current._id, season._id)
+		freshSeason = await getSeason(season._id)
 	}
-	return playerGame(season, current, teams, now)
+	return playerGame(freshSeason, current, teams, now)
 }
 
 export async function loadStandings(team: Team, now = new Date()): Promise<PlayerStandings> {

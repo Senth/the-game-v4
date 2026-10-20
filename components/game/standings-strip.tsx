@@ -1,7 +1,17 @@
 import Link from "next/link"
+import { FinishFlag } from "@/components/finish-flag"
+import type { PlayerFinisher } from "@/lib/domain/finishers"
 import type { StripEntry } from "@/lib/domain/game"
 
-export function StandingsStrip({ strip, preview = false }: { strip: StripEntry[]; preview?: boolean }) {
+export function StandingsStrip({
+	strip,
+	finishers = [],
+	preview = false,
+}: {
+	strip: StripEntry[]
+	finishers?: PlayerFinisher[]
+	preview?: boolean
+}) {
 	const content = (
 		<span className="mx-auto flex min-h-11 max-w-2xl items-center gap-1 overflow-hidden whitespace-nowrap px-2.5 font-cond text-[13px]">
 			{strip.map((entry) =>
@@ -16,6 +26,9 @@ export function StandingsStrip({ strip, preview = false }: { strip: StripEntry[]
 					>
 						<span className="shrink-0 text-[11px] text-muted">{entry.rank}</span>
 						<span className="truncate text-ink">{entry.name}</span>
+						{finishers.some((finisher) => finisher.teamId === entry.id) && (
+							<FinishFlag className="h-3 w-3 self-center" />
+						)}
 						<span className="shrink-0 font-bold tabular-nums text-head">{entry.score}</span>
 					</span>
 				),

@@ -1,5 +1,19 @@
 import type { Season, Team } from "./schemas"
 
+export type PlayerFinisher = { teamId: string; name: string; place: number; points: number }
+
+export function playerFinishers(
+	season: Pick<Season, "finishers">,
+	teams: Pick<Team, "_id" | "name">[],
+): PlayerFinisher[] {
+	return (season.finishers ?? []).map(({ teamId, place, points }) => ({
+		teamId,
+		name: teams.find((team) => team._id === teamId)?.name ?? "Deleted team",
+		place,
+		points,
+	}))
+}
+
 export function bonusForPlace(bonuses: readonly number[], place: number): number {
 	return bonuses[place - 1] ?? 0
 }
