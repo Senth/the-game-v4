@@ -118,10 +118,11 @@ mkdir -p .tmp/v3-archive
 pnpm export:v3 --project <gcp-id> --collection <collection> --out .tmp/v3-archive/<collection>.json
 ```
 
-On fenrir, copy the export into the app container, then dry-run the import:
+On fenrir, stream the export as the app container's user, then dry-run the import.
+The container copy is private to that user, who can read and remove it:
 
 ```sh
-docker cp .tmp/v3-export.json the-game-app-1:/tmp/v3-export.json
+docker exec -i the-game-app-1 sh -c 'umask 077; cat > /tmp/v3-export.json' < .tmp/v3-export.json
 docker exec -it the-game-app-1 node scripts/import-v3.mjs /tmp/v3-export.json --dry-run
 ```
 
