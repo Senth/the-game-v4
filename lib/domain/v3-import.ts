@@ -29,7 +29,7 @@ const V3Quest = z.object({
 	points: z.unknown(),
 	asset: z.string().optional(),
 	imageUrl: z.string().optional(),
-	hints: z.array(z.object({ text: z.string().default(""), points: z.number().optional() })).default([]),
+	hints: z.array(z.object({ text: z.string().default(""), points: z.unknown().optional() })).default([]),
 })
 
 const V3Season = z.object({
@@ -121,9 +121,11 @@ export function parseV3Export(input: unknown): {
 							hints: quest.hints
 								.filter((hint) => hint.text.trim())
 								.map((hint) => {
-									const original = z.number().parse(hint.points)
-									const points = Math.min(10000, Math.max(0, original))
-									if (points !== original) warn(`clamped hint points ${original} to ${points}`)
+									const original = hint.points
+									const validNumber = typeof original === "number" && Number.isFinite(original)
+									const points = validNumber ? Math.min(10000, Math.max(0, original)) : 0
+									if (!validNumber) warn(`invalid hint points ${String(original)}; using 0`)
+									else if (points !== original) warn(`clamped hint points ${original} to ${points}`)
 									return { id: crypto.randomUUID(), text: hint.text, points }
 								}),
 						}

@@ -92,6 +92,35 @@ describe("QuestContent", () => {
 		expect(html).toContain("Open PDF</a>")
 		expect(html).not.toContain("<img")
 	})
+
+	it.each([false, true])("renders each asset kind with inert preview=%s", (preview) => {
+		for (const extension of ["jpg", "png", "svg", "pdf", "mp3", "m4a", "ogg", "wav", "mp4", "webm", "zip", "bin"]) {
+			const assetPath = `/assets/clue.${extension}`
+			const html = renderToStaticMarkup(<QuestContent quest={{ ...quest, assetPath }} preview={preview} />)
+			expect(html.includes('inert=""')).toBe(preview)
+			if (["jpg", "png", "svg"].includes(extension)) {
+				expect(html).toContain(`<img src="${assetPath}"`)
+			} else if (extension === "pdf") {
+				expect(html).toContain(`Open PDF</${preview ? "span" : "a"}>`)
+				expect(html.includes(`href="${assetPath}"`)).toBe(!preview)
+			} else if (["mp3", "m4a", "ogg", "wav"].includes(extension)) {
+				expect(html).toContain(`<audio`)
+				expect(html).toContain(`src="${assetPath}"`)
+				expect(html).toContain('preload="metadata"')
+				expect(html).toContain('aria-label="Play audio"')
+				expect(html).toContain('type="range"')
+			} else if (["mp4", "webm"].includes(extension)) {
+				expect(html).toContain(`<video src="${assetPath}" controls="" preload="metadata"`)
+				expect(html).toContain("max-h-[70vh] w-full rounded-md")
+			} else {
+				expect(html).toContain(`↓ Download ${extension === "bin" ? "file" : "ZIP"}</${preview ? "span" : "a"}>`)
+				expect(html.includes(`href="${assetPath}"`)).toBe(!preview)
+				expect(html.includes('download=""')).toBe(!preview)
+				expect(html).toContain("h-11 w-full")
+			}
+			if (!["jpg", "png", "svg"].includes(extension)) expect(html).not.toContain("<img")
+		}
+	})
 })
 
 describe("G2 header and strip", () => {

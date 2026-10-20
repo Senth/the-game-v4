@@ -6,8 +6,8 @@ const nextConfig: NextConfig = {
 		"/*": ["./*.{ts,tsx}", "./{app,components,lib,scripts}/**/*.{ts,tsx}"],
 	},
 	experimental: {
-		serverActions: { bodySizeLimit: "11mb" },
-		proxyClientMaxBodySize: "11mb",
+		serverActions: { bodySizeLimit: "51mb" },
+		proxyClientMaxBodySize: "51mb",
 	},
 }
 

@@ -5,7 +5,7 @@ import { deleteAssetFile, saveAsset } from "@/lib/assets/files"
 import { releaseAsset } from "@/lib/assets/release"
 import { requireAdmin } from "@/lib/auth/guards"
 import { setQuestAsset } from "@/lib/db/seasons"
-import { detectAssetExtension, maxAssetBytes, sizeError, typeError } from "@/lib/domain/assets"
+import { assetExtension, detectAssetExtension, maxAssetBytes, sizeError } from "@/lib/domain/assets"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
 import { type ActionResult, actionFailure } from "./action-result"
 
@@ -28,8 +28,7 @@ export async function uploadQuestAsset(
 		if (!(file instanceof File)) return { ok: false, error: "Not saved, retry" }
 		if (file.size > maxAssetBytes) return { ok: false, error: sizeError(file.name, file.size) }
 		const bytes = new Uint8Array(await file.arrayBuffer())
-		const extension = detectAssetExtension(bytes)
-		if (!extension) return { ok: false, error: typeError(file.name) }
+		const extension = detectAssetExtension(bytes) ?? assetExtension(file.name)
 		assetPath = await saveAsset(bytes, extension)
 		let previous: string | null
 		try {

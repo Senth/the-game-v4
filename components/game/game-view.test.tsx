@@ -24,20 +24,38 @@ const quest: PlayerQuest = {
 const rail: RailArc[] = [{ arcId: "arc-one", segments: [{ questId: "quest-one", state: "current" }] }]
 
 describe("GameView preview", () => {
-	it("renders team preview links as plain readable content without disabling frame scrolling", () => {
+	it.each([true, "team"] as const)("renders preview=%s links as plain readable content", (preview) => {
 		const html = renderToStaticMarkup(
 			<GameView
 				timeLeftMs={60_000}
 				pace={null}
 				rail={rail}
 				quest={{ ...quest, assetPath: "/assets/clue.pdf", content: '[Linked clue](/clue) <a href="/raw">Raw clue</a>' }}
-				preview="team"
+				preview={preview}
 			/>,
 		)
 		expect(html).toContain("Linked clue")
 		expect(html).toContain("Raw clue")
 		expect(html).toContain("Open PDF")
 		expect(html).not.toContain("<a")
+	})
+
+	it.each([true, "team"] as const)("keeps audio, video and downloads inert in preview=%s", (preview) => {
+		for (const extension of ["mp3", "mp4", "zip"]) {
+			const html = renderToStaticMarkup(
+				<GameView
+					timeLeftMs={60_000}
+					pace={null}
+					rail={rail}
+					quest={{ ...quest, assetPath: `/assets/clue.${extension}` }}
+					preview={preview}
+				/>,
+			)
+			expect(html).toMatch(/<section inert="">[\s\S]*<\/section>/)
+			expect(html).toContain(extension === "zip" ? "↓ Download ZIP</span>" : `src="/assets/clue.${extension}"`)
+			expect(html).not.toContain("<a ")
+			expect(html).not.toContain('download=""')
+		}
 	})
 
 	it("renders player content with inert dock controls and no standings link", () => {

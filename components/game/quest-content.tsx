@@ -4,7 +4,9 @@ import { isValidElement, type ReactNode, useEffect, useState } from "react"
 import Markdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import type { BundledLanguage, ThemedToken } from "shiki"
+import { assetExtension, assetKind } from "@/lib/domain/assets"
 import type { PlayerQuest } from "@/lib/domain/game"
+import { AudioBar } from "./audio-bar"
 
 function CodeFence({ children }: { children?: ReactNode }) {
 	const element = isValidElement<{ children?: ReactNode; className?: string }>(children) ? children : null
@@ -70,23 +72,37 @@ export function QuestContent({
 	quest: Pick<PlayerQuest, "displayTitle" | "assetPath" | "content">
 	preview?: boolean
 }) {
-	const pdf = quest.assetPath?.toLowerCase().endsWith(".pdf")
-	const PdfLink = preview ? "span" : "a"
+	const kind = quest.assetPath ? assetKind(quest.assetPath) : null
+	const extension = quest.assetPath ? assetExtension(quest.assetPath) : "bin"
+	const AssetLink = preview ? "span" : "a"
 	return (
 		<section inert={preview}>
 			{quest.displayTitle.trim() && (
 				<h1 className="mb-4 font-head text-2xl font-medium text-head">{quest.displayTitle}</h1>
 			)}
 			{quest.assetPath &&
-				(pdf ? (
-					<PdfLink
+				(kind === "pdf" ? (
+					<AssetLink
 						href={preview ? undefined : quest.assetPath}
 						target={preview ? undefined : "_blank"}
 						rel={preview ? undefined : "noopener noreferrer"}
 						className="inline-flex min-h-11 items-center font-cond text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-link active:text-head"
 					>
 						Open PDF
-					</PdfLink>
+					</AssetLink>
+				) : kind === "audio" ? (
+					<AudioBar key={quest.assetPath} src={quest.assetPath} />
+				) : kind === "video" ? (
+					// biome-ignore lint/a11y/useMediaCaption: Authored puzzle assets have no caption track.
+					<video src={quest.assetPath} controls preload="metadata" className="max-h-[70vh] w-full rounded-md" />
+				) : kind === "file" ? (
+					<AssetLink
+						href={preview ? undefined : quest.assetPath}
+						download={preview ? undefined : true}
+						className="flex h-11 w-full items-center justify-center rounded-md border border-z2 px-3 font-cond text-sm text-head hover:bg-z1 focus-visible:outline-2 focus-visible:outline-link active:bg-z2"
+					>
+						↓ Download {extension === "bin" ? "file" : extension.toUpperCase()}
+					</AssetLink>
 				) : (
 					// biome-ignore lint/performance/noImgElement: Authored assets have no stored dimensions and must retain their intrinsic aspect ratio.
 					<img

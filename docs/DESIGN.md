@@ -115,6 +115,17 @@ Intel shows current/full worth, revealed hints with right-aligned penalties, and
 The fixed answer dock contains only the input and Send. It remains visible at every scroll position.
 Wrong-answer feedback is an orange line fading over 4 seconds; correct feedback uses success green.
 
+The quest asset sits where the image sits and follows final mock F
+([phone](https://artifacts.senth.org/f-final-phone-4f838f.png),
+[desktop](https://artifacts.senth.org/f-final-desktop-a8bb05.png)):
+
+- Image and SVG show the image.
+- PDF shows the "Open PDF" link.
+- Audio shows a bar with a 44 px accent play button, a seekable track and `0:12 / 0:42` time.
+- Video shows a native player at the image's size.
+- Any other file shows a full-width bordered `↓ Download <EXT>` button, or "Download file" for `.bin`.
+- The team preview keeps all of these inert.
+
 ## S1: player standings
 
 Mock: [HTML](mocks/S1-standings.html), [PNG](mocks/S1-standings.png).
@@ -212,7 +223,7 @@ The tree follows the saved season; editor warnings follow each field's local val
 Missing editor fields get a `warn` border and a `mt-1.5 font-cond text-xs text-warn` line below:
 
 - Display title is optional and never gets a missing-field warning.
-- Content: "Needs content or an image", only when both content and asset are empty.
+- Content: "Needs content or a file", only when both content and asset are empty.
 - Answers: "Needs an answer".
 - Points: "Needs points".
 
@@ -314,33 +325,31 @@ primary action is editing the content; read first the display title, second cont
 must not look like a CMS with a Save bar.
 
 Use Edit/Preview with the real player view. Fields are display title, internal title, Markdown content,
-image, answers, points and admin notes. Answers become chips on Enter or comma and can be removed
+file, answers, points and admin notes. Answers become chips on Enter or comma and can be removed
 with ✕ or Backspace. Keep autosave status visible. "+ Add hint" follows the hint rows.
 H1/H2 supersede M2's always-open hint rows, not its field order or Revealed by chips.
 
 - Comma, Enter, paste and leaving the field all turn typed text into chips.
 - A duplicate answer clears the input and shows muted "Already an answer".
 - Content and Admin notes grow with their text; only the page scrolls.
-- The Image row follows final variant A:
-  - [Phone, all row states](https://artifacts.senth.org/a-phone-3af0d7.png)
-  - [Desktop, all row states](https://artifacts.senth.org/a-desktop-8b7749.png)
-  - [Desktop drop overlay](https://artifacts.senth.org/drop-page-6f22cc.png)
-  - [Remove dialog, phone](https://artifacts.senth.org/remove-dialog-4586e9.png)
-- With a file, show a thumbnail or PDF tile, short name, bordered `Replace` and quiet `Remove`.
-- Without one, show dashed 80×56 `+` tile, muted "No image" and bordered `Upload`.
-- Empty-state hint reads "jpg, png, gif, webp or pdf, up to 10 MB".
+- The File row follows final mock F's editor panel
+  ([phone](https://artifacts.senth.org/f-final-phone-4f838f.png),
+  [desktop](https://artifacts.senth.org/f-final-desktop-a8bb05.png)).
+- With a file, show a thumbnail for images and SVG, or an 80×56 `bg-z1` tile with the capitalised extension
+  (`PDF`, `MP3`, `MP4`, `ZIP`), then short name, bordered `Replace` and quiet `Remove`.
+- Without one, show dashed 80×56 `+` tile, muted "No file" and bordered `Upload`.
+- Empty-state hint reads "any file up to 50 MB". The file input has no `accept` list.
 - While uploading, button reads "Uploading…" and both buttons are disabled.
 - Show errors below the row in `font-cond text-xs text-warn`.
 - On desktop, dragging a file anywhere over the quest form shows a dashed accent overlay.
-  It reads "Drop to replace the image" or "Drop to add an image or PDF".
+  It reads "Drop to replace the file" or "Drop to add a file".
 - Remove confirms in the Remove quest dialog style.
-- The plain Remove quest dialog reads "Its answers, hints and image go too." when the quest has a file.
+- The plain Remove quest dialog reads "Its answers, hints and file go too." when the quest has a file.
 - Remove dialog copy:
-  - Title: "Remove this image?" or "Remove this PDF?".
-  - Body: "Players stop seeing it and the file is deleted." Confirm: "Remove image" or "Remove PDF".
+  - Title: "Remove this image / PDF / audio / video / file?" by kind.
+  - Body: "Players stop seeing it and the file is deleted." Confirm: "Remove image / PDF / audio / video / file".
 - Error copy:
-  - `<name> is not jpg, png, gif, webp or pdf.`
-  - `<name> is <x.x> MB. The limit is 10 MB.` (one decimal; 1 MB = 1024 × 1024 bytes)
+  - `<name> is <x.x> MB. The limit is 50 MB.` (one decimal; 1 MB = 1024 × 1024 bytes)
   - `Drop one file at a time.`
   - `Not saved, retry` (existing generic failure)
 - On desktop, titles share a row, and so do Answers and Points, as D1.
@@ -369,8 +378,8 @@ Live Remove quest dialog uses the [shared impact body](#live-structural-edits):
 
 - Title: `Remove <label>?`.
 - Groups: "On it now · skips it with 0 points" and "Not reached · leaves their order".
-- Confirm: red "Remove quest". Omit "Its answers, hints and image go too." from this live impact dialog.
-- Hidden drafts keep the plain confirmation, including its answers, hints and image copy.
+- Confirm: red "Remove quest". Omit "Its answers, hints and file go too." from this live impact dialog.
+- Hidden drafts keep the plain confirmation, including its answers, hints and file copy.
 
 `<label>` uses internal title, else display title, else "this quest".
 

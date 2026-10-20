@@ -62,7 +62,7 @@ export function GameView(props: GameViewProps) {
 			<main className="mx-auto max-w-2xl px-4 pt-5 pb-[calc(var(--spacing)*40+env(safe-area-inset-bottom))]">
 				{quest ? (
 					<>
-						<QuestContent quest={quest} preview={props.preview === "team"} />
+						<QuestContent quest={quest} preview={!!props.preview} />
 						{live ? (
 							<Intel
 								quest={quest}

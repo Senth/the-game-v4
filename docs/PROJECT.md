@@ -347,21 +347,25 @@ Channel access must not expose another team's private data or admin-only content
 ## Assets, migration and deployment
 
 Assets live under `ASSETS_DIR` on a Docker volume and are served by a Next route handler at
-`/assets/<uuid>.<ext>`. Allow jpg, png, gif, webp and pdf up to 10 MB. The server checks a file's
-first bytes, ignores the client MIME type and sets the extension from the detected type. Store
-JPEG files with the `.jpg` extension. Reject path traversal; serve immutable assets with
-`Cache-Control: public, max-age=31536000, immutable`.
+`/assets/<uuid>.<ext>`. Accept any file up to 50 MB, where 1 MB is 1024 × 1024 bytes.
+The server checks the first bytes, ignores the client MIME type and detects images
+(jpg, png, gif, webp, svg), PDF, audio (mp3, m4a, ogg, wav) and video (mp4, webm).
+Store JPEG files as `.jpg`. Unrecognized files keep their original lowercased extension
+when it matches `^[a-z0-9]{1,10}$`, otherwise use `.bin`. Serve unrecognized bytes as
+`application/octet-stream` with `Content-Disposition: attachment`, even with a known extension.
+Serve SVG with `Content-Security-Policy: sandbox`. Reject path traversal. All assets have
+`X-Content-Type-Options: nosniff` and `Cache-Control: public, max-age=31536000, immutable`.
+Stream responses with `Accept-Ranges: bytes`; single byte ranges return 206 and
+`Content-Range`, unsatisfiable ranges return 416.
 
 Upload, replace and remove work before start and while live. Replace saves the new file before
 deleting the old one. Remove, Replace, Remove quest and Remove arc delete a file only when no
 quest in any season still references its path.
 
 `pnpm import:v3 <export.json>` imports seasons and reusable quests, not teams or users.
-Use `--dry-run` to inspect counts, skips and warnings without fetching assets or writing data.
+Use `--dry-run` to inspect counts, skips and warnings; it checks asset URLs with `HEAD` and downloads no bodies or writes.
 Set `MONGODB_URI`; real imports also require `ASSETS_DIR` for downloaded assets.
-Export Firestore seasons with
-`pnpm export:v3 --project <gcp-id> [--collection game_seasons] --out <file>`; credentials use Application Default
-Credentials or `GOOGLE_APPLICATION_CREDENTIALS`.
+Follow the [v3 migration runbook](../README.md#migrating-from-v3) to export production Firestore seasons and import them.
 The human exports production Firestore data as JSON, not Firestore's binary backup format:
 `{ "<collection>": { "<docId>": season } }`. The collection name may have any prefix.
 Exactly one top-level collection is required; zero or several is an error.
@@ -390,7 +394,8 @@ Inputs stay unchanged. Mapping rules:
   Use at least three backticks and a fence longer than every backtick run inside the content.
   Other content stays raw trusted HTML. Do not add a fence when content is absent.
 - Drop hints whose text is missing, empty or whitespace-only. Preserve remaining text.
-  Clamp out-of-range hint points to 0-10000 with a warning.
+  Missing, null or non-numeric hint points become 0 with a warning; clamp out-of-range numeric points
+  to 0-10000 with a warning.
 - A nonempty `asset` queues `{ url: asset, target: "assetPath" }`.
   With no asset, a nonempty `imageUrl` queues the same job using its URL.
   With both, also queue `{ url: imageUrl, target: "content" }` and warn that it will append a Markdown image.

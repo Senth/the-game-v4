@@ -76,13 +76,13 @@ beforeEach(() => {
 	vi.mocked(removeQuestAsset).mockReset().mockResolvedValue({ ok: true })
 })
 
-it("shows variant A empty row with Upload, type hint and dashed 80 by 56 tile", () => {
+it("shows empty File row with Upload, type hint and dashed 80 by 56 tile", () => {
 	const markup = html(null)
-	expect(markup).toContain(">Image")
-	expect(markup).toContain("jpg, png, gif, webp or pdf, up to 10 MB")
+	expect(markup).toContain(">File")
+	expect(markup).toContain("any file up to 50 MB")
 	expect(markup).toContain("h-14 w-20 shrink-0 items-center justify-center rounded-md border border-dashed border-z2")
 	expect(markup).toContain(">+</span>")
-	expect(markup).toContain("No image")
+	expect(markup).toContain("No file")
 	expect(markup).toContain("Upload</button>")
 	expect(markup).not.toContain("Remove</button>")
 })
@@ -104,30 +104,40 @@ it("shows thumbnail, shortened name, bordered Replace and quiet Remove with focu
 	expect(controls().at(-1).props.className).toContain("text-muted")
 })
 
-it.each(["pdf", "PDF"])("shows PDF tile and matching confirmation for .%s", (extension) => {
+it.each([
+	["pdf", "PDF", "PDF", "PDF"],
+	["mp3", "MP3", "audio", "audio"],
+	["mp4", "MP4", "video", "video"],
+	["zip", "ZIP", "file", "file"],
+])("shows %s tile and matching confirmation", (extension, tile, removeType, confirmLabel) => {
 	const assetPath = `/assets/12345678-rest.${extension}`
-	expect(html(assetPath)).toContain(">PDF</span>")
+	expect(html(assetPath)).toContain(`>${tile}</span>`)
 	expect(html(assetPath)).not.toContain("<img")
 	controls(assetPath).at(-1).props.onClick()
 	renderToStaticMarkup(view(assetPath))
 	expect(ConfirmDialog).toHaveBeenLastCalledWith(
 		expect.objectContaining({
 			open: true,
-			title: "Remove this PDF?",
-			confirmLabel: "Remove PDF",
+			title: `Remove this ${removeType}?`,
+			confirmLabel: `Remove ${confirmLabel}`,
 			body: "Players stop seeing it and the file is deleted.",
 		}),
 		undefined,
 	)
 })
 
-it("keeps short filenames short and opens hidden picker with exact accept list", () => {
+it.each(["png", "svg"])("shows thumbnail for image kind .%s", (extension) => {
+	const assetPath = `/assets/12345678-rest.${extension}`
+	expect(html(assetPath)).toContain(`src="${assetPath}"`)
+	expect(html(assetPath)).not.toContain(">SVG</span>")
+})
+
+it("keeps short filenames short and opens unrestricted hidden picker", () => {
 	expect(html("/assets/log.png")).toContain(">log.png</span>")
 	expect(input().props.type).toBe("file")
 	expect(input().props.className).toBe("hidden")
-	expect(input().props.accept).toBe(
-		".jpg,.jpeg,.png,.gif,.webp,.pdf,image/jpeg,image/png,image/gif,image/webp,application/pdf",
-	)
+	expect(input().props["aria-label"]).toBe("Upload quest file")
+	expect(input().props.accept).toBeUndefined()
 	const click = vi.fn()
 	input().props.ref.current = { click }
 	controls().at(-2).props.onClick()
@@ -135,16 +145,23 @@ it("keeps short filenames short and opens hidden picker with exact accept list",
 	expect(click).toHaveBeenCalledTimes(2)
 })
 
-it.each([
-	[new File(["<svg/>"], "map.svg"), "map.svg is not jpg, png, gif, webp or pdf."],
-	[new File([new Uint8Array(maxAssetBytes + 1)], "scan.pdf"), "scan.pdf is 10.0 MB. The limit is 10 MB."],
-])("rejects invalid client file before action and announces exact error", async (file, error) => {
+it.each([[new File([new Uint8Array(maxAssetBytes + 1)], "scan.pdf"), "scan.pdf is 50.0 MB. The limit is 50 MB."]])(
+	"rejects invalid client file before action and announces exact error",
+	async (file, error) => {
+		view()
+		await handle.current?.upload(file)
+		expect(uploadQuestAsset).not.toHaveBeenCalled()
+		expect(props.onChange).not.toHaveBeenCalled()
+		expect(html()).toContain('role="alert" class="mt-1.5 font-cond text-xs text-warn"')
+		expect(html()).toContain(error)
+	},
+)
+
+it("passes SVG and arbitrary files to server validation", async () => {
 	view()
-	await handle.current?.upload(file)
-	expect(uploadQuestAsset).not.toHaveBeenCalled()
-	expect(props.onChange).not.toHaveBeenCalled()
-	expect(html()).toContain('role="alert" class="mt-1.5 font-cond text-xs text-warn"')
-	expect(html()).toContain(error)
+	await handle.current?.upload(new File(["<svg/>"], "map.svg"))
+	await handle.current?.upload(new File(["<html/>"], "page.html"))
+	expect(uploadQuestAsset).toHaveBeenCalledTimes(2)
 })
 
 it("disables both controls while uploading, ignores duplicate requests and reports success", async () => {
@@ -185,13 +202,13 @@ it.each(["returned", "thrown"])(
 		if (kind === "returned")
 			vi.mocked(uploadQuestAsset).mockResolvedValueOnce({
 				ok: false,
-				error: "map.png is not jpg, png, gif, webp or pdf.",
+				error: "Upload failed",
 			})
 		else vi.mocked(uploadQuestAsset).mockRejectedValueOnce(new Error("offline"))
 		view()
 		const file = new File(["bytes"], "map.png")
 		await handle.current?.upload(file)
-		expect(html()).toContain(kind === "returned" ? "map.png is not jpg, png, gif, webp or pdf." : "Not saved, retry")
+		expect(html()).toContain(kind === "returned" ? "Upload failed" : "Not saved, retry")
 		expect(props.onChange).not.toHaveBeenCalled()
 		expect(html()).toContain(`src="${image}"`)
 		await handle.current?.upload(file)
