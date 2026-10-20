@@ -179,6 +179,17 @@ describe("parseV3Export", () => {
 		for (const warning of warnings) expect(warning).toMatch(/Source season.*Source arc.*Source quest.*hint.*points/)
 	})
 
+	it.each([undefined, null, Number.NaN, "5"])(
+		"imports invalid hint points %j as zero with a named warning",
+		(points) => {
+			const hint = points === undefined ? { text: "Hint" } : { text: "Hint", points }
+			const { quest, warnings } = mapped({ hints: [hint] })
+			expect(quest.hints).toMatchObject([{ text: "Hint", points: 0 }])
+			expect(warnings).toHaveLength(1)
+			expect(warnings[0]).toMatch(/Source season.*Source arc.*Source quest.*hint.*points/)
+		},
+	)
+
 	it.each(["plain", "`", "```", "before ````` after"])("fences code safely for content %s", (content) => {
 		const { quest } = mapped({ code: "javascript", content })
 		const fence = "`".repeat(Math.max(3, ...[...content.matchAll(/`+/g)].map(([run]) => run.length + 1)))
@@ -239,7 +250,7 @@ describe("parseV3Export", () => {
 		expect(() => parseV3Export(source({}, season))).toThrow()
 	})
 
-	it("validates hints against the v4 whole-number rule", () => {
+	it("rejects fractional hint points against the v4 whole-number rule", () => {
 		expect(() => mapped({ hints: [{ text: "Hint", points: 1.5 }] })).toThrow()
 	})
 })

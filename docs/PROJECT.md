@@ -357,7 +357,7 @@ deleting the old one. Remove, Replace, Remove quest and Remove arc delete a file
 quest in any season still references its path.
 
 `pnpm import:v3 <export.json>` imports seasons and reusable quests, not teams or users.
-Use `--dry-run` to inspect counts, skips and warnings without fetching assets or writing data.
+Use `--dry-run` to inspect counts, skips and warnings; it checks asset URLs with `HEAD` and downloads no bodies or writes.
 Set `MONGODB_URI`; real imports also require `ASSETS_DIR` for downloaded assets.
 Export Firestore seasons with
 `pnpm export:v3 --project <gcp-id> [--collection game_seasons] --out <file>`; credentials use Application Default
@@ -390,7 +390,8 @@ Inputs stay unchanged. Mapping rules:
   Use at least three backticks and a fence longer than every backtick run inside the content.
   Other content stays raw trusted HTML. Do not add a fence when content is absent.
 - Drop hints whose text is missing, empty or whitespace-only. Preserve remaining text.
-  Clamp out-of-range hint points to 0-10000 with a warning.
+  Missing, null or non-numeric hint points become 0 with a warning; clamp out-of-range numeric points
+  to 0-10000 with a warning.
 - A nonempty `asset` queues `{ url: asset, target: "assetPath" }`.
   With no asset, a nonempty `imageUrl` queues the same job using its URL.
   With both, also queue `{ url: imageUrl, target: "content" }` and warn that it will append a Markdown image.

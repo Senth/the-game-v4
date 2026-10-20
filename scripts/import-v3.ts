@@ -62,6 +62,7 @@ export async function runV3Import(input: unknown, dryRun = false): Promise<Impor
 
 	const mappedSeasons = parseV3Export(input)
 	const downloads = new Map<string, Promise<DownloadResult>>()
+	const preflight = new Map<string, string>()
 	const summary: ImportSummary = { imported: 0, skipped: 0, warnings: [] }
 
 	for (const mapped of mappedSeasons) {
@@ -78,7 +79,17 @@ export async function runV3Import(input: unknown, dryRun = false): Promise<Impor
 			summary.skipped += 1
 			continue
 		}
-		if (dryRun) continue
+		if (dryRun) {
+			for (const arc of season.arcs) {
+				for (const quest of arc.quests) {
+					const context = `Season ${JSON.stringify(season.title)} (${season._id}), arc ${JSON.stringify(arc.title)}, quest ${JSON.stringify(quest.internalTitle || quest.displayTitle || quest.id)}`
+					for (const job of assetJobs[quest.id] ?? []) {
+						if (!preflight.has(job.url)) preflight.set(job.url, context)
+					}
+				}
+			}
+			continue
+		}
 
 		for (const arc of season.arcs) {
 			for (const quest of arc.quests) {
@@ -107,6 +118,29 @@ export async function runV3Import(input: unknown, dryRun = false): Promise<Impor
 
 		await createSeason(season)
 		summary.imported += 1
+	}
+
+	if (dryRun) {
+		const assets = [...preflight]
+		for (let index = 0; index < assets.length; index += 8) {
+			const batch = assets.slice(index, index + 8)
+			const warnings = await Promise.all(
+				batch.map(async ([url, context]) => {
+					try {
+						const response = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(10_000) })
+						const issues: string[] = []
+						if (!response.ok) issues.push(`HTTP ${response.status}`)
+						if (Number(response.headers.get("content-length")) > maxAssetBytes) {
+							issues.push("asset exceeds 10 MB")
+						}
+						return issues.map((issue) => `${context}: asset preflight failed for ${url} (${issue})`)
+					} catch (error) {
+						return [`${context}: asset preflight failed for ${url} (${errorMessage(error)})`]
+					}
+				}),
+			)
+			summary.warnings.push(...warnings.flat())
+		}
 	}
 
 	for (const warning of summary.warnings) console.warn(warning)
