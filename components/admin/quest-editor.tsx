@@ -177,7 +177,7 @@ export function QuestEditor({
 				<p className="font-cond text-xs text-muted">Counting teams…</p>
 			) : null
 		) : assetPath ? (
-			"Its answers, hints and image go too."
+			"Its answers, hints and file go too."
 		) : (
 			"Its answers and hints go too."
 		)
@@ -265,7 +265,7 @@ export function QuestEditor({
 					}
 					target={{ arcId, questId: quest.id, field: "content" }}
 					serverValue={quest.content}
-					missing={assetPath?.trim() ? undefined : "Needs content or an image"}
+					missing={assetPath?.trim() ? undefined : "Needs content or a file"}
 					minRows={5}
 					mono
 				/>
@@ -342,7 +342,7 @@ export function QuestEditor({
 			{dragging && (
 				<div className="pointer-events-none absolute inset-0 z-10 hidden items-center justify-center rounded-md border-2 border-dashed border-accent bg-z0/85 lg:flex">
 					<span className="font-head text-lg text-head">
-						{assetPath ? "Drop to replace the image" : "Drop to add an image or PDF"}
+						{assetPath ? "Drop to replace the file" : "Drop to add a file"}
 					</span>
 				</div>
 			)}

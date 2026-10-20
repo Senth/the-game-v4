@@ -4,7 +4,7 @@ import Image from "next/image"
 import { type Ref, useImperativeHandle, useRef, useState } from "react"
 import { removeQuestAsset, uploadQuestAsset } from "@/app/admin/asset-actions"
 import { labelClass } from "@/components/auth-form"
-import { assetFileError } from "@/lib/domain/assets"
+import { assetFileError, assetKind } from "@/lib/domain/assets"
 import { ConfirmDialog, outlineClass } from "./confirm-dialog"
 
 export type QuestAssetHandle = {
@@ -35,7 +35,8 @@ export function QuestAsset({
 	const filename = assetPath?.split("/").pop() ?? ""
 	const extension = filename.slice(filename.lastIndexOf("."))
 	const shortName = filename.slice(0, filename.lastIndexOf(".")).slice(0, 8) + extension
-	const pdf = extension.toLowerCase() === ".pdf"
+	const kind = assetPath ? assetKind(assetPath) : null
+	const removeType = kind === "pdf" ? "PDF" : (kind ?? "image")
 
 	async function upload(file: File) {
 		if (busy.current || confirming) return
@@ -81,16 +82,14 @@ export function QuestAsset({
 	return (
 		<div>
 			<span className={labelClass}>
-				Image
-				{!assetPath && (
-					<span className="ml-2 font-body normal-case tracking-normal">jpg, png, gif, webp or pdf, up to 10 MB</span>
-				)}
+				File
+				{!assetPath && <span className="ml-2 font-body normal-case tracking-normal">any file up to 50 MB</span>}
 			</span>
 			<input
 				ref={input}
 				type="file"
 				className="hidden"
-				aria-label="Upload quest image or PDF"
+				aria-label="Upload quest file"
 				disabled={pending !== null}
 				onChange={(event) => {
 					const file = event.currentTarget.files?.[0]
@@ -103,9 +102,9 @@ export function QuestAsset({
 					<span className="flex h-14 w-20 shrink-0 items-center justify-center rounded-md border border-dashed border-z2 font-cond text-xl text-muted">
 						+
 					</span>
-				) : pdf ? (
+				) : kind !== "image" ? (
 					<span className="flex h-14 w-20 shrink-0 items-center justify-center rounded-md bg-z1 font-cond text-sm text-muted">
-						PDF
+						{extension.slice(1).toUpperCase()}
 					</span>
 				) : (
 					<Image
@@ -118,7 +117,7 @@ export function QuestAsset({
 					/>
 				)}
 				<span className="min-w-0 flex-1 truncate font-cond text-sm text-muted">
-					{assetPath ? shortName : "No image"}
+					{assetPath ? shortName : "No file"}
 				</span>
 				<button
 					type="button"
@@ -146,9 +145,9 @@ export function QuestAsset({
 			)}
 			<ConfirmDialog
 				open={confirming}
-				title={pdf ? "Remove this PDF?" : "Remove this image?"}
+				title={`Remove this ${removeType}?`}
 				body="Players stop seeing it and the file is deleted."
-				confirmLabel={pdf ? "Remove PDF" : "Remove image"}
+				confirmLabel={`Remove ${removeType}`}
 				disabled={pending !== null}
 				onConfirm={() => void remove()}
 				onClose={() => setConfirming(false)}

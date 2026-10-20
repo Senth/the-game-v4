@@ -184,7 +184,7 @@ it("renders all seven fields in M2 order with helper text, desktop pairs and qui
 	expect(view.html).toContain("admin only")
 	expect(view.html).toContain("font-body normal-case tracking-normal")
 	expect(view.html).toContain("space-y-5")
-	const labels = ["Display title", "Internal title", "Content", "Image", "Answers", "Points", "Admin notes"]
+	const labels = ["Display title", "Internal title", "Content", "File", "Answers", "Points", "Admin notes"]
 	const positions = labels.map((label) => view.html.indexOf(`>${label}`))
 	expect(positions.every((position) => position >= 0)).toBe(true)
 	expect(positions).toEqual([...positions].sort((a, b) => a - b))
@@ -267,7 +267,7 @@ it.each([
 				points: null,
 			},
 		})
-		for (const message of ["Needs content or an image", "Needs an answer", "Needs points"]) {
+		for (const message of ["Needs content or a file", "Needs an answer", "Needs points"]) {
 			expect(view.html).toContain(message)
 		}
 		expect(view.html).not.toContain("Needs a display title")
@@ -284,16 +284,16 @@ it("keeps complete quests quiet, including zero points", () => {
 	expect(view.html).not.toContain("border-warn")
 })
 
-it("updates the content warning when the local image is added or removed", () => {
+it("updates the content warning when the local file is added or removed", () => {
 	const props = { quest: { ...defaults.quest, displayTitle: "", content: " \n", assetPath: null } }
 	const empty = render(props)
-	expect(empty.html).toContain("Needs content or an image")
+	expect(empty.html).toContain("Needs content or a file")
 	empty.asset.props.onChange("/assets/new.png")
 	const uploaded = render(props)
 	expect(uploaded.html).not.toContain("Needs ")
 	expect(uploaded.html).not.toContain("border-warn")
 	uploaded.asset.props.onChange(null)
-	expect(render(props).html).toContain("Needs content or an image")
+	expect(render(props).html).toContain("Needs content or a file")
 })
 
 it("shows ready draft copy and enables Add to game", () => {
@@ -355,7 +355,7 @@ it("confirms live quest removal with shared impact body", async () => {
 	expect(dialog.html).toContain("On it now · skips it with 0 points")
 	expect(dialog.html).toContain("Not reached · leaves their order")
 	expect(dialog.html).toContain("4 teams solved it and keep their points.")
-	expect(dialog.html).not.toContain("Its answers, hints and image go too.")
+	expect(dialog.html).not.toContain("Its answers, hints and file go too.")
 	expect(dialog.confirm?.props.className).toContain("bg-pace-3")
 	dialog.confirm?.props.onClick()
 	await vi.waitFor(() => expect(removeQuest).toHaveBeenCalledWith("s1", "a1", "q1"))
@@ -365,17 +365,17 @@ it("keeps live draft removal confirmation plain", () => {
 	const props = { ...live, quest: { ...defaults.quest, hidden: true } }
 	render(props).remove?.props.onClick()
 	const dialog = render(props)
-	expect(dialog.html).toContain("Its answers, hints and image go too.")
+	expect(dialog.html).toContain("Its answers, hints and file go too.")
 	expect(dialog.html).not.toContain("Counting teams…")
 	expect(getRemoveQuestImpact).not.toHaveBeenCalled()
 })
 
-it("shows Upload and empty Image row when the quest has no asset", () => {
+it("shows Upload and empty File row when the quest has no asset", () => {
 	const view = render({ quest: { ...defaults.quest, assetPath: null } })
-	expect(view.html).toContain(">Image")
+	expect(view.html).toContain(">File")
 	expect(view.html).not.toContain("<img")
 	expect(view.html).toContain("Upload</button>")
-	expect(view.html).toContain("No image")
+	expect(view.html).toContain("No file")
 	expect(view.html).toContain("Answers")
 })
 
@@ -396,7 +396,7 @@ it.each([null, defaults.quest.assetPath])(
 		const event = drag()
 		render(props).root.props.onDragEnter(event)
 		const view = render(props)
-		expect(view.html).toContain(assetPath ? "Drop to replace the image" : "Drop to add an image or PDF")
+		expect(view.html).toContain(assetPath ? "Drop to replace the file" : "Drop to add a file")
 		expect(view.html).toContain("absolute inset-0")
 		expect(view.html).toContain("border-2 border-dashed border-accent bg-z0/85")
 		expect(view.html).toContain("lg:flex")
@@ -419,7 +419,7 @@ it("leaves text drags and drops alone without an overlay", () => {
 	expect(uploadQuestAsset).not.toHaveBeenCalled()
 })
 
-it("rejects multiple files in Image row error slot and resets overlay", () => {
+it("rejects multiple files in File row error slot and resets overlay", () => {
 	const event = drag([new File(["a"], "a.png"), new File(["b"], "b.pdf")])
 	render().root.props.onDragEnter(event)
 	render().root.props.onDrop(event)
@@ -431,7 +431,7 @@ it("rejects multiple files in Image row error slot and resets overlay", () => {
 	expect(uploadQuestAsset).not.toHaveBeenCalled()
 })
 
-it("accepts a file drop bubbled from Content, uploads once and updates Image row without reload", async () => {
+it("accepts a file drop bubbled from Content, uploads once and updates File row without reload", async () => {
 	const file = new File(["png"], "map.png")
 	const event = drag([file])
 	render().root.props.onDragEnter(event)
@@ -449,15 +449,15 @@ it.each([null, defaults.quest.assetPath])("changes Remove quest copy with curren
 	const props = { quest: { ...defaults.quest, assetPath } }
 	render(props).remove?.props.onClick()
 	expect(render(props).html).toContain(
-		assetPath ? "Its answers, hints and image go too." : "Its answers and hints go too.",
+		assetPath ? "Its answers, hints and file go too." : "Its answers and hints go too.",
 	)
 	render(props).asset.props.onChange(assetPath ? null : "/assets/new.png")
 	expect(render(props).html).toContain(
-		assetPath ? "Its answers and hints go too." : "Its answers, hints and image go too.",
+		assetPath ? "Its answers and hints go too." : "Its answers, hints and file go too.",
 	)
 })
 
-it("syncs Image row from refreshed server props after another admin changes asset", () => {
+it("syncs File row from refreshed server props after another admin changes asset", () => {
 	render()
 	const props = { quest: { ...defaults.quest, assetPath: "/assets/another-admin.pdf" } }
 	render(props)
@@ -466,7 +466,7 @@ it("syncs Image row from refreshed server props after another admin changes asse
 	const removed = { quest: { ...defaults.quest, assetPath: null } }
 	render(removed)
 	hooks.effects[1]?.()
-	expect(render(removed).html).toContain("No image")
+	expect(render(removed).html).toContain("No file")
 })
 
 it.each([
@@ -491,7 +491,7 @@ it.each([null, new Date(now + 60_000)])(
 		const view = render(props)
 		expect(removeQuest).not.toHaveBeenCalled()
 		expect(view.html).toContain("Remove Harbour map?")
-		expect(view.html).toContain("Its answers, hints and image go too.")
+		expect(view.html).toContain("Its answers, hints and file go too.")
 		for (const effect of hooks.effects) effect()
 		expect(hooks.showModal).toHaveBeenCalledOnce()
 		expect(hooks.focus).toHaveBeenCalledOnce()
