@@ -81,13 +81,43 @@ The command prompts for a password of at least eight characters.
 docker compose exec -it app node scripts/admin-create.mjs <name>
 ```
 
-Import a v3 JSON export with the bundled importer:
+### Migrating from v3
+
+On fenrir, confirm Application Default Credentials exist at `~/.config/gcloud/application_default_credentials.json`.
+Export season documents as JSON:
 
 ```sh
-docker compose run --rm -v ./export.json:/import.json:ro app node scripts/import-v3.mjs /import.json
+pnpm export:v3 --project <gcp-id> --out .tmp/v3-export.json
 ```
 
-Append `--dry-run` to inspect counts and warnings without downloading assets or writing data.
+If the exporter reports an empty collection, rerun with the listed seasons collection:
+
+```sh
+pnpm export:v3 --project <gcp-id> --collection <seasons-collection> --out .tmp/v3-export.json
+```
+
+Copy `.tmp/v3-export.json` to a secure backup outside the repository. It contains every answer; never commit it.
+
+Optional: archive every other listed root collection before I-33. Repeat for each collection:
+
+```sh
+mkdir -p .tmp/v3-archive
+pnpm export:v3 --project <gcp-id> --collection <collection> --out .tmp/v3-archive/<collection>.json
+```
+
+Dry-run the import and review asset warnings. Fix bucket access or URLs before importing for real:
+
+```sh
+docker compose run --rm -v ./.tmp/v3-export.json:/import.json:ro app node scripts/import-v3.mjs /import.json --dry-run
+```
+
+Run the real import after resolving warnings:
+
+```sh
+docker compose run --rm -v ./.tmp/v3-export.json:/import.json:ro app node scripts/import-v3.mjs /import.json
+```
+
+Existing seasons are skipped. Delete a season before retrying its assets.
 The importer copies seasons and quests, not teams or users. See [migration rules](docs/PROJECT.md#assets-migration-and-deployment).
 
 ## Releasing
