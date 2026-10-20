@@ -115,6 +115,17 @@ Intel shows current/full worth, revealed hints with right-aligned penalties, and
 The fixed answer dock contains only the input and Send. It remains visible at every scroll position.
 Wrong-answer feedback is an orange line fading over 4 seconds; correct feedback uses success green.
 
+The quest asset sits where the image sits and follows final mock F
+([phone](https://artifacts.senth.org/f-final-phone-4f838f.png),
+[desktop](https://artifacts.senth.org/f-final-desktop-a8bb05.png)):
+
+- Image and SVG show the image.
+- PDF shows the "Open PDF" link.
+- Audio shows a bar with a 44 px accent play button, a seekable track and `0:12 / 0:42` time.
+- Video shows a native player at the image's size.
+- Any other file shows a full-width bordered `↓ Download <EXT>` button, or "Download file" for `.bin`.
+- The team preview keeps all of these inert.
+
 ## S1: player standings
 
 Mock: [HTML](mocks/S1-standings.html), [PNG](mocks/S1-standings.png).
