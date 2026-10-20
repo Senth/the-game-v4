@@ -20,7 +20,7 @@ jobs:
       - name: Checkout tag
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Get image name and tags
