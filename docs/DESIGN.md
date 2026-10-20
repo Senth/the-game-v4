@@ -223,7 +223,7 @@ The tree follows the saved season; editor warnings follow each field's local val
 Missing editor fields get a `warn` border and a `mt-1.5 font-cond text-xs text-warn` line below:
 
 - Display title is optional and never gets a missing-field warning.
-- Content: "Needs content or an image", only when both content and asset are empty.
+- Content: "Needs content or a file", only when both content and asset are empty.
 - Answers: "Needs an answer".
 - Points: "Needs points".
 
@@ -325,7 +325,7 @@ primary action is editing the content; read first the display title, second cont
 must not look like a CMS with a Save bar.
 
 Use Edit/Preview with the real player view. Fields are display title, internal title, Markdown content,
-image, answers, points and admin notes. Answers become chips on Enter or comma and can be removed
+file, answers, points and admin notes. Answers become chips on Enter or comma and can be removed
 with ✕ or Backspace. Keep autosave status visible. "+ Add hint" follows the hint rows.
 H1/H2 supersede M2's always-open hint rows, not its field order or Revealed by chips.
 
@@ -344,7 +344,7 @@ H1/H2 supersede M2's always-open hint rows, not its field order or Revealed by c
 - On desktop, dragging a file anywhere over the quest form shows a dashed accent overlay.
   It reads "Drop to replace the file" or "Drop to add a file".
 - Remove confirms in the Remove quest dialog style.
-- The plain Remove quest dialog reads "Its answers, hints and image go too." when the quest has a file.
+- The plain Remove quest dialog reads "Its answers, hints and file go too." when the quest has a file.
 - Remove dialog copy:
   - Title: "Remove this image / PDF / audio / video / file?" by kind.
   - Body: "Players stop seeing it and the file is deleted." Confirm: "Remove image / PDF / audio / video / file".
@@ -378,8 +378,8 @@ Live Remove quest dialog uses the [shared impact body](#live-structural-edits):
 
 - Title: `Remove <label>?`.
 - Groups: "On it now · skips it with 0 points" and "Not reached · leaves their order".
-- Confirm: red "Remove quest". Omit "Its answers, hints and image go too." from this live impact dialog.
-- Hidden drafts keep the plain confirmation, including its answers, hints and image copy.
+- Confirm: red "Remove quest". Omit "Its answers, hints and file go too." from this live impact dialog.
+- Hidden drafts keep the plain confirmation, including its answers, hints and file copy.
 
 `<label>` uses internal title, else display title, else "this quest".
 
