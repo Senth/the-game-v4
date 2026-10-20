@@ -10,7 +10,10 @@ Assert input objects stay unchanged and player JSON contains neither answers nor
 Vitest tests `lib/db/` against MongoDB 8 through `mongodb-memory-server`, never a live database or Docker.
 Give each test file a fresh database. Cover create/get/list, per-path `$set`, the per-season name index,
 persistent hint history, guards and structural-edit writes. Concurrent field edits must preserve both values.
-The later first-finisher bonus needs an atomic concurrent-winner test.
+Test concurrent finisher place claims for unique places and exactly-once score awards.
+Test that later bonus-row edits never change claimed points or awarded scores.
+Test that one quest removal completing several teams claims places in arrival order.
+Use [PROJECT.md's finisher rules](PROJECT.md#finisher-bonus) for ordering and scoring expectations.
 
 Cover hidden-draft exclusion from player data, rails, standings, board, order builds and live stats.
 Cover removal-dialog impact outcomes: current teams skip with zero points, unreached quests leave orders,
@@ -51,6 +54,7 @@ It seeds only an empty database, then starts `next dev`.
 Seed accounts are `admin / admin` and `Ninjas / ninjas`. Other teams use their lowercased name as password.
 Never deploy those passwords. The seed copies the Backwards log image to `ASSETS_DIR`, default `.tmp/assets`.
 Start and end follow seed time, so the season is running with registration open and Ninjas is mid-game.
+Cipher Night has `finisherBonuses: [50, 20]` and no finishers.
 
 | Arc | Quests | Authored order |
 | --- | --- | --- |
