@@ -24,8 +24,18 @@ export function assetExtension(name: string): string {
 }
 
 export function assetKind(path: string): (typeof assetTypes)[keyof typeof assetTypes]["kind"] {
+	if (/\.file\.[a-z0-9]{1,10}$/i.test(path)) return "file"
 	const extension = assetExtension(path)
 	return Object.hasOwn(assetTypes, extension) ? assetTypes[extension as keyof typeof assetTypes].kind : "file"
+}
+
+function readEbmlInteger(bytes: Uint8Array, offset: number) {
+	const first = bytes[offset] ?? 0
+	const length = Math.clz32(first) - 23
+	if (length > 8 || offset + length > bytes.length) return null
+	let value = first & (0xff >>> length)
+	for (let index = 1; index < length; index++) value = value * 256 + (bytes[offset + index] ?? 0)
+	return Number.isSafeInteger(value) ? { value, length } : null
 }
 
 export function detectAssetExtension(bytes: Uint8Array): keyof typeof assetTypes | null {
@@ -60,7 +70,26 @@ export function detectAssetExtension(bytes: Uint8Array): keyof typeof assetTypes
 		if (["M4A ", "M4B ", "M4P "].includes(brand)) return "m4a"
 		if (["isom", "iso2", "mp41", "mp42", "avc1", "M4V ", "MSNV", "dash"].includes(brand)) return "mp4"
 	}
-	if ([0x1a, 0x45, 0xdf, 0xa3].every((byte, index) => bytes[index] === byte)) return "webm"
+	if ([0x1a, 0x45, 0xdf, 0xa3].every((byte, index) => bytes[index] === byte)) {
+		const headerSize = readEbmlInteger(bytes, 4)
+		if (!headerSize) return null
+		let offset = 4 + headerSize.length
+		const end = offset + headerSize.value
+		if (end > Math.min(bytes.length, 8192)) return null
+		while (offset < end) {
+			const id = readEbmlInteger(bytes, offset)
+			if (!id) return null
+			const size = readEbmlInteger(bytes, offset + id.length)
+			if (!size) return null
+			const start = offset + id.length + size.length
+			const next = start + size.value
+			if (next > end) return null
+			if (id.length === 2 && bytes[offset] === 0x42 && bytes[offset + 1] === 0x82)
+				return String.fromCharCode(...bytes.subarray(start, next)) === "webm" ? "webm" : null
+			offset = next
+		}
+		return null
+	}
 	const text = new TextDecoder().decode(bytes.subarray(0, 8192))
 	if (/^(?:\s|<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->)*<svg(?:\s|\/?>)/.test(text)) return "svg"
 	return null

@@ -19,7 +19,7 @@ const signatures = [
 	["ogg", Buffer.from("OggS")],
 	["wav", wave],
 	["mp4", Buffer.from("\x00\x00\x00\x18ftypisom")],
-	["webm", Buffer.from([0x1a, 0x45, 0xdf, 0xa3])],
+	["webm", Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x87, 0x42, 0x82, 0x84, ...Buffer.from("webm")])],
 ] as const
 
 describe("detectAssetExtension", () => {
@@ -40,6 +40,23 @@ describe("detectAssetExtension", () => {
 		"<!-- first --><!-- second -->\n<svg viewBox='0 0 1 1'>",
 	])("detects SVG with allowed preamble %s", (text) => {
 		expect(detectAssetExtension(Buffer.from(text))).toBe("svg")
+	})
+
+	it.each(
+		[
+			[0x1a, 0x45, 0xdf, 0xa3, 0x8b, 0x42, 0x82, 0x88, ...Buffer.from("matroska")],
+			[0x1a, 0x45, 0xdf, 0xa3, 0x80, 0x42, 0x82, 0x84, ...Buffer.from("webm")],
+			[0x1a, 0x45, 0xdf, 0xa3, 0x8a, 0x42, 0x86, 0x87, 0x42, 0x82, 0x84, ...Buffer.from("webm")],
+			[0x1a, 0x45, 0xdf, 0xa3, 0x87, 0x42, 0x82, 0x85, ...Buffer.from("webm")],
+			[0x1a, 0x45, 0xdf, 0xa3, 0x00],
+		].map((bytes) => ({ bytes })),
+	)("rejects non-WebM or malformed EBML header $bytes", ({ bytes }) => {
+		expect(detectAssetExtension(Uint8Array.from(bytes))).toBeNull()
+	})
+
+	it("reads WebM DocType after other EBML fields and a multibyte size", () => {
+		const bytes = [0x1a, 0x45, 0xdf, 0xa3, 0x40, 0x0b, 0x42, 0x86, 0x81, 0x01, 0x42, 0x82, 0x84, ...Buffer.from("webm")]
+		expect(detectAssetExtension(Uint8Array.from(bytes))).toBe("webm")
 	})
 
 	it.each([

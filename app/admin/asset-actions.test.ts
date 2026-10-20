@@ -1,13 +1,18 @@
 import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises"
 import path from "node:path"
 import { redirect } from "next/navigation"
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { GET } from "@/app/assets/[file]/route"
+import { QuestAsset } from "@/components/admin/quest-asset"
+import { QuestContent } from "@/components/game/quest-content"
 import { saveAsset } from "@/lib/assets/files"
 import * as assets from "@/lib/assets/release"
 import { requireAdmin } from "@/lib/auth/guards"
 import { collections } from "@/lib/db/collections"
 import * as seasons from "@/lib/db/seasons"
-import { maxAssetBytes } from "@/lib/domain/assets"
+import { assetExtension, assetKind, maxAssetBytes } from "@/lib/domain/assets"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
 import { useTestDb } from "@/test/db"
@@ -122,16 +127,18 @@ describe("quest asset actions", () => {
 		["image.webp", new TextEncoder().encode("RIFF1234WEBP"), "webp"],
 		["file.pdf", new TextEncoder().encode("%PDF-"), "pdf"],
 		["image.png", new TextEncoder().encode("<svg></svg>"), "svg"],
-		["page.HTML", new TextEncoder().encode("<html></html>"), "html"],
-		["image.heic", new TextEncoder().encode("\x00\x00\x00\x18ftypheic"), "heic"],
-		["audio.wav", new TextEncoder().encode("RIFF1234WAVE"), "wav"],
-		["no-extension", new TextEncoder().encode("anything"), "bin"],
-		["bad.longextension", new TextEncoder().encode("anything"), "bin"],
+		["page.HTML", new TextEncoder().encode("<html></html>"), "file.html"],
+		["image.heic", new TextEncoder().encode("\x00\x00\x00\x18ftypheic"), "file.heic"],
+		["audio.wav", new TextEncoder().encode("RIFF1234WAVE"), "file.wav"],
+		["no-extension", new TextEncoder().encode("anything"), "file.bin"],
+		["bad.longextension", new TextEncoder().encode("anything"), "file.bin"],
 	])("uploads %s using detected %s bytes, ignoring client MIME", async (name, bytes, extension) => {
 		const result = await uploadQuestAsset(...ids, form(new File([bytes], name, { type: "text/plain" })))
 		expect(result).toEqual({ ok: true, assetPath: await currentPath() })
 		if (!result.ok) throw new Error(result.error)
-		expect(result.assetPath).toMatch(new RegExp(`^/assets/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\\.${extension}$`))
+		expect(result.assetPath).toMatch(
+			new RegExp(`^/assets/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\\.${extension.replaceAll(".", "\\.")}$`),
+		)
 		expect(await readFile(path.join(directory, path.basename(result.assetPath)))).toEqual(Buffer.from(bytes))
 		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(ids[0])], [boardChannel]])
 	})
@@ -141,6 +148,46 @@ describe("quest asset actions", () => {
 		const bytes = new Uint8Array(maxAssetBytes)
 		bytes.set(png)
 		expect((await uploadQuestAsset(...ids, form(new File([bytes], "image.png")))).ok).toBe(true)
+	})
+
+	it.each([
+		["audio.WAV", Buffer.from("RIFF1234WAVE"), "wav"],
+		["clue.png", Buffer.from("unrecognized"), "png"],
+		["clue.pdf", Buffer.from("unrecognized"), "pdf"],
+		["clue.mp4", Buffer.from("unrecognized"), "mp4"],
+		["clue.webm", Buffer.from("unrecognized"), "webm"],
+		["movie.mkv", Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x8b, 0x42, 0x82, 0x88, ...Buffer.from("matroska")]), "mkv"],
+	])("keeps unrecognized upload %s downloadable in player and editor", async (name, bytes, extension) => {
+		const result = await uploadQuestAsset(...ids, form(new File([bytes], name)))
+		if (!result.ok) throw new Error(result.error)
+		expect(result.assetPath).toBe(await currentPath())
+		expect(assetExtension(result.assetPath)).toBe(extension)
+		expect(assetKind(result.assetPath)).toBe("file")
+		const player = renderToStaticMarkup(
+			createElement(QuestContent, { quest: { displayTitle: "", content: "", assetPath: result.assetPath } }),
+		)
+		expect(player).toContain(`↓ Download ${extension.toUpperCase()}</a>`)
+		expect(player).toContain(`href="${result.assetPath}"`)
+		expect(player).not.toMatch(/<(?:img|audio|video)\b/)
+		const editor = renderToStaticMarkup(
+			createElement(QuestAsset, {
+				seasonId: ids[0],
+				arcId: ids[1],
+				questId: ids[2],
+				assetPath: result.assetPath,
+				onChange: vi.fn(),
+			}),
+		)
+		expect(editor).toContain(`>${extension.toUpperCase()}</span>`)
+		expect(editor).not.toContain("<img")
+		const file = path.basename(result.assetPath)
+		const response = await GET(new Request(`http://localhost${result.assetPath}`), {
+			params: Promise.resolve({ file }),
+		})
+		expect(response.status).toBe(200)
+		expect(response.headers.get("Content-Type")).toBe("application/octet-stream")
+		expect(response.headers.get("Content-Disposition")).toContain("attachment")
+		expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes)
 	})
 
 	it.each([false, true])("replace releases old file only when unreferenced, shared=%s", async (shared) => {

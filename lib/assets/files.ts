@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto"
 import { mkdir, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { assetExtensionPattern } from "@/lib/domain/assets"
+import { assetExtensionPattern, detectAssetExtension } from "@/lib/domain/assets"
 
-const assetName = new RegExp(`^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\\.${assetExtensionPattern}$`, "i")
+const assetName = new RegExp(
+	`^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\\.(?:file\\.)?${assetExtensionPattern}$`,
+	"i",
+)
 
 export function assetsDir(): string {
 	return path.resolve(/* turbopackIgnore: true */ process.env.ASSETS_DIR ?? ".tmp/assets")
@@ -22,7 +25,7 @@ export async function saveAsset(bytes: Uint8Array, extension: string): Promise<s
 	if (!new RegExp(`^${assetExtensionPattern}$`, "i").test(extension)) throw new Error("Invalid asset extension")
 	const directory = assetsDir()
 	await mkdir(directory, { recursive: true })
-	const filename = `${randomUUID()}.${extension.toLowerCase()}`
+	const filename = `${randomUUID()}.${detectAssetExtension(bytes) ? "" : "file."}${extension.toLowerCase()}`
 	const assetPath = `/assets/${filename}`
 	try {
 		await writeFile(path.join(/* turbopackIgnore: true */ directory, filename), bytes)
