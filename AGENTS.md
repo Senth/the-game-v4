@@ -26,8 +26,9 @@ MongoDB access lives in `lib/db/`, zod schemas in `lib/domain/`, and dev boot an
 Run configured gates in order.
 CI runs `pnpm lint` without `--write` so formatting errors fail instead of changing files.
 
-Agents never run Docker on fenrir. Its `docker` command invokes `sudo docker` and needs a password.
-Development and tests use `mongodb-memory-server`; production images build in CI and the human runs compose.
+Agents may run `/usr/bin/docker` against the `the-game` compose project on fenrir for `ps`, `logs`, `exec` and one-off imports.
+Production compose runs from server-infrastructure, not this checkout. Production images build in CI.
+Development and tests use `mongodb-memory-server`, never Docker.
 `pnpm dev` takes its web and MongoDB ports from 7000-7999, records them in `.tmp/dev-stack/stack.json`
 and releases them on exit. When `MONGODB_URI` is unset, it persists the local database under `.tmp/mongo`.
 When the dispatcher finishes every step, run `[dev] stop` from `.ai/config.toml`.
