@@ -556,6 +556,83 @@ Place season time bar at bottom; after season ends, replace it with "Final" alon
 With no game running, center muted "No game running"; never show a blank screen.
 Body text is at least 28 px for viewing from 3 m.
 
+## Finisher bonus
+
+Final mocks:
+
+- [Phone](https://artifacts.senth.org/final-phone-452833.png)
+- [Desktop](https://artifacts.senth.org/final-desktop-82bbf1.png)
+
+[PROJECT.md](PROJECT.md#finisher-bonus) owns place, points and ordering rules. This section owns their presentation.
+Use board option 1, a ribbon for bonus finishes and a slim banner otherwise. Option 2 is rejected.
+Use `pace-ok` for flags, bonus earnings and the ribbon's green left border.
+
+### Settings rows
+
+Job: setting finisher bonuses before or during play. Primary action: "+ Add place".
+Read row ordinals and points first, winners second, help third.
+Do not make a spreadsheet or CMS form with a Save bar.
+Remove per-row delete buttons except on the last row. Quiet claimed rows; sharpen the last row's ✕ and "+ Add place".
+
+Place this group after shuffle and registration. Use existing field autosave and the header's Saved state.
+
+- Label: "Finisher bonus".
+- Help: "Points for the first teams to finish. Row 1 is first place."
+- Empty state: "No bonus". Add link: "+ Add place".
+- Rows show "1st", "2nd", "3rd", then the points input and a muted "p".
+- Claimed rows show muted ordinal and points, then a green flag and team name. No input or ✕.
+- Show ✕ only on the last unclaimed row.
+- Rejected edits show a `warn` line: "Already won, can't change".
+
+`components/admin/finisher-bonus-rows.tsx` owns the rows, composed by `components/admin/season-settings.tsx`.
+
+### Flags, completed line and team history
+
+Job: seeing who finished and who earned a bonus. Each screen's primary action stays unchanged.
+Read rank and points first, flag and bonus second, rail third.
+Do not compete with points or add a place column. Remove finish-place chips and ordinal markers from ranking rows.
+Quiet the strip's flag. Sharpen "+Np" beside the flag in standings and on the board.
+
+Use one shared inline SVG flag, never emoji. Its `aria-label` reads "Finished" or "Finished, +50p bonus".
+Standings show the flag after the name, with bold "+50p" for positive bonuses only.
+The game strip shows the flag only, never "+Np". Board rows show the flag and positive bonus at board size.
+Zero-point finishers still get flags.
+
+On the completed screen, put a green flag line under the score only for positive bonuses.
+Copy: "First to finish · +50p", or "2nd to finish · +20p". Keep the existing points rank, such as "1st of 10".
+In M4, put a "Finisher bonus" group after the arcs and before "Removed during play", only for positive bonuses.
+Its row shows a flag, "Finished 1st" and "+50p" in `pace-ok`.
+
+Extend `components/standings/standings-list.tsx` and `components/game/standings-strip.tsx` for ranking flags.
+`components/board/board-list.tsx` owns board flags.
+`components/game/lifecycle-screen.tsx` owns the completed line; `components/admin/team-history.tsx` owns the history group.
+
+### Live notices
+
+Job: noticing a team just finished and whether a bonus remains. No primary action; a tap dismisses.
+Read who finished first, "+Np" second, next open place third.
+Do not make a modal, celebration overlay or push-notification card. No confetti or emoji.
+Remove notices from admin pages, standings and the completed screen.
+Quiet no-bonus finishes with a strip notice on the game screen. Sharpen the ribbon's green left border and points.
+
+The first render sets a baseline without replaying old finishes.
+Queue new finishes in place order after refetch, showing one at a time.
+Skip the finishing team's own phones; their completed screen covers it.
+Use `aria-live="polite"` for announcements.
+
+`components/game/finish-ribbon.tsx` owns the positive-bonus ribbon under the game header:
+
+- Header: flag, `<Team> finished 1st`, with "+50p" at right.
+- Muted second line: "2nd still open for +20p", or "No bonus left".
+- Slide down over 250 ms, pushing the quest. Stay 8 seconds, then slide up. A tap closes it.
+
+For zero-point finishes, `components/game/standings-strip.tsx` cross-fades a flag and `<Team> finished 3rd` over the strip.
+Stay 6 seconds, then cross-fade back. The quest does not move.
+The board shows a large ribbon under the title for bonus finishes, a slim banner otherwise, with the same timings.
+Board rows share the remaining height under the existing 76 px cap. Nothing overlaps the footer.
+New flags fade in on standings and the board.
+With `prefers-reduced-motion`, use fades only, never sliding.
+
 ## Anti-references
 
 No gradient heroes, card-in-card layouts, decorative stat tiles or emoji icons.

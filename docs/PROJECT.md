@@ -40,6 +40,8 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `end` | `Date \| null` | Scheduled or actual end; adjusted by live controls |
 | `shuffleArcs` | `boolean` | Shuffle arc order when building each team's order |
 | `registrationOpen` | `boolean` | Teams may self-register for this season; a stored season without it counts as closed |
+| `finisherBonuses` | `number[]` | Points by finish place; defaults to `[]` |
+| `finishers` | `{teamId: string, place: number, points: number, at: Date}[]` | Claimed finishes; defaults to `[]` |
 | `arcs` | `Arc[]` | Arcs in authored order |
 
 A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
@@ -75,6 +77,7 @@ and Shiki for fenced code. There is no separate v3 `code` field.
 | `seasonId` | `string \| null` | Assigned season; null until active-season lookup assigns one |
 | `questOrder` | `string[]` | Quest ids in this team's generated play order |
 | `questIndex` | `number` | Index of the current quest in `questOrder` |
+| `reachedAt` | `Date?` | When the team reached its current quest; set on order build and each advance, including skips |
 | `score` | `number` | Accumulated points, allowed to be negative |
 | `completed` | `boolean` | Team has finished its quest order |
 | `progress` | `TeamQuestProgress[]` | Persistent history for each reached quest |
@@ -184,6 +187,30 @@ Hint edits affect only future reveals. Solves use the stored penalties, even if 
 
 Team hint loss sums the penalty points in every revealed-hint snapshot, including the current unsolved quest.
 M3 and M4 both show this total. It can exceed penalties charged against score, since penalties charge only on solve.
+
+#### Finisher bonus
+
+`finisherBonuses` contains whole numbers from 0 to 10000. Index 0 holds first place's points.
+Every team completing its quest order claims the next finish place, even without a bonus row.
+Places beyond the last row earn 0 points.
+Correct answers and removal of a team's last quest both count as completion.
+When one removal completes several teams, claim their places in `reachedAt` order, earliest first.
+For older teams without `reachedAt`, use the last `solvedAt` in quest order, then season start.
+
+Claim each place atomically on the season document. Teams finishing in the same second receive different places.
+Record the team id, place, points and claim time in `finishers`.
+Freeze the points at claim time and add them to `team.score` exactly once, including retries:
+
+```text
+score = score + bonus
+```
+
+Later row edits never change awarded points. Each team claims only once.
+A row stays editable until its place is claimed. Claimed rows lock and show the winner.
+Admins add rows at the bottom. They may remove only the last row, and only while unclaimed.
+A row added after its place was claimed awards nothing. That place is already taken.
+Deleting a team preserves its claimed place. Nobody moves up.
+With no rows, scores stay unchanged. Finishes are still recorded, flagged and announced.
 
 ### Pace
 
@@ -296,6 +323,7 @@ Players never receive internal titles, admin notes, answers or unrevealed hint t
 and live responses. Hidden hints may expose their id, position and penalty, not their text.
 Players reveal hints by id, not by index, so edits and deletions cannot shift a reveal onto another hint.
 Construct a player view without deleting fields from the shared season object.
+The player finisher list exposes only team id, name, place and points, never claim times or other season fields.
 
 Team join URLs are absolute, built from the request's `host` and `x-forwarded-proto`.
 They log teammates into that team's own `/`, never standings, board or admin JSON.
@@ -308,9 +336,9 @@ then switch back to SSE when connected. UI updates from teammates and live contr
 
 | Channel | Triggers and readers |
 | --- | --- |
-| `team:<id>` | Correct solve, first hint reveal, team changes and structural edits affecting the team; its sessions and admin preview |
-| `season:<id>` | Content, settings, timing, structure or teams change; solve and reveal update admin stats and standings |
-| `board` | Running-season changes, timing changes, solves, reveals and team changes; public TV standings |
+| `team:<id>` | Correct solve, finish, first hint reveal, team changes and structural edits affecting the team; its sessions and admin preview |
+| `season:<id>` | Content, settings, timing, structure or teams change; solve, finish and reveal update admin stats and standings |
+| `board` | Running-season changes, timing changes, solves, finishes, reveals and team changes; public TV standings |
 
 `getGame`, `submitAnswer` and `revealHint` use authorized data. Successful game mutations publish to all
 three channels after writes. Wrong answers and repeated hint reveals are no-ops.
@@ -387,8 +415,6 @@ No milestones or area labels. GitHub blocked-by relations carry ordering. This p
 
 ## Backlog decisions deferred to their implementation
 
-- I-30 defines a per-season first-finisher bonus, default `5 × number of teams`, with one atomic winner.
-  It is not part of the base solve formula until that issue adds the rule and fields here.
 - I-34 adds default quest points per season, affecting new quests only, not existing ones.
 - I-35 researches LiveKit versus peer-to-peer WebRTC for 2-6 players on phones. No voice implementation.
 

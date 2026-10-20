@@ -27,8 +27,8 @@ function historyHints(progress: TeamQuestProgress | undefined, quest?: Quest) {
 }
 
 export function teamHistory(
-	season: Pick<Season, "start" | "end" | "arcs">,
-	team: Pick<Team, "score" | "questOrder" | "questIndex" | "progress" | "completed">,
+	season: Pick<Season, "start" | "end" | "arcs" | "finishers">,
+	team: Pick<Team, "_id" | "score" | "questOrder" | "questIndex" | "progress" | "completed">,
 	now: Date,
 ) {
 	const lifecycle = lifecycleState(season, team, now)
@@ -48,7 +48,9 @@ export function teamHistory(
 	const progressByQuest = new Map(team.progress.map((entry) => [entry.questId, entry]))
 	const arcs = playableArcs(season)
 	const questIds = new Set(arcs.flatMap((arc) => arc.quests.map((quest) => quest.id)))
+	const finisher = season.finishers?.find((entry) => entry.teamId === team._id && entry.points > 0)
 	return {
+		bonus: finisher ? { place: finisher.place, points: finisher.points } : null,
 		stats: { score: team.score, ...questCounts(team), hintLoss: teamHintLoss(team), state },
 		arcs: arcs.map((arc) => ({
 			id: arc.id,

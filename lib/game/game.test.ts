@@ -45,7 +45,7 @@ useTestDb()
 
 const now = new Date("2026-10-09T18:00:00Z")
 const fixture = buildFixture(now)
-const season = withSecrets(fixture.season)
+const season = { ...withSecrets(fixture.season), finisherBonuses: [] }
 const ninjas = fixture.teams.find((team) => team._id === "team-ninjas") as (typeof fixture.teams)[number]
 const current = "backwards-log"
 const next = ninjas.questOrder[ninjas.questIndex + 1] as string
@@ -94,12 +94,22 @@ describe("loadGame", () => {
 			score: 0,
 			progress: ninjas.progress.filter((entry) => entry.questId === current),
 		})
-		expect(await loadGame(team, now)).toMatchObject(
+		const game = await loadGame(team, now)
+		expect(game).toMatchObject(
 			last
 				? { lifecycleState: "completed", score: 0 }
 				: { lifecycleState: "running", quest: { id: next }, score: 0, total: 1 },
 		)
-		expect(await getTeam(team._id)).toEqual(team)
+		expect(await getTeam(team._id)).toMatchObject({
+			questOrder: last ? [] : [next],
+			completed: last,
+		})
+		if (last) {
+			expect(game).toHaveProperty("finishers", [{ teamId: team._id, name: team.name, place: 1, points: 0 }])
+			expect((await (await collections()).seasons.findOne({ _id: gapSeason._id }))?.finishers).toEqual([
+				{ teamId: team._id, place: 1, points: 0, at: expect.any(Date) },
+			])
+		}
 	})
 
 	it("returns waiting for a seasonless team", async () => {
@@ -123,7 +133,14 @@ describe("loadGame", () => {
 		await setTeamField(team._id, "completed", team.completed)
 		try {
 			const game = await loadGame(team, season.end as Date)
-			expect(game).toEqual({ lifecycleState: state, score: team.score, rank: 7, teamCount: 10 })
+			expect(game).toEqual({
+				lifecycleState: state,
+				teamId: team._id,
+				finishers: [],
+				score: team.score,
+				rank: 7,
+				teamCount: 10,
+			})
 			expect(JSON.stringify(game)).not.toContain("secret-")
 		} finally {
 			await setTeamField(team._id, "completed", false)

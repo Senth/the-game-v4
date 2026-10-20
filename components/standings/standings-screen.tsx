@@ -45,7 +45,7 @@ export function StandingsScreen({
 				) : (
 					<FinalSummary standings={standings} />
 				)}
-				<StandingsList rows={standings.rows} />
+				<StandingsList rows={standings.rows} finishers={standings.finishers} />
 			</main>
 		</div>
 	)

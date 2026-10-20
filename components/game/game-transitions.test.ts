@@ -4,6 +4,9 @@ import { gameTransitions } from "./game-transitions"
 
 const running: Extract<PlayerGame, { lifecycleState: "running" }> = {
 	lifecycleState: "running",
+	teamId: "team",
+	finishers: [],
+	nextBonus: null,
 	quest: {
 		id: "log",
 		displayTitle: "The log",
@@ -95,8 +98,8 @@ describe("gameTransitions", () => {
 	})
 
 	it.each<PlayerGame>([
-		{ lifecycleState: "ended", score: 64, rank: 7, teamCount: 10 },
-		{ lifecycleState: "completed", score: 64, rank: 7, teamCount: 10 },
+		{ lifecycleState: "ended", teamId: "team", finishers: [], score: 64, rank: 7, teamCount: 10 },
+		{ lifecycleState: "completed", teamId: "team", finishers: [], score: 64, rank: 7, teamCount: 10 },
 		{ ...running, quest: null },
 	])("clears the input when running quest disappears: $lifecycleState", (next) => {
 		expect(gameTransitions(running, next).questChanged).toBe(true)

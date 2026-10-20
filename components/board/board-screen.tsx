@@ -2,8 +2,10 @@
 
 import { useCallback } from "react"
 import { getBoard } from "@/app/board/actions"
+import { FinishRibbon } from "@/components/game/finish-ribbon"
 import { useGameClock } from "@/components/game/use-game-clock"
 import type { PublicBoard } from "@/lib/domain/player-game"
+import { useFinisherNotices } from "@/lib/events/use-finisher-notices"
 import { useLiveState } from "@/lib/events/use-live-state"
 import { BoardList } from "./board-list"
 import { BoardStage } from "./board-stage"
@@ -35,6 +37,10 @@ export function BoardScreen({
 	const [board, setBoard] = useLiveState(getBoard, channels, initial)
 	const setClock = useCallback((next: ReturnType<typeof boardClock>) => setBoard(next.board), [setBoard])
 	const now = useGameClock(boardClock(board), initialNow, fetchClock, setClock)
+	const notices = useFinisherNotices(
+		board.view === "running" ? board.finishers : undefined,
+		board.view === "running" ? board.start.toISOString() : "",
+	)
 	return (
 		<BoardStage>
 			{board.view === "idle" ? (
@@ -45,7 +51,19 @@ export function BoardScreen({
 				<main className="flex h-full flex-col px-20 pt-10 pb-10">
 					<div className="flex min-h-0 flex-1 flex-col">
 						<h1 className="mb-4 shrink-0 font-cond text-[28px] text-muted uppercase tracking-wider">{board.title}</h1>
-						<BoardList rows={board.rows} />
+						<div className="shrink-0" aria-live="polite" aria-atomic="true">
+							{board.view === "running" && notices.notice && (
+								<FinishRibbon
+									key={notices.notice.teamId}
+									notice={notices.notice}
+									nextBonus={board.nextBonus}
+									closing={notices.closing}
+									onDismiss={notices.dismiss}
+									board
+								/>
+							)}
+						</div>
+						<BoardList rows={board.rows} finishers={board.finishers} />
 					</div>
 					<div className="shrink-0">
 						{board.view === "running" ? (

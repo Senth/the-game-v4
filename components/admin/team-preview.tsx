@@ -12,7 +12,7 @@ export function TeamPreview({
 	teams,
 	now,
 }: {
-	season: Pick<Season, "start" | "end" | "arcs">
+	season: Pick<Season, "start" | "end" | "arcs" | "finishers">
 	team: Omit<Team, "passwordHash">
 	teams: Omit<Team, "passwordHash">[]
 	now: number

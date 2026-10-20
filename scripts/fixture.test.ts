@@ -25,6 +25,8 @@ const standings: [string, number, number][] = [
 
 describe("buildFixture", () => {
 	it("passes the Season, Team and Admin schemas", () => {
+		expect(season.finisherBonuses).toEqual([50, 20])
+		expect(season.finishers).toEqual([])
 		expect(() => Season.parse(season)).not.toThrow()
 		for (const { password, ...team } of teams)
 			expect(() => Team.parse({ ...team, passwordHash: password })).not.toThrow()

@@ -22,6 +22,51 @@ const cases = {
 	ended: [secretSeason, ninjas, end],
 } as const
 
+it("exposes only named finisher fields across player and public views without mutating season", () => {
+	const finished = {
+		...secretSeason,
+		finishers: [
+			{ teamId: ninjas._id, place: 1, points: 50, at: now },
+			{ teamId: "deleted", place: 2, points: 0, at: now },
+		],
+	}
+	const before = structuredClone(finished)
+	const expected = [
+		{ teamId: ninjas._id, name: ninjas.name, place: 1, points: 50 },
+		{ teamId: "deleted", name: "Deleted team", place: 2, points: 0 },
+	]
+	for (const at of [now, end]) {
+		for (const team of [ninjas, { ...ninjas, completed: true }]) {
+			for (const view of [
+				playerGame(finished, team, teams, at),
+				playerStandings(finished, team, teams, at),
+				publicBoard([finished], { [finished._id]: teams }, at),
+			]) {
+				expect(view).toHaveProperty("finishers", expected)
+				const json = JSON.stringify(view)
+				for (const field of ["finisherBonuses", '"at":', "secret-", "passwordHash"]) expect(json).not.toContain(field)
+			}
+		}
+	}
+	expect(finished).toEqual(before)
+})
+
+it("exposes only next open bonus to running game and board notices", () => {
+	const finished = {
+		...secretSeason,
+		finisherBonuses: [50, 0, 20],
+		finishers: [{ teamId: ninjas._id, place: 1, points: 50, at: now }],
+	}
+	for (const view of [
+		playerGame(finished, ninjas, teams, now),
+		publicBoard([finished], { [finished._id]: teams }, now),
+	]) {
+		expect(view).toHaveProperty("nextBonus", { place: 3, points: 20 })
+		expect(JSON.stringify(view)).not.toContain("finisherBonuses")
+	}
+	expect(playerGame({ ...finished, finisherBonuses: [50] }, ninjas, teams, now)).toHaveProperty("nextBonus", null)
+})
+
 describe("playerGame", () => {
 	it("returns waiting for a null, missing or unscheduled season", () => {
 		expect(playerGame(null, ninjas, teams, now)).toEqual({ lifecycleState: "waiting" })
@@ -87,12 +132,16 @@ describe("playerGame", () => {
 		const team = { ...ninjas, completed: true }
 		expect(playerGame(season, team, teams, now)).toEqual({
 			lifecycleState: "completed",
+			teamId: ninjas._id,
+			finishers: [],
 			score: ninjas.score,
 			rank: 7,
 			teamCount: 10,
 		})
 		expect(playerGame(season, team, teams, new Date(end.getTime() + 1))).toEqual({
 			lifecycleState: "completed",
+			teamId: ninjas._id,
+			finishers: [],
 			score: ninjas.score,
 			rank: 7,
 			teamCount: 10,
@@ -102,6 +151,8 @@ describe("playerGame", () => {
 	it("returns score and place when ended", () => {
 		expect(playerGame(season, ninjas, teams, end)).toEqual({
 			lifecycleState: "ended",
+			teamId: ninjas._id,
+			finishers: [],
 			score: ninjas.score,
 			rank: 7,
 			teamCount: 10,
@@ -148,6 +199,8 @@ describe("publicBoard", () => {
 			start,
 			end,
 			rows: standingsRows(season, teams, "", false),
+			finishers: [],
+			nextBonus: { place: 1, points: 50 },
 			nextStart: null,
 		})
 		expect(publicBoard([{ ...secretSeason, end: null }], teamsBySeason, now)).toMatchObject({
@@ -180,6 +233,7 @@ describe("publicBoard", () => {
 			view: "final",
 			title: final.title,
 			rows: standingsRows(final, [ninjas], "", false),
+			finishers: [],
 			nextStart: upcoming.start,
 		})
 		expect(publicBoard([final], teamsBySeason, now)).toMatchObject({ view: "final", nextStart: null })

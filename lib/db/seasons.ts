@@ -51,6 +51,45 @@ export async function listSeasons(): Promise<Season[]> {
 	return (await collections()).seasons.find().toArray()
 }
 
+export class FinisherBonusClaimedError extends Error {
+	constructor() {
+		super("Already won, can't change")
+	}
+}
+
+export async function addFinisherBonus(seasonId: string, points: number): Promise<void> {
+	const value = Hint.shape.points.parse(points)
+	const result = await (await collections()).seasons.updateOne({ _id: seasonId }, { $push: { finisherBonuses: value } })
+	if (!result.matchedCount) throw new NotFoundError(`Season ${seasonId} not found`)
+}
+
+export async function setFinisherBonus(seasonId: string, index: number, points: number): Promise<void> {
+	z.number().int().nonnegative().parse(index)
+	const value = Hint.shape.points.parse(points)
+	const result = await (await collections()).seasons.updateOne(
+		{
+			_id: seasonId,
+			[`finisherBonuses.${index}`]: { $exists: true },
+			$expr: { $lte: [{ $size: { $ifNull: ["$finishers", []] } }, index] },
+		},
+		{ $set: { [`finisherBonuses.${index}`]: value } },
+	)
+	if (!result.matchedCount) throw new FinisherBonusClaimedError()
+}
+
+export async function removeLastFinisherBonus(seasonId: string): Promise<number> {
+	const result = await (await collections()).seasons.findOneAndUpdate(
+		{
+			_id: seasonId,
+			$expr: { $gt: [{ $size: { $ifNull: ["$finisherBonuses", []] } }, { $size: { $ifNull: ["$finishers", []] } }] },
+		},
+		{ $pop: { finisherBonuses: 1 } },
+		{ returnDocument: "before", projection: { finisherBonuses: 1 } },
+	)
+	if (!result) throw new FinisherBonusClaimedError()
+	return result.finisherBonuses.length - 1
+}
+
 export class CopyTargetStartedError extends Error {
 	name = "CopyTargetStartedError"
 

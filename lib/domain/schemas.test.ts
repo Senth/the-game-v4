@@ -103,6 +103,15 @@ describe("Season", () => {
 	it("reads a stored season without registrationOpen as closed", () => {
 		const stored = { _id: "s1", title: "Old", lengthMinutes: 60, start: null, end: null, shuffleArcs: false, arcs: [] }
 		expect(Season.parse(stored).registrationOpen).toBe(false)
+		expect(Season.parse(stored)).toMatchObject({ finisherBonuses: [], finishers: [] })
+	})
+
+	it.each([-1, 10001, 1.5, "50"])("rejects invalid finisher bonus %j", (points) => {
+		expect(Season.shape.finisherBonuses.safeParse([points]).success).toBe(false)
+	})
+
+	it("accepts whole-number finisher bonuses including zero", () => {
+		expect(Season.shape.finisherBonuses.parse([0, 50, 10000])).toEqual([0, 50, 10000])
 	})
 })
 

@@ -1,9 +1,11 @@
 import { z } from "zod"
+import { sortByArrival } from "@/lib/domain/finishers"
 import { applyStructuralEdit, buildQuestOrder, type StructuralEdit } from "@/lib/domain/game"
 import { playableArcs } from "@/lib/domain/playable-quests"
 import { RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
 import { publish, teamChannel } from "@/lib/events/bus"
 import { collections, NotFoundError } from "./collections"
+import { claimFinish } from "./finishers"
 import { finishSeasonStructure, withSeasonStructure } from "./structural-writes"
 
 type TeamField = Exclude<keyof Team, "_id">
@@ -46,34 +48,57 @@ export async function deleteTeam(id: string): Promise<boolean> {
 export async function editSeasonTeamOrders(seasonId: string, edit: StructuralEdit): Promise<string[]> {
 	const { teams } = await collections()
 	const affected: string[] = []
-	for (const listed of await listSeasonTeams(seasonId)) {
-		let current: Omit<Team, "passwordHash"> | null = listed
-		for (let attempt = 0; current && current.seasonId === seasonId; attempt++) {
-			if (edit.kind === "addQuest" && current.questOrder.includes(edit.questId)) break
-			const result = applyStructuralEdit([current], edit)
-			const changed = result.teams[0]
-			if (!result.affected.length || !changed) break
-			const written = await teams.updateOne(
-				{
-					_id: current._id,
-					seasonId,
-					questOrder: current.questOrder,
-					questIndex: current.questIndex,
-					completed: current.completed,
-					progress: current.progress,
-				},
-				{ $set: { questOrder: changed.questOrder, completed: changed.completed, progress: changed.progress } },
-			)
-			if (written.matchedCount) {
-				affected.push(current._id)
-				publish(teamChannel(current._id))
-				break
+	const completed: Omit<Team, "passwordHash">[] = []
+	const now = new Date()
+	try {
+		for (const listed of await listSeasonTeams(seasonId)) {
+			if (listed.completed && listed.finisherBonusApplied === false) completed.push(listed)
+			let current: Omit<Team, "passwordHash"> | null = listed
+			for (let attempt = 0; current && current.seasonId === seasonId; attempt++) {
+				if (edit.kind === "addQuest" && current.questOrder.includes(edit.questId)) break
+				const result = applyStructuralEdit([current], edit, Math.random, now)
+				const changed = result.teams[0]
+				if (!result.affected.length || !changed) break
+				const written = await teams.updateOne(
+					{
+						_id: current._id,
+						seasonId,
+						questOrder: current.questOrder,
+						questIndex: current.questIndex,
+						completed: current.completed,
+						progress: current.progress,
+					},
+					{
+						$set: {
+							questOrder: changed.questOrder,
+							completed: changed.completed,
+							progress: changed.progress,
+							...(changed.reachedAt ? { reachedAt: changed.reachedAt } : {}),
+							...(changed.completed && !current.completed ? { finisherBonusApplied: false } : {}),
+						},
+					},
+				)
+				if (written.matchedCount) {
+					affected.push(current._id)
+					if (changed.completed && !current.completed) completed.push(current)
+					break
+				}
+				if (attempt === 3) throw new Error("Not saved, retry")
+				current = await getTeam(current._id)
 			}
-			if (attempt === 3) throw new Error("Not saved, retry")
-			current = await getTeam(current._id)
 		}
+		if (completed.length) {
+			const season = await (await collections()).seasons.findOne({ _id: seasonId })
+			if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
+			for (const team of sortByArrival(completed, season)) {
+				await claimFinish(seasonId, team._id, now)
+				if (!affected.includes(team._id)) affected.push(team._id)
+			}
+		}
+		return affected
+	} finally {
+		for (const teamId of affected) publish(teamChannel(teamId))
 	}
-	return affected
 }
 
 export async function fillQuestOrders(
@@ -90,7 +115,7 @@ export async function fillQuestOrders(
 			.map((team) => ({
 				updateOne: {
 					filter: { _id: team._id, seasonId: season._id, questOrder: { $size: 0 }, progress: { $size: 0 } },
-					update: { $set: { questOrder: buildQuestOrder(current, random) } },
+					update: { $set: { questOrder: buildQuestOrder(current, random), reachedAt: new Date() } },
 				},
 			}))
 		if (operations.length === 0) return false
@@ -173,6 +198,8 @@ export async function solveCurrentQuest(
 				"progress.$.solvedAt": solve.solvedAt,
 				"progress.$.pointsEarned": solve.pointsEarned,
 				completed: current.questIndex + 1 === current.orderLength,
+				...(current.questIndex + 1 === current.orderLength ? { finisherBonusApplied: false } : {}),
+				reachedAt: solve.solvedAt,
 			},
 			$inc: { score: solve.pointsEarned, questIndex: 1 },
 		},

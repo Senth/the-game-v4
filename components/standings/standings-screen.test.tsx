@@ -121,7 +121,9 @@ describe("StandingsScreen", () => {
 	it("keeps long names truncated inside a shrinkable flex child", () => {
 		const name = "VeryLongTeamName".repeat(10)
 		const html = render({ ...running, rows: running.rows.map((row) => ({ ...row, name })) })
-		expect(html).toContain(`<span class="min-w-0 flex-1"><span class="block truncate text-ink`)
+		expect(html).toContain(
+			`<span class="min-w-0 flex-1"><span class="flex items-center gap-1"><span class="truncate text-ink`,
+		)
 		expect(html).toContain(name)
 	})
 

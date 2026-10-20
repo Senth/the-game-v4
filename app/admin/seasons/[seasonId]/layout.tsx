@@ -50,7 +50,15 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 		/>
 	)
 	return (
-		<AutosaveProvider key={seasonId} seasonId={seasonId} start={season.start} end={season.end} now={now}>
+		<AutosaveProvider
+			key={seasonId}
+			seasonId={seasonId}
+			start={season.start}
+			end={season.end}
+			now={now}
+			finisherBonuses={season.finisherBonuses ?? []}
+			finishers={season.finishers ?? []}
+		>
 			<AdminFrame
 				title={season.title}
 				status={status}
@@ -94,7 +102,13 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 				}
 				preview={
 					<SeasonPreview
-						season={{ start: season.start, end: season.end, lengthMinutes: season.lengthMinutes, arcs: season.arcs }}
+						season={{
+							start: season.start,
+							end: season.end,
+							lengthMinutes: season.lengthMinutes,
+							arcs: season.arcs,
+							finishers: season.finishers ?? [],
+						}}
 						teams={teams}
 						now={now}
 					/>

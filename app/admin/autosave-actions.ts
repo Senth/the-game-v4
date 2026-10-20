@@ -4,11 +4,14 @@ import { z } from "zod"
 import { requireAdmin } from "@/lib/auth/guards"
 import { NotFoundError } from "@/lib/db/collections"
 import {
+	addFinisherBonus as addBonus,
 	getSeason,
 	patchSeasonList as patchList,
 	RegistrationConflictError,
+	removeLastFinisherBonus as removeBonus,
 	moveHint as reorderHint,
 	type SeasonFieldTarget,
+	setFinisherBonus as setBonus,
 	setSeasonField,
 	setSeasonLength,
 	setSeasonWindow,
@@ -20,7 +23,19 @@ import { type ActionResult, actionFailure } from "./action-result"
 
 const id = z.string().min(1)
 const FieldTarget = z.union([
-	z.object({ field: Season.omit({ _id: true, arcs: true, registrationOpen: true, end: true }).keyof() }).strict(),
+	z
+		.object({
+			field: Season.omit({
+				_id: true,
+				arcs: true,
+				registrationOpen: true,
+				end: true,
+				finisherBonuses: true,
+				finishers: true,
+			}).keyof(),
+		})
+		.strict(),
+	z.object({ field: z.literal("finisherBonuses"), index: z.string().regex(/^(0|[1-9]\d*)$/) }).strict(),
 	z.object({ arcId: id, field: Arc.omit({ id: true, quests: true }).keyof() }).strict(),
 	z
 		.object({
@@ -33,6 +48,45 @@ const FieldTarget = z.union([
 ])
 const ListTarget = z.object({ arcId: id, questId: id, field: z.enum(["answers", "hints"]) }).strict()
 const HintMoveTarget = z.object({ seasonId: id, id, beforeId: id.nullable() }).strict()
+
+export async function addFinisherBonus(seasonId: string, points: number): Promise<ActionResult> {
+	await requireAdmin()
+	try {
+		await addBonus(id.parse(seasonId), points)
+	} catch (error) {
+		return actionFailure(error, new Date())
+	}
+	publish(seasonChannel(seasonId))
+	publish(boardChannel)
+	return { ok: true }
+}
+
+export async function setFinisherBonus(seasonId: string, index: number, points: number): Promise<ActionResult> {
+	await requireAdmin()
+	try {
+		await setBonus(id.parse(seasonId), index, points)
+	} catch (error) {
+		return actionFailure(error, new Date())
+	}
+	publish(seasonChannel(seasonId))
+	publish(boardChannel)
+	return { ok: true }
+}
+
+export async function removeLastFinisherBonus(
+	seasonId: string,
+): Promise<{ ok: true; removedIndex: number } | Extract<ActionResult, { ok: false }>> {
+	await requireAdmin()
+	let removedIndex: number
+	try {
+		removedIndex = await removeBonus(id.parse(seasonId))
+	} catch (error) {
+		return actionFailure(error, new Date())
+	}
+	publish(seasonChannel(seasonId))
+	publish(boardChannel)
+	return { ok: true, removedIndex }
+}
 
 export async function moveHint(target: Parameters<typeof reorderHint>[0]): Promise<ActionResult> {
 	await requireAdmin()
@@ -49,7 +103,7 @@ export async function moveHint(target: Parameters<typeof reorderHint>[0]): Promi
 
 export async function saveSeasonField(
 	seasonId: string,
-	target: SeasonFieldTarget,
+	target: SeasonFieldTarget | { field: "finisherBonuses"; index: string },
 	value: unknown,
 ): Promise<ActionResult> {
 	await requireAdmin()
@@ -57,6 +111,7 @@ export async function saveSeasonField(
 	try {
 		const parsed = FieldTarget.parse(target)
 		id.parse(seasonId)
+		if ("index" in parsed) return setFinisherBonus(seasonId, Number(parsed.index), value as number)
 		if (
 			"questId" in parsed &&
 			parsed.field === "points" &&

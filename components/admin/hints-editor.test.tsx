@@ -243,7 +243,15 @@ beforeEach(() => {
 	sortable.rows = []
 	sortable.layer = null
 	hooks.context = run(scope(), () =>
-		AutosaveProvider({ seasonId: "season", start: null, end: null, now: Date.now(), children: null }),
+		AutosaveProvider({
+			seasonId: "season",
+			start: null,
+			end: null,
+			now: Date.now(),
+			finisherBonuses: [],
+			finishers: [],
+			children: null,
+		}),
 	).props.value
 	editor = scope()
 	rows = new Map()
@@ -406,7 +414,15 @@ it("shows missing and negative Worth, preserves long one-line text and keeps pen
 	editor = scope()
 	rows.clear()
 	hooks.context = run(scope(), () =>
-		AutosaveProvider({ seasonId: "other", start: null, end: null, now: Date.now(), children: null }),
+		AutosaveProvider({
+			seasonId: "other",
+			start: null,
+			end: null,
+			now: Date.now(),
+			finisherBonuses: [],
+			finishers: [],
+			children: null,
+		}),
 	).props.value
 	const long = view({
 		...props,

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation"
 import { createContext, type ReactNode, useContext, useEffect, useEffectEvent, useState } from "react"
 import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
-import type { Hint, HintInput } from "@/lib/domain/schemas"
+import type { Hint, HintInput, Season } from "@/lib/domain/schemas"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { type AutosaveState, createFieldSaver, createListSaver } from "./autosave"
 import { useSeasonClock } from "./use-season-clock"
@@ -14,6 +14,8 @@ type Draft = {
 	saver: { cancel: () => void }
 }
 
+type DiscardTarget = { arcId: string; questId?: string; hintId?: string } | { field: "finisherBonuses"; index: string }
+
 type SaveContext = {
 	seasonId: string
 	status: "saved" | "saving" | "failed" | null
@@ -21,7 +23,7 @@ type SaveContext = {
 	listenersFor: (id: string) => Set<() => void>
 	update: (id: string, state: AutosaveState, retry: () => void) => void
 	remove: (id: string) => void
-	discard: (target: { arcId: string; questId?: string; hintId?: string }) => void
+	discard: (target: DiscardTarget) => void
 	retryAll: () => void
 }
 
@@ -36,8 +38,10 @@ export function AutosaveProvider({
 	start,
 	end,
 	now,
+	finisherBonuses,
+	finishers,
 	children,
-}: {
+}: Pick<Season, "finisherBonuses" | "finishers"> & {
 	seasonId: string
 	start: Date | null
 	end: Date | null
@@ -84,11 +88,10 @@ export function AutosaveProvider({
 				drafts.delete(id)
 				changed()
 			},
-			discard(target: { arcId: string; questId?: string; hintId?: string }) {
+			discard(target: DiscardTarget) {
 				for (const [id, draft] of drafts) {
-					if (draft.target.arcId !== target.arcId || (target.questId && draft.target.questId !== target.questId))
+					if (!Object.entries(target).every(([key, value]) => value === undefined || draft.target[key] === value))
 						continue
-					if (target.hintId && draft.target.hintId !== target.hintId) continue
 					draft.saver.cancel()
 					fields.delete(id)
 					drafts.delete(id)
@@ -100,6 +103,16 @@ export function AutosaveProvider({
 			},
 		}
 	})
+
+	useEffect(() => {
+		for (const draft of registry.drafts.values()) {
+			if (draft.target.field !== "finisherBonuses") continue
+			const index = Number(draft.target.index)
+			if (index >= finisherBonuses.length || finishers.some((finisher) => finisher.place === index + 1)) {
+				registry.discard({ field: "finisherBonuses", index: String(index) })
+			}
+		}
+	}, [finisherBonuses.length, finishers, registry])
 
 	useEffect(() => {
 		window.addEventListener("online", registry.retryAll)

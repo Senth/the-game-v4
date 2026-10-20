@@ -1,12 +1,13 @@
 import { Children, type EffectCallback, isValidElement, type ReactElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
+import { patchSeasonList, removeLastFinisherBonus, saveSeasonField } from "@/app/admin/autosave-actions"
 import TeamPage from "@/app/admin/seasons/[seasonId]/teams/[teamId]/page"
 import TeamsPage from "@/app/admin/seasons/[seasonId]/teams/page"
 import { addQuest, moveQuest, removeArc, removeQuest } from "@/app/admin/tree-actions"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
+import type { Season } from "@/lib/domain/schemas"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { buildFixture } from "@/scripts/fixture"
 import { AdminFrame } from "./admin-frame"
@@ -18,6 +19,7 @@ import {
 	useDraftHints,
 	useDraftValue,
 } from "./autosave-provider"
+import { FinisherBonusRows } from "./finisher-bonus-rows"
 import { QuestEditor } from "./quest-editor"
 import { QuestPreview } from "./quest-preview"
 import { AutosaveHeader, SaveStatus } from "./save-status"
@@ -79,7 +81,11 @@ vi.mock("next/navigation", () => ({
 	useRouter: () => ({ refresh: hooks.refresh, push: hooks.push }),
 	useSelectedLayoutSegments: () => hooks.segments,
 }))
-vi.mock("@/app/admin/autosave-actions", () => ({ saveSeasonField: vi.fn(), patchSeasonList: vi.fn() }))
+vi.mock("@/app/admin/autosave-actions", () => ({
+	saveSeasonField: vi.fn(),
+	patchSeasonList: vi.fn(),
+	removeLastFinisherBonus: vi.fn(),
+}))
 vi.mock("@/app/admin/tree-actions", () => ({
 	removeArc: vi.fn(),
 	removeQuest: vi.fn(),
@@ -124,8 +130,12 @@ function firstTreeArc(node: ReactNode): ReactElement<TreeArcProps> | undefined {
 	}
 }
 
-function provider(state = scope(), timing = { start: null as Date | null, end: null as Date | null, now: Date.now() }) {
-	const element = render(state, () => AutosaveProvider({ seasonId: "season-1", ...timing, children: null }))
+function provider(
+	state = scope(),
+	timing = { start: null as Date | null, end: null as Date | null, now: Date.now() },
+	bonuses: Pick<Season, "finisherBonuses" | "finishers"> = { finisherBonuses: [], finishers: [] },
+) {
+	const element = render(state, () => AutosaveProvider({ seasonId: "season-1", ...timing, ...bonuses, children: null }))
 	hooks.context = element.props.value
 	return { state, context: element.props.value }
 }
@@ -250,6 +260,7 @@ it.each(["direct", "via placeholder"])(
 			start: new Date(now - 60_000),
 			end: new Date(now + 60_000),
 			lengthMinutes: 2,
+			finishers: [],
 			arcs: [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [quest, next] }],
 		}
 		const layout = scope()
@@ -833,6 +844,124 @@ it.each(["quest", "arc"] as const)("discards only removed %s drafts after an ext
 	unmount(survivor)
 	unmount(menu)
 	expect(provider(owner.state).context.status).toBe(null)
+})
+
+it.each(["local removal", "external removal", "claim"])(
+	"discards failed indexed bonus drafts after %s without retrying or reusing them",
+	async (change) => {
+		const owner = provider()
+		const rows = scope()
+		const points = scope()
+		const title = scope()
+		const target = { field: "finisherBonuses", index: "2" } as const
+		const season = { _id: "season-1", finisherBonuses: [50, 20, 10], finishers: [] }
+		const view = (snapshot: Parameters<typeof FinisherBonusRows>[0]["season"] = season) => {
+			provider(owner.state, undefined, snapshot)
+			return render(rows, () => FinisherBonusRows({ season: snapshot, teams: [] }))
+		}
+		view()
+		vi.mocked(saveSeasonField).mockResolvedValue({ ok: false, error: "Not saved" })
+		const field = render(points, () => useAutosaveField(target, 10))
+		field.onChange(999)
+		await field.onBlur()
+		const retained = render(title, () => useAutosaveField({ field: "title" }, "Season"))
+		retained.onChange("Retained draft")
+		await retained.onBlur()
+		if (change === "local removal") {
+			vi.mocked(removeLastFinisherBonus).mockResolvedValueOnce({ ok: true, removedIndex: 2 })
+			const lastRow = view().props.children[2][2]
+			lastRow.props.children[1].props.children[1].props.onClick()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(removeLastFinisherBonus).toHaveBeenCalledWith(season._id)
+		} else {
+			unmount(points)
+			view({
+				...season,
+				finisherBonuses: change === "claim" ? season.finisherBonuses : [50, 20],
+				finishers: change === "claim" ? [{ teamId: "winner", place: 3, points: 10, at: new Date() }] : [],
+			})
+		}
+		expect([...owner.context.drafts.values()].some((draft) => draft.target.index === "2")).toBe(false)
+		if (change === "local removal") {
+			unmount(points)
+			view({ ...season, finisherBonuses: [50, 20] })
+		}
+		vi.mocked(saveSeasonField).mockClear().mockResolvedValue({ ok: true })
+		owner.context.retryAll()
+		window.dispatchEvent(new Event("online"))
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(saveSeasonField).toHaveBeenCalledExactlyOnceWith("season-1", { field: "title" }, "Retained draft")
+		if (change !== "claim") {
+			view({ ...season, finisherBonuses: [50, 20, 0] })
+			const replacement = render(scope(), () => useAutosaveField(target, 0))
+			expect(replacement.value).toBe(0)
+			expect(replacement.failed).toBe(false)
+		}
+	},
+)
+
+it.each(["external removal", "claim"])(
+	"discards failed bonus drafts after leaving Settings then %s before retry",
+	async (change) => {
+		const season: Pick<Season, "_id" | "finisherBonuses" | "finishers"> = {
+			_id: "season-1",
+			finisherBonuses: [50, 20, 10],
+			finishers: [],
+		}
+		const owner = provider(undefined, undefined, season)
+		const settings = scope()
+		const points = scope()
+		const target = { field: "finisherBonuses", index: "2" } as const
+		render(settings, () => FinisherBonusRows({ season, teams: [] }))
+		vi.mocked(saveSeasonField).mockResolvedValue({ ok: false, error: "Not saved" })
+		const field = render(points, () => useAutosaveField(target, 10))
+		field.onChange(999)
+		await field.onBlur()
+		unmount(points)
+		unmount(settings)
+		hooks.segments = ["quests", "quest"]
+		const quest = render(scope(), () => useAutosaveField({ arcId: "arc", questId: "quest", field: "content" }, ""))
+		quest.onChange("Retained quest draft")
+		await quest.onBlur()
+		provider(owner.state, undefined, {
+			finisherBonuses: change === "claim" ? season.finisherBonuses : [50, 20],
+			finishers: change === "claim" ? [{ teamId: "winner", place: 3, points: 10, at: new Date() }] : [],
+		})
+		vi.mocked(saveSeasonField).mockClear().mockResolvedValue({ ok: true })
+		owner.context.retryAll()
+		window.dispatchEvent(new Event("online"))
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(saveSeasonField).toHaveBeenCalledExactlyOnceWith(
+			"season-1",
+			{ arcId: "arc", questId: "quest", field: "content" },
+			"Retained quest draft",
+		)
+		expect([...owner.context.drafts.values()].some((draft) => draft.target.index === "2")).toBe(false)
+		if (change === "external removal") {
+			provider(owner.state, undefined, { ...season, finisherBonuses: [50, 20, 0] })
+			const replacement = render(scope(), () => useAutosaveField(target, 0))
+			expect(replacement.value).toBe(0)
+			expect(replacement.failed).toBe(false)
+		}
+	},
+)
+
+it("keeps surviving bonus saver active when a concurrent append precedes stale removal", async () => {
+	const season = { _id: "season-1", finisherBonuses: [50, 20], finishers: [] }
+	const owner = provider(undefined, undefined, season)
+	const rows = scope()
+	const points = scope()
+	const target = { field: "finisherBonuses", index: "1" } as const
+	const field = () => render(points, () => useAutosaveField(target, 20))
+	field()
+	vi.mocked(removeLastFinisherBonus).mockResolvedValueOnce({ ok: true, removedIndex: 2 })
+	const view = render(rows, () => FinisherBonusRows({ season, teams: [] }))
+	view.props.children[2][1].props.children[1].props.children[1].props.onClick()
+	await vi.advanceTimersByTimeAsync(0)
+	provider(owner.state, undefined, season)
+	field().onChange(30)
+	await field().onBlur()
+	expect(saveSeasonField).toHaveBeenCalledExactlyOnceWith("season-1", target, 30)
 })
 
 it.each(["menu", "page"] as const)(

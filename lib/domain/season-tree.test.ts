@@ -70,6 +70,8 @@ describe("canEditStructure", () => {
 describe("treeView", () => {
 	it("returns minimal quest labels and points without mutating the season", () => {
 		const season: Season = {
+			finisherBonuses: [],
+			finishers: [],
 			_id: "s1",
 			title: "Season",
 			lengthMinutes: 60,

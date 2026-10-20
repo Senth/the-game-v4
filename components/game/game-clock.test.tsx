@@ -34,6 +34,9 @@ vi.mock("@/lib/events/use-live-state", () => ({
 const initialNow = new Date("2026-10-10T18:00:00Z").getTime()
 const running: PlayerGame = {
 	lifecycleState: "running",
+	teamId: "team",
+	finishers: [],
+	nextBonus: null,
 	start: new Date(initialNow - 60_000),
 	end: new Date(initialNow + 1000),
 	score: 42,
@@ -44,7 +47,7 @@ const running: PlayerGame = {
 	strip: [],
 	quest: null,
 }
-const ended: PlayerGame = { lifecycleState: "ended", score: 42, rank: 7, teamCount: 10 }
+const ended: PlayerGame = { lifecycleState: "ended", teamId: "team", finishers: [], score: 42, rank: 7, teamCount: 10 }
 let cleanups: (() => void)[] = []
 
 function mount(initial = running) {

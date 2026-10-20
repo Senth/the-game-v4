@@ -5,6 +5,7 @@ import { type ReactNode, useCallback, useState, useTransition } from "react"
 import { getGame, revealHint, submitAnswer } from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
+import { useFinisherNotices } from "@/lib/events/use-finisher-notices"
 import { useLiveState } from "@/lib/events/use-live-state"
 import type { AnswerFeedback } from "./answer-dock"
 import { gameTransitions } from "./game-transitions"
@@ -39,6 +40,11 @@ export function GameScreen({
 	const [feedback, setFeedback] = useState<(AnswerFeedback & { questId: string }) | null>(null)
 	const [decrypting, setDecrypting] = useState(() => new Set<string>())
 	const [pending, startTransition] = useTransition()
+	const notices = useFinisherNotices(
+		game.lifecycleState === "running" ? game.finishers : undefined,
+		game.lifecycleState === "running" ? game.start.toISOString() : "",
+		"teamId" in game ? game.teamId : undefined,
+	)
 
 	if (previous !== game) {
 		const changes = gameTransitions(previous, game)
@@ -124,6 +130,9 @@ export function GameScreen({
 			pace={pace && { band: pace.band, label: paceLabel(pace.n) }}
 			rail={game.rail}
 			strip={game.strip}
+			finishers={game.finishers}
+			notices={notices}
+			nextBonus={game.nextBonus}
 			quest={game.quest}
 			answer={answer}
 			onAnswerChange={setAnswer}
