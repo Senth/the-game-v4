@@ -98,6 +98,27 @@ it("skips own team, dismisses on tap, and appends finishes arriving during exit"
 	expect(render([...finishers, third], first.teamId).notice).toEqual(third)
 })
 
+it("never requeues announced teams after stale snapshots, but resets seen teams for a new scope", () => {
+	render([])
+	expect(render([first]).notice).toEqual(first)
+	render([])
+	const notice = render([first, second])
+	expect(notice.notice).toEqual(first)
+	notice.dismiss()
+	render([first, second])
+	vi.advanceTimersByTime(250)
+	expect(render([first, second]).notice).toEqual(second)
+	render([first])
+	render([first, second]).dismiss()
+	render([first, second])
+	vi.advanceTimersByTime(250)
+	expect(render([first, second]).notice).toBeNull()
+	render([])
+	expect(render([first, second]).notice).toBeNull()
+	expect(render([], undefined, "next-season").notice).toBeNull()
+	expect(render([first], undefined, "next-season").notice).toEqual(first)
+})
+
 it("clears notices when leaving play or switching seasons and cancels timers on unmount", () => {
 	render([])
 	render([first])

@@ -16,7 +16,7 @@ vi.mock("react", async (importOriginal) => ({
 	useEffect: (effect: EffectCallback) => hooks.effects.push(effect),
 	useId: () => "setting",
 }))
-vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn() }))
+vi.mock("./autosave-provider", () => ({ useAutosave: () => null, useAutosaveField: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("./use-season-clock", () => ({ useSeasonClock: vi.fn() }))
 vi.mock("./registration-switch", () => ({ RegistrationSwitch: vi.fn(() => <p>Registration field</p>) }))

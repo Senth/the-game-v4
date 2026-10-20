@@ -1,13 +1,13 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { addFinisherBonus, removeLastFinisherBonus } from "@/app/admin/autosave-actions"
 import { inputClass, labelClass } from "@/components/auth-form"
 import { FinishFlag } from "@/components/finish-flag"
 import { ordinal } from "@/lib/domain/game"
 import type { Season } from "@/lib/domain/schemas"
-import { useAutosaveField } from "./autosave-provider"
+import { useAutosave, useAutosaveField } from "./autosave-provider"
 
 function BonusPoints({ index, points }: { index: number; points: number }) {
 	const field = useAutosaveField({ field: "finisherBonuses", index: String(index) }, points)
@@ -53,14 +53,29 @@ export function FinisherBonusRows({
 	const [error, setError] = useState<string>()
 	const bonuses = season.finisherBonuses ?? []
 	const finishers = season.finishers ?? []
+	const autosave = useAutosave()
+	const discard = autosave?.discard
+	const drafts = autosave?.drafts
+	useEffect(() => {
+		if (!drafts || !discard) return
+		for (const draft of drafts.values()) {
+			if (draft.target.field !== "finisherBonuses") continue
+			const index = Number(draft.target.index)
+			if (index >= bonuses.length || finishers.some((finisher) => finisher.place === index + 1)) {
+				discard({ field: "finisherBonuses", index: String(index) })
+			}
+		}
+	}, [bonuses.length, finishers, drafts, discard])
 	async function change(remove: boolean) {
 		if (pending) return
 		setPending(true)
 		setError(undefined)
 		try {
 			const result = await (remove ? removeLastFinisherBonus(season._id) : addFinisherBonus(season._id, 0))
-			if (result.ok) router.refresh()
-			else setError(result.error)
+			if (result.ok) {
+				if (remove) discard?.({ field: "finisherBonuses", index: String(bonuses.length - 1) })
+				router.refresh()
+			} else setError(result.error)
 		} catch {
 			setError("Not saved, retry")
 		} finally {

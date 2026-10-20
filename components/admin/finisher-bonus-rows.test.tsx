@@ -4,7 +4,7 @@ import { useAutosaveField } from "./autosave-provider"
 import { FinisherBonusRows } from "./finisher-bonus-rows"
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn() }))
+vi.mock("./autosave-provider", () => ({ useAutosave: () => null, useAutosaveField: vi.fn() }))
 
 beforeEach(() => {
 	vi.clearAllMocks()

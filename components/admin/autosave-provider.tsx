@@ -14,6 +14,8 @@ type Draft = {
 	saver: { cancel: () => void }
 }
 
+type DiscardTarget = { arcId: string; questId?: string; hintId?: string } | { field: "finisherBonuses"; index: string }
+
 type SaveContext = {
 	seasonId: string
 	status: "saved" | "saving" | "failed" | null
@@ -21,7 +23,7 @@ type SaveContext = {
 	listenersFor: (id: string) => Set<() => void>
 	update: (id: string, state: AutosaveState, retry: () => void) => void
 	remove: (id: string) => void
-	discard: (target: { arcId: string; questId?: string; hintId?: string }) => void
+	discard: (target: DiscardTarget) => void
 	retryAll: () => void
 }
 
@@ -84,11 +86,10 @@ export function AutosaveProvider({
 				drafts.delete(id)
 				changed()
 			},
-			discard(target: { arcId: string; questId?: string; hintId?: string }) {
+			discard(target: DiscardTarget) {
 				for (const [id, draft] of drafts) {
-					if (draft.target.arcId !== target.arcId || (target.questId && draft.target.questId !== target.questId))
+					if (!Object.entries(target).every(([key, value]) => value === undefined || draft.target[key] === value))
 						continue
-					if (target.hintId && draft.target.hintId !== target.hintId) continue
 					draft.saver.cancel()
 					fields.delete(id)
 					drafts.delete(id)
