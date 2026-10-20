@@ -50,7 +50,15 @@ export default async function SeasonLayout({ children, params }: LayoutProps<"/a
 		/>
 	)
 	return (
-		<AutosaveProvider key={seasonId} seasonId={seasonId} start={season.start} end={season.end} now={now}>
+		<AutosaveProvider
+			key={seasonId}
+			seasonId={seasonId}
+			start={season.start}
+			end={season.end}
+			now={now}
+			finisherBonuses={season.finisherBonuses ?? []}
+			finishers={season.finishers ?? []}
+		>
 			<AdminFrame
 				title={season.title}
 				status={status}

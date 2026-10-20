@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { addFinisherBonus, removeLastFinisherBonus } from "@/app/admin/autosave-actions"
 import { inputClass, labelClass } from "@/components/auth-form"
 import { FinishFlag } from "@/components/finish-flag"
@@ -55,17 +55,6 @@ export function FinisherBonusRows({
 	const finishers = season.finishers ?? []
 	const autosave = useAutosave()
 	const discard = autosave?.discard
-	const drafts = autosave?.drafts
-	useEffect(() => {
-		if (!drafts || !discard) return
-		for (const draft of drafts.values()) {
-			if (draft.target.field !== "finisherBonuses") continue
-			const index = Number(draft.target.index)
-			if (index >= bonuses.length || finishers.some((finisher) => finisher.place === index + 1)) {
-				discard({ field: "finisherBonuses", index: String(index) })
-			}
-		}
-	}, [bonuses.length, finishers, drafts, discard])
 	async function change(remove: boolean) {
 		if (pending) return
 		setPending(true)
@@ -73,7 +62,7 @@ export function FinisherBonusRows({
 		try {
 			const result = await (remove ? removeLastFinisherBonus(season._id) : addFinisherBonus(season._id, 0))
 			if (result.ok) {
-				if (remove) discard?.({ field: "finisherBonuses", index: String(bonuses.length - 1) })
+				if ("removedIndex" in result) discard?.({ field: "finisherBonuses", index: String(result.removedIndex) })
 				router.refresh()
 			} else setError(result.error)
 		} catch {

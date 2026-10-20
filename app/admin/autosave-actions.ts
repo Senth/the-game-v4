@@ -73,16 +73,19 @@ export async function setFinisherBonus(seasonId: string, index: number, points: 
 	return { ok: true }
 }
 
-export async function removeLastFinisherBonus(seasonId: string): Promise<ActionResult> {
+export async function removeLastFinisherBonus(
+	seasonId: string,
+): Promise<{ ok: true; removedIndex: number } | Extract<ActionResult, { ok: false }>> {
 	await requireAdmin()
+	let removedIndex: number
 	try {
-		await removeBonus(id.parse(seasonId))
+		removedIndex = await removeBonus(id.parse(seasonId))
 	} catch (error) {
 		return actionFailure(error, new Date())
 	}
 	publish(seasonChannel(seasonId))
 	publish(boardChannel)
-	return { ok: true }
+	return { ok: true, removedIndex }
 }
 
 export async function moveHint(target: Parameters<typeof reorderHint>[0]): Promise<ActionResult> {

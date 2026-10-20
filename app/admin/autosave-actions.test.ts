@@ -71,7 +71,7 @@ describe("autosave actions", () => {
 		expect((await seasons.getSeason(season._id))?.finisherBonuses).toEqual([20])
 		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
 		vi.mocked(publish).mockClear()
-		expect(await removeLastFinisherBonus(season._id)).toEqual({ ok: true })
+		expect(await removeLastFinisherBonus(season._id)).toEqual({ ok: true, removedIndex: 0 })
 		expect(await seasons.getSeason(season._id)).toEqual(season)
 		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
 	})
@@ -99,8 +99,18 @@ describe("autosave actions", () => {
 		expect(publish).not.toHaveBeenCalled()
 		expect(await addFinisherBonus(season._id, 20)).toEqual({ ok: true })
 		expect(await setFinisherBonus(season._id, 1, 10)).toEqual({ ok: true })
-		expect(await removeLastFinisherBonus(season._id)).toEqual({ ok: true })
+		expect(await removeLastFinisherBonus(season._id)).toEqual({ ok: true, removedIndex: 1 })
 		expect(await seasons.getSeason(season._id)).toEqual(before)
+	})
+
+	it("returns the actual removed bonus index after another admin appends a row", async () => {
+		const season = await setup()
+		await addFinisherBonus(season._id, 50)
+		await addFinisherBonus(season._id, 20)
+		const displayed = await seasons.getSeason(season._id)
+		await addFinisherBonus(season._id, 10)
+		expect(await removeLastFinisherBonus(season._id)).toEqual({ ok: true, removedIndex: 2 })
+		expect(await seasons.getSeason(season._id)).toEqual(displayed)
 	})
 
 	it.each(["add", "set", "remove"])("rejects unauthenticated bonus %s calls", async (action) => {

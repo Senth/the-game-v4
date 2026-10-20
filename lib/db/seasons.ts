@@ -77,15 +77,17 @@ export async function setFinisherBonus(seasonId: string, index: number, points: 
 	if (!result.matchedCount) throw new FinisherBonusClaimedError()
 }
 
-export async function removeLastFinisherBonus(seasonId: string): Promise<void> {
-	const result = await (await collections()).seasons.updateOne(
+export async function removeLastFinisherBonus(seasonId: string): Promise<number> {
+	const result = await (await collections()).seasons.findOneAndUpdate(
 		{
 			_id: seasonId,
 			$expr: { $gt: [{ $size: { $ifNull: ["$finisherBonuses", []] } }, { $size: { $ifNull: ["$finishers", []] } }] },
 		},
 		{ $pop: { finisherBonuses: 1 } },
+		{ returnDocument: "before", projection: { finisherBonuses: 1 } },
 	)
-	if (!result.matchedCount) throw new FinisherBonusClaimedError()
+	if (!result) throw new FinisherBonusClaimedError()
+	return result.finisherBonuses.length - 1
 }
 
 export class CopyTargetStartedError extends Error {
