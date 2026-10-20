@@ -332,26 +332,24 @@ H1/H2 supersede M2's always-open hint rows, not its field order or Revealed by c
 - Comma, Enter, paste and leaving the field all turn typed text into chips.
 - A duplicate answer clears the input and shows muted "Already an answer".
 - Content and Admin notes grow with their text; only the page scrolls.
-- The Image row follows final variant A:
-  - [Phone, all row states](https://artifacts.senth.org/a-phone-3af0d7.png)
-  - [Desktop, all row states](https://artifacts.senth.org/a-desktop-8b7749.png)
-  - [Desktop drop overlay](https://artifacts.senth.org/drop-page-6f22cc.png)
-  - [Remove dialog, phone](https://artifacts.senth.org/remove-dialog-4586e9.png)
-- With a file, show a thumbnail or PDF tile, short name, bordered `Replace` and quiet `Remove`.
-- Without one, show dashed 80×56 `+` tile, muted "No image" and bordered `Upload`.
-- Empty-state hint reads "jpg, png, gif, webp or pdf, up to 10 MB".
+- The File row follows final mock F's editor panel
+  ([phone](https://artifacts.senth.org/f-final-phone-4f838f.png),
+  [desktop](https://artifacts.senth.org/f-final-desktop-a8bb05.png)).
+- With a file, show a thumbnail for images and SVG, or an 80×56 `bg-z1` tile with the capitalised extension
+  (`PDF`, `MP3`, `MP4`, `ZIP`), then short name, bordered `Replace` and quiet `Remove`.
+- Without one, show dashed 80×56 `+` tile, muted "No file" and bordered `Upload`.
+- Empty-state hint reads "any file up to 50 MB". The file input has no `accept` list.
 - While uploading, button reads "Uploading…" and both buttons are disabled.
 - Show errors below the row in `font-cond text-xs text-warn`.
 - On desktop, dragging a file anywhere over the quest form shows a dashed accent overlay.
-  It reads "Drop to replace the image" or "Drop to add an image or PDF".
+  It reads "Drop to replace the file" or "Drop to add a file".
 - Remove confirms in the Remove quest dialog style.
 - The plain Remove quest dialog reads "Its answers, hints and image go too." when the quest has a file.
 - Remove dialog copy:
-  - Title: "Remove this image?" or "Remove this PDF?".
-  - Body: "Players stop seeing it and the file is deleted." Confirm: "Remove image" or "Remove PDF".
+  - Title: "Remove this image / PDF / audio / video / file?" by kind.
+  - Body: "Players stop seeing it and the file is deleted." Confirm: "Remove image / PDF / audio / video / file".
 - Error copy:
-  - `<name> is not jpg, png, gif, webp or pdf.`
-  - `<name> is <x.x> MB. The limit is 10 MB.` (one decimal; 1 MB = 1024 × 1024 bytes)
+  - `<name> is <x.x> MB. The limit is 50 MB.` (one decimal; 1 MB = 1024 × 1024 bytes)
   - `Drop one file at a time.`
   - `Not saved, retry` (existing generic failure)
 - On desktop, titles share a row, and so do Answers and Points, as D1.
