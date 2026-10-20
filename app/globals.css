@@ -33,6 +33,73 @@
 	}
 }
 
+@keyframes finisher-flag {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+.finish-notice {
+	display: grid;
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transition:
+		grid-template-rows 250ms,
+		opacity 250ms;
+}
+
+.finish-notice-content {
+	transform: translateY(0);
+	transition: transform 250ms ease-out;
+}
+
+.finish-notice[data-closing="true"] {
+	grid-template-rows: 0fr;
+	opacity: 0;
+}
+
+.finish-notice[data-closing="true"] .finish-notice-content {
+	transform: translateY(-100%);
+	transition-timing-function: ease-in;
+}
+
+@starting-style {
+	.finish-notice {
+		grid-template-rows: 0fr;
+		opacity: 0;
+	}
+	.finish-notice-content {
+		transform: translateY(-100%);
+	}
+	.finish-strip-notice {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.finish-notice,
+	.finish-notice[data-closing="true"] {
+		grid-template-rows: 1fr;
+		transition-property: opacity;
+	}
+	.finish-notice-content,
+	.finish-notice[data-closing="true"] .finish-notice-content {
+		transform: none;
+		transition: none;
+	}
+	@starting-style {
+		.finish-notice {
+			grid-template-rows: 1fr;
+		}
+		.finish-notice-content {
+			transform: none;
+		}
+	}
+}
+
 @layer base {
 	html {
 		color-scheme: dark;

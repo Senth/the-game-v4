@@ -51,6 +51,22 @@ it("exposes only named finisher fields across player and public views without mu
 	expect(finished).toEqual(before)
 })
 
+it("exposes only next open bonus to running game and board notices", () => {
+	const finished = {
+		...secretSeason,
+		finisherBonuses: [50, 0, 20],
+		finishers: [{ teamId: ninjas._id, place: 1, points: 50, at: now }],
+	}
+	for (const view of [
+		playerGame(finished, ninjas, teams, now),
+		publicBoard([finished], { [finished._id]: teams }, now),
+	]) {
+		expect(view).toHaveProperty("nextBonus", { place: 3, points: 20 })
+		expect(JSON.stringify(view)).not.toContain("finisherBonuses")
+	}
+	expect(playerGame({ ...finished, finisherBonuses: [50] }, ninjas, teams, now)).toHaveProperty("nextBonus", null)
+})
+
 describe("playerGame", () => {
 	it("returns waiting for a null, missing or unscheduled season", () => {
 		expect(playerGame(null, ninjas, teams, now)).toEqual({ lifecycleState: "waiting" })
@@ -184,6 +200,7 @@ describe("publicBoard", () => {
 			end,
 			rows: standingsRows(season, teams, "", false),
 			finishers: [],
+			nextBonus: { place: 1, points: 50 },
 			nextStart: null,
 		})
 		expect(publicBoard([{ ...secretSeason, end: null }], teamsBySeason, now)).toMatchObject({

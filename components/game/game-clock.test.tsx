@@ -36,6 +36,7 @@ const running: PlayerGame = {
 	lifecycleState: "running",
 	teamId: "team",
 	finishers: [],
+	nextBonus: null,
 	start: new Date(initialNow - 60_000),
 	end: new Date(initialNow + 1000),
 	score: 42,

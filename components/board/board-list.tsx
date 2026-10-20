@@ -25,7 +25,9 @@ export function BoardList({ rows, finishers = [] }: { rows: StandingsRow[]; fini
 									className={`${twoColumns ? "w-[15rem]" : "w-[26rem]"} flex min-w-0 items-center gap-2 text-4xl text-ink`}
 								>
 									<span className="truncate">{row.name}</span>
-									{finisher && <FinishFlag points={finisher.points} className="h-8 w-8" />}
+									{finisher && (
+										<FinishFlag points={finisher.points} className="h-8 w-8 animate-[finisher-flag_250ms_ease-out]" />
+									)}
 									{finisher && finisher.points > 0 && (
 										<span className="shrink-0 text-3xl font-bold text-pace-ok">+{finisher.points}p</span>
 									)}

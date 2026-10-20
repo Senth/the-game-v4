@@ -6,6 +6,7 @@ const running: Extract<PlayerGame, { lifecycleState: "running" }> = {
 	lifecycleState: "running",
 	teamId: "team",
 	finishers: [],
+	nextBonus: null,
 	quest: {
 		id: "log",
 		displayTitle: "The log",

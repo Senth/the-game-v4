@@ -1,5 +1,6 @@
 import type { PlayerFinisher } from "@/lib/domain/finishers"
 import type { PaceBand, RailArc, StripEntry } from "@/lib/domain/game"
+import type { useFinisherNotices } from "@/lib/events/use-finisher-notices"
 import { ArcRail } from "./arc-rail"
 import { formatTimeLeft } from "./clock"
 import { StandingsStrip } from "./standings-strip"
@@ -18,6 +19,7 @@ export function GameHeader({
 	strip,
 	finishers,
 	preview = false,
+	notices,
 }: {
 	timeLeftMs: number
 	pace: { band: PaceBand; label: string } | null
@@ -25,6 +27,7 @@ export function GameHeader({
 	strip?: StripEntry[]
 	finishers?: PlayerFinisher[]
 	preview?: boolean
+	notices?: ReturnType<typeof useFinisherNotices>
 }) {
 	const color = pace ? paceColors[pace.band] : "text-muted"
 	return (
@@ -39,7 +42,16 @@ export function GameHeader({
 				</div>
 				<ArcRail rail={rail} />
 			</div>
-			{strip && <StandingsStrip strip={strip} finishers={finishers} preview={preview} />}
+			{strip && (
+				<StandingsStrip
+					strip={strip}
+					finishers={finishers}
+					preview={preview}
+					notice={notices?.notice?.points === 0 ? notices.notice : null}
+					closing={notices?.closing}
+					onDismiss={notices?.dismiss}
+				/>
+			)}
 		</header>
 	)
 }

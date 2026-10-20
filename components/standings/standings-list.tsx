@@ -17,7 +17,9 @@ export function StandingsList({ rows, finishers = [] }: { rows: StandingsRow[]; 
 								<span className="min-w-0 flex-1">
 									<span className="flex items-center gap-1">
 										<span className={`truncate text-ink ${row.you ? "font-bold" : ""}`}>{row.name}</span>
-										{finisher && <FinishFlag points={finisher.points} />}
+										{finisher && (
+											<FinishFlag points={finisher.points} className="h-4 w-4 animate-[finisher-flag_250ms_ease-out]" />
+										)}
 										{finisher && finisher.points > 0 && (
 											<span className="shrink-0 text-xs font-bold text-pace-ok">+{finisher.points}p</span>
 										)}

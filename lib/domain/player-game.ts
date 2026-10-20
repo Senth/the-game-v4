@@ -1,4 +1,4 @@
-import { type PlayerFinisher, playerFinishers } from "./finishers"
+import { nextOpenBonus, type PlayerFinisher, playerFinishers } from "./finishers"
 import {
 	boardSeasons,
 	currentQuest,
@@ -26,6 +26,7 @@ export type PlayerGame =
 			lifecycleState: "running"
 			teamId: string
 			finishers: PlayerFinisher[]
+			nextBonus: ReturnType<typeof nextOpenBonus>
 			quest: PlayerQuest | null
 			score: number
 			solved: number
@@ -70,6 +71,7 @@ export type PublicBoard =
 			end: Date | null
 			rows: StandingsRow[]
 			finishers: PlayerFinisher[]
+			nextBonus: ReturnType<typeof nextOpenBonus>
 			nextStart: Date | null
 	  }
 	| { view: "final"; title: string; rows: StandingsRow[]; finishers: PlayerFinisher[]; nextStart: Date | null }
@@ -82,12 +84,24 @@ export function publicBoard(seasons: Season[], teamsBySeason: Record<string, Tea
 	const rows = standingsRows(season, teamsBySeason[season._id] ?? [], "", false)
 	const finishers = playerFinishers(season, teamsBySeason[season._id] ?? [])
 	if (running?.start)
-		return { view: "running", title: running.title, start: running.start, end: running.end, rows, finishers, nextStart }
+		return {
+			view: "running",
+			title: running.title,
+			start: running.start,
+			end: running.end,
+			rows,
+			finishers,
+			nextStart,
+			nextBonus: nextOpenBonus(running),
+		}
 	return { view: "final", title: season.title, rows, finishers, nextStart }
 }
 
 export function playerGame(
-	season: Pick<Season, "start" | "end" | "arcs" | "finishers"> | null | undefined,
+	season:
+		| (Pick<Season, "start" | "end" | "arcs" | "finishers"> & Partial<Pick<Season, "finisherBonuses">>)
+		| null
+		| undefined,
 	team: Pick<Team, "_id" | "questOrder" | "questIndex" | "score" | "completed" | "progress">,
 	teams: Pick<Team, "_id" | "name" | "score" | "progress">[],
 	now: Date,
@@ -113,6 +127,7 @@ export function playerGame(
 		lifecycleState: state,
 		teamId: team._id,
 		finishers,
+		nextBonus: nextOpenBonus(season),
 		quest: current ? playerView(current.quest, current.progress) : null,
 		score: team.score,
 		...counts,
