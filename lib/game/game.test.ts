@@ -45,7 +45,7 @@ useTestDb()
 
 const now = new Date("2026-10-09T18:00:00Z")
 const fixture = buildFixture(now)
-const season = withSecrets(fixture.season)
+const season = { ...withSecrets(fixture.season), finisherBonuses: [] }
 const ninjas = fixture.teams.find((team) => team._id === "team-ninjas") as (typeof fixture.teams)[number]
 const current = "backwards-log"
 const next = ninjas.questOrder[ninjas.questIndex + 1] as string

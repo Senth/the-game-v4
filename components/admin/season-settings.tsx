@@ -6,12 +6,32 @@ import { AutosaveDatetimeField } from "./autosave-datetime-field"
 import { AutosaveNumberField } from "./autosave-number-field"
 import { AutosaveSwitch } from "./autosave-switch"
 import { AutosaveTextField } from "./autosave-text-field"
+import { FinisherBonusRows } from "./finisher-bonus-rows"
 import { RegistrationSwitch } from "./registration-switch"
 import { useSeasonClock } from "./use-season-clock"
 
-type Settings = Pick<Season, "_id" | "title" | "start" | "end" | "lengthMinutes" | "shuffleArcs" | "registrationOpen">
+type Settings = Pick<
+	Season,
+	| "_id"
+	| "title"
+	| "start"
+	| "end"
+	| "lengthMinutes"
+	| "shuffleArcs"
+	| "registrationOpen"
+	| "finisherBonuses"
+	| "finishers"
+>
 
-export function SeasonSettings({ season, now }: { season: Settings; now: number }) {
+export function SeasonSettings({
+	season,
+	teams,
+	now,
+}: {
+	season: Settings
+	teams: { _id: string; name: string }[]
+	now: number
+}) {
 	const currentNow = useSeasonClock(now, season.start, season.end)
 	const status = seasonStatus(season, new Date(currentNow))
 	const started = status === "live" || status === "ended"
@@ -23,6 +43,7 @@ export function SeasonSettings({ season, now }: { season: Settings; now: number 
 			<AutosaveNumberField serverValue={season.lengthMinutes} readOnly={started} />
 			<AutosaveSwitch serverValue={season.shuffleArcs} started={started} />
 			<RegistrationSwitch seasonId={season._id} serverValue={season.registrationOpen} />
+			<FinisherBonusRows season={season} teams={teams} />
 		</div>
 	)
 }

@@ -6,7 +6,13 @@ import type { SeasonFieldTarget } from "@/lib/db/seasons"
 import * as seasons from "@/lib/db/seasons"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
 import { useTestDb } from "@/test/db"
-import { patchSeasonList, saveSeasonField } from "./autosave-actions"
+import {
+	addFinisherBonus,
+	patchSeasonList,
+	removeLastFinisherBonus,
+	saveSeasonField,
+	setFinisherBonus,
+} from "./autosave-actions"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/events/bus", async (original) => ({
@@ -56,6 +62,75 @@ async function setup() {
 const quest = { arcId: "a1", questId: "q1" }
 
 describe("autosave actions", () => {
+	it("adds, autosaves and removes bonus rows without replacing other settings", async () => {
+		const season = await setup()
+		expect(await addFinisherBonus(season._id, 50)).toEqual({ ok: true })
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+		vi.mocked(publish).mockClear()
+		expect(await saveSeasonField(season._id, { field: "finisherBonuses", index: "0" }, 20)).toEqual({ ok: true })
+		expect((await seasons.getSeason(season._id))?.finisherBonuses).toEqual([20])
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+		vi.mocked(publish).mockClear()
+		expect(await removeLastFinisherBonus(season._id)).toEqual({ ok: true })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+	})
+
+	it("locks claimed rows, including rows added after a finish, and preserves awarded points", async () => {
+		const season = await setup()
+		await (await collections()).seasons.updateOne(
+			{ _id: season._id },
+			{
+				$set: {
+					finishers: [{ teamId: "winner", place: 1, points: 0, at: new Date() }],
+				},
+			},
+		)
+		expect(await addFinisherBonus(season._id, 50)).toEqual({ ok: true })
+		vi.mocked(publish).mockClear()
+		const before = await seasons.getSeason(season._id)
+		for (const result of [
+			await setFinisherBonus(season._id, 0, 100),
+			await saveSeasonField(season._id, { field: "finisherBonuses", index: "0" }, 100),
+			await removeLastFinisherBonus(season._id),
+		])
+			expect(result).toEqual({ ok: false, error: "Already won, can't change" })
+		expect(await seasons.getSeason(season._id)).toEqual(before)
+		expect(publish).not.toHaveBeenCalled()
+		expect(await addFinisherBonus(season._id, 20)).toEqual({ ok: true })
+		expect(await setFinisherBonus(season._id, 1, 10)).toEqual({ ok: true })
+		expect(await removeLastFinisherBonus(season._id)).toEqual({ ok: true })
+		expect(await seasons.getSeason(season._id)).toEqual(before)
+	})
+
+	it.each(["add", "set", "remove"])("rejects unauthenticated bonus %s calls", async (action) => {
+		const season = await setup()
+		vi.mocked(requireAdmin).mockImplementationOnce(async () => redirect("/login"))
+		await expect(
+			action === "add"
+				? addFinisherBonus(season._id, 50)
+				: action === "set"
+					? setFinisherBonus(season._id, 0, 20)
+					: removeLastFinisherBonus(season._id),
+		).rejects.toMatchObject({ digest: expect.stringContaining("NEXT_REDIRECT") })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each([-1, 10001, 1.5, Number.NaN])("rejects invalid bonus points %s", async (points) => {
+		const season = await setup()
+		expect(await addFinisherBonus(season._id, points)).toEqual({ ok: false, error: "Invalid value." })
+		expect(await setFinisherBonus(season._id, 0, points)).toEqual({ ok: false, error: "Invalid value." })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each(["finisherBonuses", "finishers"] as const)("rejects whole %s autosaves", async (field) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field }, [])).toEqual({ ok: false, error: "Invalid value." })
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
 	it.each([true, false])("rejects hidden autosave %s without writing or publishing", async (value) => {
 		const season = await setup()
 		await (await collections()).seasons.updateOne({ _id: season._id }, { $set: { "arcs.0.quests.0.hidden": !value } })

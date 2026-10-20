@@ -366,7 +366,7 @@ export type FixtureAdmin = Omit<Admin, "passwordHash"> & { password: string }
 export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[]; admins: FixtureAdmin[] } {
 	const start = now.getTime() - 72.5 * minute
 	const season: Season = {
-		finisherBonuses: [],
+		finisherBonuses: [50, 20],
 		finishers: [],
 		_id: "cipher-night-2026",
 		title: "Cipher Night 2026",

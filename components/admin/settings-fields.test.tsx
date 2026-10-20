@@ -17,6 +17,7 @@ vi.mock("react", async (importOriginal) => ({
 	useId: () => "setting",
 }))
 vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn() }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("./use-season-clock", () => ({ useSeasonClock: vi.fn() }))
 vi.mock("./registration-switch", () => ({ RegistrationSwitch: vi.fn(() => <p>Registration field</p>) }))
 
@@ -169,6 +170,8 @@ it.each(["unscheduled", "upcoming", "live", "ended"] as const)(
 	"orders fields and applies lifecycle helpers while %s",
 	(status) => {
 		const season = {
+			finisherBonuses: [],
+			finishers: [],
 			_id: "s1",
 			title: "Cipher Night 2026",
 			lengthMinutes: 60,
@@ -177,7 +180,7 @@ it.each(["unscheduled", "upcoming", "live", "ended"] as const)(
 			start: status === "unscheduled" ? null : new Date(status === "upcoming" ? now + 20_000 : now - 1000),
 			end: status === "ended" ? new Date(now) : new Date(now + 3_600_000),
 		}
-		const html = renderToStaticMarkup(<SeasonSettings season={season} now={now} />)
+		const html = renderToStaticMarkup(<SeasonSettings season={season} teams={[]} now={now} />)
 		const started = status === "live" || status === "ended"
 		expect(html).toContain('class="space-y-5 px-4 py-5 lg:px-8 lg:py-6"')
 		expect(html.indexOf(">Title</label>")).toBeLessThan(html.indexOf(">Start</"))
@@ -197,6 +200,8 @@ it.each(["unscheduled", "upcoming", "live", "ended"] as const)(
 
 it("locks Start and Length when the shared clock reaches scheduled start without a reload", () => {
 	const season = {
+		finisherBonuses: [],
+		finishers: [],
 		_id: "s1",
 		title: "Hunt",
 		start: new Date(now + 1000),
@@ -205,9 +210,11 @@ it("locks Start and Length when the shared clock reaches scheduled start without
 		shuffleArcs: false,
 		registrationOpen: true,
 	}
-	expect(renderToStaticMarkup(<SeasonSettings season={season} now={now} />)).toContain('type="datetime-local"')
+	expect(renderToStaticMarkup(<SeasonSettings season={season} teams={[]} now={now} />)).toContain(
+		'type="datetime-local"',
+	)
 	vi.mocked(useSeasonClock).mockReturnValue(now + 1000)
-	const html = renderToStaticMarkup(<SeasonSettings season={season} now={now} />)
+	const html = renderToStaticMarkup(<SeasonSettings season={season} teams={[]} now={now} />)
 	expect(html).not.toContain('type="datetime-local"')
 	expect(html).toContain('readOnly=""')
 	expect(html).toContain("Applies to teams that join from now on.")
