@@ -94,6 +94,19 @@ describe("parseV3Export", () => {
 		expect(mapped({}, { order }).season.arcs[0]?.shuffleQuests).toBe(false)
 	})
 
+	it.each([
+		[undefined, true, false, true],
+		["Random All", undefined, true, false],
+		[undefined, undefined, false, false],
+	])(
+		"defaults missing shuffle fields with order %j and theme random %j",
+		(order, random, shuffleArcs, shuffleQuests) => {
+			const { season } = mapped({}, { order, themes: [{ title: "Source arc", random, quests: [{ points: 5 }] }] })
+			expect(season.shuffleArcs).toBe(shuffleArcs)
+			expect(season.arcs[0]?.shuffleQuests).toBe(shuffleQuests)
+		},
+	)
+
 	it("uses draft defaults for missing optional fields and does not force registration open", () => {
 		const { season, quest, assetJobs, warnings } = mapped({}, { registrationOpen: true })
 		expect(season).toMatchObject({ start: null, end: null, lengthMinutes: 60, registrationOpen: false })
@@ -245,6 +258,9 @@ describe("parseV3Export", () => {
 		{ start: { __datatype__: "other", value: { _seconds: 1 } } },
 		{ start: { _seconds: 1e20 } },
 		{ order: "unknown" },
+		{ order: null },
+		{ themes: [{ title: "Source arc", random: null, quests: [] }] },
+		{ themes: [{ title: "Source arc", random: "false", quests: [] }] },
 		{ themes: "invalid" },
 	])("rejects invalid source or mapped season: %j", (season) => {
 		expect(() => parseV3Export(source({}, season))).toThrow()

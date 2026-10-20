@@ -383,7 +383,9 @@ Inputs stay unchanged. Mapping rules:
   Missing dates become null. With a start but no end, derive end as start plus length in minutes.
 - `Random All` and `Random Theme` set `shuffleArcs: true`.
   `Ordered` and `Random Quest` set it false. Preserve authored array order.
+  Missing `order` becomes `Ordered`, setting `shuffleArcs: false`.
 - Each theme becomes an arc with a new UUID, its original title and `shuffleQuests` from `random`.
+  Missing theme `random` becomes false, setting `shuffleQuests: false`.
   Every quest and retained hint gets a new UUID, including quests copied between v3 seasons with identical ids.
 - Quest `title` becomes `internalTitle`, `description` becomes `adminNotes`, and `displayTitle` stays as is.
   Missing quest text fields become empty strings. Missing answers and hints become empty arrays.

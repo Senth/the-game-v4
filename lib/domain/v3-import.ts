@@ -37,8 +37,8 @@ const V3Season = z.object({
 	length: z.number().default(60),
 	start: V3Timestamp,
 	end: V3Timestamp,
-	order: z.enum(["Ordered", "Random All", "Random Theme", "Random Quest"]),
-	themes: z.array(z.object({ title: z.string(), random: z.boolean(), quests: z.array(V3Quest) })),
+	order: z.enum(["Ordered", "Random All", "Random Theme", "Random Quest"]).default("Ordered"),
+	themes: z.array(z.object({ title: z.string(), random: z.boolean().default(false), quests: z.array(V3Quest) })),
 })
 
 export type V3AssetJob = { url: string; target: "assetPath" | "content" }
