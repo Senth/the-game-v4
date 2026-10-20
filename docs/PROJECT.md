@@ -405,14 +405,16 @@ Inputs stay unchanged. Mapping rules:
   Validate every mapped season with `lib/domain/schemas.ts`; reject malformed input or any remaining schema violation,
   including invalid lengths, invalid timestamps and non-whole hint points within range.
 
-Production runs compose with app and MongoDB 8 on fenrir, persistent mongo and asset volumes, and GHCR images
-published on `v*` tags. Build a non-root standalone app on `node:24-alpine`; gates run in PR CI.
+Production runs as the `the-game` service in server-infrastructure on fenrir,
+with MongoDB 8 and persistent mongo and asset storage.
+`gamev4.senth.org` serves it until I-33 moves `game.senth.org`. Main merges auto-deploy the `:main` image within 5 minutes.
+Build a non-root standalone app on `node:24-alpine`; gates run in PR CI.
 Production admin creation and v3 imports run inside the image through bundled scripts,
 `scripts/admin-create.mjs` and `scripts/import-v3.mjs`.
-MongoDB has no host port; compose binds the app to `127.0.0.1:5009` by default.
+MongoDB has no host port; the generic compose file binds the app to `127.0.0.1:5009` by default.
 See [README.md](../README.md#deploying-with-compose) for environment variables, deployment commands and releases.
-The human handles DNS, nginx at `game.senth.org`, SSE proxy settings, compose and production seed/import.
-Agents never run Docker because fenrir requires sudo. Development and tests use `mongodb-memory-server`.
+The human runs `terraform apply`. Agents may inspect the production compose project and run bundled commands under [AGENTS.md](../AGENTS.md).
+Development and tests use `mongodb-memory-server`, never Docker.
 After the first real v4 game, the human decommissions GCP, points v3's README to v4 and archives v3.
 
 Work is tracked in one GitHub project, "The Game", using home-backlog labels plus `human` for work agents skip.

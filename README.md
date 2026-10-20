@@ -52,7 +52,7 @@ Compose reads these values from `.env`. They configure compose, not arbitrary ap
 
 ## Deploying with compose
 
-Human operators run these commands on the deployment host. Agents never run Docker on fenrir.
+Use this checkout's compose file for other hosts. Fenrir uses the [server-infrastructure service](#fenrir) instead.
 
 ```sh
 cp .env.example .env
@@ -72,13 +72,26 @@ docker compose up -d
 MongoDB initialization manages ownership inside `data/mongo`; the app needs write access to `data/assets`.
 Both directories persist across container replacement. Back up both before upgrades or imports.
 MongoDB has no host port. The app binds `127.0.0.1:5009` unless `APP_PORT` changes.
-The human configures DNS, HTTPS and nginx at `game.senth.org`, including SSE proxy settings.
+Configure DNS, HTTPS and nginx for the host's domain, including SSE proxy settings.
 
 Create a production admin with the bundled script. Replace `<name>` with the login name.
 The command prompts for a password of at least eight characters.
 
 ```sh
 docker compose exec -it app node scripts/admin-create.mjs <name>
+```
+
+### fenrir
+
+Production compose lives in `terraform/services/the-game/` in server-infrastructure, not this checkout.
+The human runs `terraform apply`. Data lives under `/home/the-game/`.
+Main merges auto-deploy `ghcr.io/senth/the-game-v4:main` within 5 minutes.
+`gamev4.senth.org` serves v4 until I-33 moves `game.senth.org`.
+
+Run one-off commands inside the app container, such as admin creation:
+
+```sh
+docker exec -it the-game-app-1 node scripts/admin-create.mjs <name>
 ```
 
 ### Migrating from v3
@@ -105,7 +118,22 @@ mkdir -p .tmp/v3-archive
 pnpm export:v3 --project <gcp-id> --collection <collection> --out .tmp/v3-archive/<collection>.json
 ```
 
-Dry-run the import and review asset warnings. Fix bucket access or URLs before importing for real:
+On fenrir, stream the export as the app container's user, then dry-run the import.
+The container copy is private to that user, who can read and remove it:
+
+```sh
+docker exec -i the-game-app-1 sh -c 'umask 077; cat > /tmp/v3-export.json' < .tmp/v3-export.json
+docker exec -it the-game-app-1 node scripts/import-v3.mjs /tmp/v3-export.json --dry-run
+```
+
+Review asset warnings and fix bucket access or URLs before importing for real:
+
+```sh
+docker exec -it the-game-app-1 node scripts/import-v3.mjs /tmp/v3-export.json
+docker exec the-game-app-1 rm /tmp/v3-export.json
+```
+
+On other hosts, dry-run with this checkout's compose file:
 
 ```sh
 docker compose run --rm -v ./.tmp/v3-export.json:/import.json:ro app node scripts/import-v3.mjs /import.json --dry-run
@@ -121,6 +149,13 @@ Existing seasons are skipped. Delete a season before retrying its assets.
 The importer copies seasons and quests, not teams or users. See [migration rules](docs/PROJECT.md#assets-migration-and-deployment).
 
 ## Releasing
+
+Each main push publishes these GHCR tags, with `<short>` replaced by the commit's first seven characters:
+
+- `ghcr.io/senth/the-game-v4:main`
+- `ghcr.io/senth/the-game-v4:sha-<short>`
+
+Fenrir tracks `:main` automatically. Other hosts can select either tag through `IMAGE_TAG`.
 
 Push a `vX.Y.Z` tag for the release commit. The publish workflow builds that tag and pushes these GHCR tags:
 
