@@ -122,7 +122,8 @@ The single login form tries admin then team in one request and returns one gener
 Team login matches names ignoring case, like the per-season unique index, and keeps teams whose password matches.
 It picks the one in the registration-open season, else the latest season whose start has passed,
 else an unscheduled or future-scheduled season.
-A team whose season record is missing cannot log in.
+A team whose season record is missing cannot use password-form login.
+QR login still accepts a valid join token without checking the season record.
 Admins land on `/admin`, teams on `/`. Deleting a team invalidates its sessions.
 `/logout` accepts only POST, so a link or prefetch cannot log anyone out.
 `pnpm admin:create <name>` prompts for a password. Production admins come from this CLI, not v3 users.
