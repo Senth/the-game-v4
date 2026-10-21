@@ -149,12 +149,12 @@ describe("Season", () => {
 })
 
 describe("Team", () => {
-	it("accepts no season, an unsolved progress entry and a negative score", () => {
+	it("accepts an assigned season, an unsolved progress entry and a negative score", () => {
 		const team = {
 			_id: "t1",
 			name: "Ninjas",
 			passwordHash: "$2b$10$hash",
-			seasonId: null,
+			seasonId: "s1",
 			questOrder: ["q1"],
 			questIndex: 0,
 			score: -15,
@@ -162,5 +162,20 @@ describe("Team", () => {
 			progress: [{ questId: "q1", hintsRevealed: [], pointsEarned: 0 }],
 		}
 		expect(Team.safeParse(team).success).toBe(true)
+	})
+
+	it("rejects a missing season id", () => {
+		const team = {
+			_id: "t1",
+			name: "Ninjas",
+			passwordHash: "$2b$10$hash",
+			seasonId: null,
+			questOrder: [],
+			questIndex: 0,
+			score: 0,
+			completed: false,
+			progress: [],
+		}
+		expect(Team.safeParse(team).success).toBe(false)
 	})
 })

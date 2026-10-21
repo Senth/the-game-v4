@@ -545,7 +545,7 @@ describe("lifecycleState", () => {
 	const playing = { completed: false }
 	const done = { completed: true }
 
-	it("waits without a season or a start time", () => {
+	it("waits without a season record or a start time", () => {
 		expect(lifecycleState(null, playing, start)).toBe("waiting")
 		expect(lifecycleState({ start: null, end: null }, playing, start)).toBe("waiting")
 	})
@@ -674,7 +674,7 @@ describe("pickLoginTeam", () => {
 	}
 	const draft = { _id: "draft", start: null, end: null, registrationOpen: false }
 	const seasons = [older, open, newer, draft]
-	const team = (seasonId: string | null) => ({ _id: `t-${seasonId}`, seasonId })
+	const team = (seasonId: string) => ({ _id: `t-${seasonId}`, seasonId })
 
 	it("picks the team in the season with registration open", () => {
 		const { frozen, original } = frozenCopy({ teams: [team("older"), team("open"), team("newer")], seasons })
@@ -707,7 +707,7 @@ describe("pickLoginTeam", () => {
 		})
 		expect(pickLoginTeam(frozen.teams, frozen.seasons, now)?.seasonId).toBe("running")
 		expect(frozen).toEqual(original)
-		expect(pickLoginTeam([team(null), team("scheduled")], [scheduled], now)?.seasonId).toBe("scheduled")
+		expect(pickLoginTeam([team("scheduled")], [scheduled], now)?.seasonId).toBe("scheduled")
 	})
 
 	it("ignores registration on an ended season", () => {
@@ -715,9 +715,12 @@ describe("pickLoginTeam", () => {
 		expect(pickLoginTeam([team("open"), team("newer")], [ended, newer], now)?.seasonId).toBe("newer")
 	})
 
-	it("else picks a team in an unstarted season, then a seasonless team", () => {
-		expect(pickLoginTeam([team(null), team("draft")], seasons, now)?.seasonId).toBe("draft")
-		expect(pickLoginTeam([team(null)], seasons, now)?.seasonId).toBeNull()
+	it("else picks a team in an unstarted season", () => {
+		expect(pickLoginTeam([team("draft")], seasons, now)?.seasonId).toBe("draft")
+	})
+
+	it("does not pick a team whose season record is missing", () => {
+		expect(pickLoginTeam([team("missing")], seasons, now)).toBeNull()
 	})
 
 	it("returns null without candidates", () => {

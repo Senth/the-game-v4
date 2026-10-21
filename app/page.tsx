@@ -10,8 +10,7 @@ export const viewport: Viewport = { interactiveWidget: "resizes-content" }
 export default async function Home() {
 	const team = await requireTeam()
 	const game = await getGame()
-	const channels = [teamChannel(team._id)]
-	if (team.seasonId) channels.push(seasonChannel(team.seasonId))
+	const channels = [teamChannel(team._id), seasonChannel(team.seasonId)]
 	return (
 		<GameScreen
 			initial={game}

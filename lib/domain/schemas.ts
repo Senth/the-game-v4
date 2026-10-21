@@ -91,7 +91,7 @@ export const Team = z.object({
 	_id: id,
 	name: z.string().min(1),
 	passwordHash: z.string().min(1),
-	seasonId: id.nullable(),
+	seasonId: id,
 	questOrder: z.array(id),
 	questIndex: z.number().int().min(0),
 	reachedAt: z.date().optional(),
