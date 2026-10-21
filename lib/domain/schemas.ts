@@ -48,6 +48,7 @@ export const Season = z.object({
 	_id: id,
 	title: z.string(),
 	lengthMinutes: z.number().int().min(1).max(1440),
+	defaultQuestPoints: z.number().int().min(0).max(10000).nullable().default(null),
 	start: z.date().nullable(),
 	end: z.date().nullable(),
 	shuffleArcs: z.boolean(),

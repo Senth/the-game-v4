@@ -11,7 +11,7 @@ export function newArc(shuffleArcs: boolean): Arc {
 	})
 }
 
-export function newQuest(): Quest {
+export function newQuest(points: number | null = null): Quest {
 	return Quest.parse({
 		id: crypto.randomUUID(),
 		displayTitle: "",
@@ -19,7 +19,7 @@ export function newQuest(): Quest {
 		content: "",
 		assetPath: null,
 		answers: [],
-		points: null,
+		points,
 		adminNotes: "",
 		hints: [],
 	})

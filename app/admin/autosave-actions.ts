@@ -119,6 +119,13 @@ export async function saveSeasonField(
 		) {
 			return { ok: false, error: "Use a whole number from 0 to 10000." }
 		}
+		if (
+			!("arcId" in parsed) &&
+			parsed.field === "defaultQuestPoints" &&
+			!Season.shape.defaultQuestPoints.safeParse(value).success
+		) {
+			return { ok: false, error: "Use a whole number from 0 to 10000." }
+		}
 		if (!("arcId" in parsed) && parsed.field === "start") {
 			const start = Season.shape.start.parse(value)
 			const season = await getSeason(seasonId)

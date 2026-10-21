@@ -39,11 +39,15 @@ export async function createSeason(
 }
 
 export async function getSeason(id: string): Promise<Season | null> {
-	return (await collections()).seasons.findOne({ _id: id })
+	const season = await (await collections()).seasons.findOne({ _id: id })
+	return season ? { ...season, defaultQuestPoints: season.defaultQuestPoints ?? null } : null
 }
 
 export async function listSeasons(): Promise<Season[]> {
-	return (await collections()).seasons.find().toArray()
+	return (await collections()).seasons
+		.find()
+		.toArray()
+		.then((seasons) => seasons.map((season) => ({ ...season, defaultQuestPoints: season.defaultQuestPoints ?? null })))
 }
 
 export class FinisherBonusClaimedError extends Error {
@@ -199,7 +203,7 @@ export async function addQuest(seasonId: string, arcId: string, now: Date): Prom
 		const season = await getSeason(seasonId)
 		if (!season) throw new NotFoundError(`Season ${seasonId} not found`)
 		const live = seasonStatus(season, now) === "live"
-		const quest = { ...newQuest(), ...(live ? { hidden: true } : {}) }
+		const quest = { ...newQuest(season.defaultQuestPoints ?? null), ...(live ? { hidden: true } : {}) }
 		const { path, filter, arrayFilters } = locate({ arcId, field: "quests" })
 		await writeSeasonTree(
 			seasonId,

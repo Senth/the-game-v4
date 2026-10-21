@@ -26,6 +26,7 @@ const season: Season = {
 	_id: "season",
 	title: "Season",
 	lengthMinutes: 60,
+	defaultQuestPoints: null,
 	start: new Date("2026-10-17T18:00:00Z"),
 	end: new Date("2026-10-17T19:00:00Z"),
 	shuffleArcs: false,

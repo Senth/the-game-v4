@@ -106,6 +106,39 @@ describe("Season", () => {
 		expect(Season.parse(stored)).toMatchObject({ finisherBonuses: [], finishers: [] })
 	})
 
+	it.each([null, 0, 10000])("accepts default quest points %j", (points) => {
+		const stored = {
+			_id: "s1",
+			title: "Old",
+			lengthMinutes: 60,
+			start: null,
+			end: null,
+			shuffleArcs: false,
+			defaultQuestPoints: points,
+			arcs: [],
+		}
+		expect(Season.parse(stored).defaultQuestPoints).toBe(points)
+	})
+
+	it.each([-1, 10001, 2.5, "30"])("rejects invalid default quest points %j", (points) => {
+		const stored = {
+			_id: "s1",
+			title: "Old",
+			lengthMinutes: 60,
+			start: null,
+			end: null,
+			shuffleArcs: false,
+			defaultQuestPoints: points,
+			arcs: [],
+		}
+		expect(Season.safeParse(stored).success).toBe(false)
+	})
+
+	it("reads a stored season without default quest points as null", () => {
+		const stored = { _id: "s1", title: "Old", lengthMinutes: 60, start: null, end: null, shuffleArcs: false, arcs: [] }
+		expect(Season.parse(stored).defaultQuestPoints).toBeNull()
+	})
+
 	it.each([-1, 10001, 1.5, "50"])("rejects invalid finisher bonus %j", (points) => {
 		expect(Season.shape.finisherBonuses.safeParse([points]).success).toBe(false)
 	})

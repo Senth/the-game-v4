@@ -222,6 +222,29 @@ describe.each(actions)("$name", ({ name, run, count }) => {
 	})
 })
 
+it("creates quests with season defaults, including hidden live drafts", async () => {
+	for (const start of [null, now]) {
+		await setup(start)
+		await seasons.setSeasonField(ids[0], { field: "defaultQuestPoints" }, 30)
+		const result = await addQuest(ids[0], ids[1])
+		expect(result.ok).toBe(true)
+		if (!result.ok) throw new Error(result.error)
+		const quest = (await seasons.getSeason(ids[0]))?.arcs[0]?.quests.at(-1)
+		expect(quest).toMatchObject({ id: result.questId, points: 30 })
+		if (start) expect(quest?.hidden).toBe(true)
+		else expect(quest?.hidden).toBeUndefined()
+		await (await collections()).seasons.deleteMany({})
+	}
+})
+
+it("creates quests without points for a legacy season missing the default", async () => {
+	await setup()
+	await (await collections()).seasons.updateOne({ _id: ids[0] }, { $unset: { defaultQuestPoints: "" } })
+	const result = await addQuest(ids[0], ids[1])
+	expect(result.ok).toBe(true)
+	expect((await seasons.getSeason(ids[0]))?.arcs[0]?.quests.at(-1)?.points).toBeNull()
+})
+
 describe("live structural actions", () => {
 	async function playing(name: string, overrides: Partial<Team> = {}) {
 		return createTeam({

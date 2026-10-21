@@ -371,6 +371,7 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 		_id: "cipher-night-2026",
 		title: "Cipher Night 2026",
 		lengthMinutes: 120,
+		defaultQuestPoints: null,
 		start: new Date(start),
 		end: new Date(start + 120 * minute),
 		shuffleArcs: true,

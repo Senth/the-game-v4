@@ -35,6 +35,10 @@ describe("newQuest", () => {
 		})
 		expect(newQuest().id).not.toBe(quest.id)
 	})
+
+	it("copies provided default points into a new draft", () => {
+		expect(newQuest(30).points).toBe(30)
+	})
 })
 
 describe("questLabel", () => {
@@ -75,6 +79,7 @@ describe("treeView", () => {
 			_id: "s1",
 			title: "Season",
 			lengthMinutes: 60,
+			defaultQuestPoints: null,
 			start: null,
 			end: null,
 			shuffleArcs: false,
