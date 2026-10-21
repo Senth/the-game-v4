@@ -10,12 +10,10 @@
 		"lint": "markdownlint-cli2 \"**/*.md\" && biome check",
 		"typecheck": "next typegen && tsc --noEmit",
 		"test": "vitest run --passWithNoTests",
-		"build": "next build && esbuild scripts/admin-create.ts scripts/import-v3.ts --bundle --platform=node --target=node24 --format=esm --outdir=.next/standalone/scripts --out-extension:.js=.mjs --tsconfig=tsconfig.json --banner:js='import { createRequire } from \"node:module\"; import { dirname } from \"node:path\"; import { fileURLToPath } from \"node:url\"; const require = createRequire(import.meta.url); const __dirname = dirname(fileURLToPath(import.meta.url));' --external:kerberos --external:@mongodb-js/zstd --external:snappy --external:mongodb-client-encryption --external:@aws-sdk/credential-providers --external:gcp-metadata --external:socks --external:aws4",
+		"build": "next build && esbuild scripts/admin-create.ts --bundle --platform=node --target=node24 --format=esm --outdir=.next/standalone/scripts --out-extension:.js=.mjs --tsconfig=tsconfig.json --banner:js='import { createRequire } from \"node:module\"; import { dirname } from \"node:path\"; import { fileURLToPath } from \"node:url\"; const require = createRequire(import.meta.url); const __dirname = dirname(fileURLToPath(import.meta.url));' --external:kerberos --external:@mongodb-js/zstd --external:snappy --external:mongodb-client-encryption --external:@aws-sdk/credential-providers --external:gcp-metadata --external:socks --external:aws4",
 		"e2e": "TMPDIR=\"$PWD/.tmp/e2e\" playwright test",
 		"seed": "tsx scripts/seed.ts",
-		"admin:create": "tsx scripts/admin-create.ts",
-		"import:v3": "tsx scripts/import-v3.ts",
-		"export:v3": "tsx scripts/export-v3.ts"
+		"admin:create": "tsx scripts/admin-create.ts"
 	},
 	"dependencies": {
 		"@dnd-kit/core": "6.3.1",
@@ -42,7 +40,6 @@
 		"@types/qrcode": "^1.5.6",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
-		"firebase-admin": "^14.5.0",
 		"esbuild": "0.28.2",
 		"jsqr": "^1.4.0",
 		"markdownlint-cli2": "^0.23.3",

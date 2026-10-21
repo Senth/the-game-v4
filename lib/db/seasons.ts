@@ -15,7 +15,6 @@ import {
 } from "@/lib/domain/schemas"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
-import { getDbWithoutIndexes } from "./client"
 import { collections, NotFoundError } from "./collections"
 import { finishSeasonStructure, type PendingStructure, withSeasonStructure } from "./structural-writes"
 
@@ -41,10 +40,6 @@ export async function createSeason(
 
 export async function getSeason(id: string): Promise<Season | null> {
 	return (await collections()).seasons.findOne({ _id: id })
-}
-
-export async function getSeasonForImport(id: string): Promise<Season | null> {
-	return getDbWithoutIndexes().then((db) => db.collection<Season>("seasons").findOne({ _id: id }))
 }
 
 export async function listSeasons(): Promise<Season[]> {

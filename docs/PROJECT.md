@@ -33,7 +33,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `_id` | `string` | Season id; v3 import uses its source id for repeatable imports |
+| `_id` | `string` | Season id; imported v3 seasons keep their v3 id |
 | `title` | `string` | Season name |
 | `lengthMinutes` | `number` | Configured game length |
 | `start` | `Date \| null` | Scheduled or actual start; null before scheduling |
@@ -54,7 +54,7 @@ A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
 | `Quest` | `id: string`, `displayTitle: string`, `internalTitle: string`, `content: string`, `assetPath: string \| null`, `answers: string[]`, `points: number \| null`, `adminNotes: string`, `hints: Hint[]` |
 | `Hint` | `id: string`, `text: string`, `points: number` |
 
-A quest and each hint must have a stable id. Assign ids to hints that lack them, including on import.
+A quest and each hint must have a stable id. Assign ids to hints that lack them.
 `Quest` also has `hidden?: boolean`; absent means visible.
 Draft quests may have empty content, empty answers or missing points.
 A quest is complete with content or an asset, at least one answer and points. Display title is optional.
@@ -362,62 +362,18 @@ Upload, replace and remove work before start and while live. Replace saves the n
 deleting the old one. Remove, Replace, Remove quest and Remove arc delete a file only when no
 quest in any season still references its path.
 
-`pnpm import:v3 <export.json>` imports seasons and reusable quests, not teams or users.
-Use `--dry-run` to inspect counts, skips and warnings; it checks asset URLs with `HEAD` and downloads no bodies or writes.
-Set `MONGODB_URI`; real imports also require `ASSETS_DIR` for downloaded assets.
-Follow the [v3 migration runbook](../README.md#migrating-from-v3) to export production Firestore seasons and import them.
-The human exports production Firestore data as JSON, not Firestore's binary backup format:
-`{ "<collection>": { "<docId>": season } }`. The collection name may have any prefix.
-Exactly one top-level collection is required; zero or several is an error.
-Ignore `__collections__` metadata keys wherever present.
-
-`lib/domain/v3-import.ts` maps this JSON without network, filesystem or database access.
-Each result contains a validated v4 `season`, `assetJobs` keyed by its new quest ids, and `warnings`.
-Inputs stay unchanged. Mapping rules:
-
-- Use the source document id as season `_id` so repeated imports do not duplicate seasons.
-  Keep the season title; always set `registrationOpen: false`. Missing `length` becomes 60 minutes.
-- Keep `start` and `end`. Accept ISO timestamps, `{ "_seconds": 1704067200 }`,
-  `{ "seconds": 1704067200 }`, and
-  `{ "__datatype__": "timestamp", "value": { "_seconds": 1704067200 } }`.
-  Missing dates become null. With a start but no end, derive end as start plus length in minutes.
-- `Random All` and `Random Theme` set `shuffleArcs: true`.
-  `Ordered` and `Random Quest` set it false. Preserve authored array order.
-  Missing `order` becomes `Ordered`, setting `shuffleArcs: false`.
-- Each theme becomes an arc with a new UUID, its original title and `shuffleQuests` from `random`.
-  Missing theme `random` becomes false, setting `shuffleQuests: false`.
-  Every quest and retained hint gets a new UUID, including quests copied between v3 seasons with identical ids.
-- Quest `title` becomes `internalTitle`, `description` becomes `adminNotes`, and `displayTitle` stays as is.
-  Missing quest text fields become empty strings. Missing answers and hints become empty arrays.
-- Split `answer` on `|`, trim and NFC-normalize each part, drop empty parts and deduplicate by `normalizeAnswer`.
-  Keep the first spelling. Drop answers longer than 200 characters with a warning.
-- Quest points must be a whole number from 0 to 10000; otherwise set them to null with a warning.
-- Nonempty `code` with nonempty `content` becomes a Markdown fenced block whose language is `code`'s value.
-  Use at least three backticks and a fence longer than every backtick run inside the content.
-  Other content stays raw trusted HTML. Do not add a fence when content is absent.
-- Drop hints whose text is missing, empty or whitespace-only. Preserve remaining text.
-  Missing, null or non-numeric hint points become 0 with a warning; clamp out-of-range numeric points
-  to 0-10000 with a warning.
-- A nonempty `asset` queues `{ url: asset, target: "assetPath" }`.
-  With no asset, a nonempty `imageUrl` queues the same job using its URL.
-  With both, also queue `{ url: imageUrl, target: "content" }` and warn that it will append a Markdown image.
-  `assetPath` stays null until the jobs run; content-append jobs leave content unchanged until then.
-  The downloader saves old asset URLs into `ASSETS_DIR` before applying their local paths.
-- Every warning names the season title and source id, arc and quest.
-  Validate every mapped season with `lib/domain/schemas.ts`; reject malformed input or any remaining schema violation,
-  including invalid lengths, invalid timestamps and non-whole hint points within range.
+v3 seasons were imported once in October 2026. v3 is archived and its backup is under `/mnt/lvm/backups/the-game-v3/`.
 
 Production runs as the `the-game` service in server-infrastructure on fenrir,
 with MongoDB 8 and persistent mongo and asset storage.
-`gamev4.senth.org` serves it until I-33 moves `game.senth.org`. Main merges auto-deploy the `:main` image within 5 minutes.
+`game.senth.org` serves v4. Main merges auto-deploy the `:main` image within 5 minutes.
 Build a non-root standalone app on `node:24-alpine`; gates run in PR CI.
-Production admin creation and v3 imports run inside the image through bundled scripts,
-`scripts/admin-create.mjs` and `scripts/import-v3.mjs`.
+Production admin creation runs inside the image through the bundled `scripts/admin-create.mjs` script.
 MongoDB has no host port; the generic compose file binds the app to `127.0.0.1:5009` by default.
 See [README.md](../README.md#deploying-with-compose) for environment variables, deployment commands and releases.
 The human runs `terraform apply`. Agents may inspect the production compose project and run bundled commands under [AGENTS.md](../AGENTS.md).
 Development and tests use `mongodb-memory-server`, never Docker.
-After the first real v4 game, the human decommissions GCP, points v3's README to v4 and archives v3.
+I-33 decommissioned GCP, pointed v3's README to v4 and archived v3.
 
 Work is tracked in one GitHub project, "The Game", using home-backlog labels plus `human` for work agents skip.
 No milestones or area labels. GitHub blocked-by relations carry ordering. This phase files no issues.
