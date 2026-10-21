@@ -10,7 +10,7 @@ export function allowedChannels(
 ): string[] | "any" {
 	if (session?.kind === "admin") return "any"
 	if (session?.kind !== "team" || !team) return [boardChannel]
-	return [teamChannel(team._id), boardChannel, ...(team.seasonId ? [seasonChannel(team.seasonId)] : [])]
+	return [teamChannel(team._id), boardChannel, seasonChannel(team.seasonId)]
 }
 
 export function authorizeChannels(requested: string[], allowed: string[] | "any"): boolean {

@@ -20,7 +20,7 @@ import {
 
 useTestDb()
 
-function team(name: string, seasonId: string | null): Omit<Team, "_id"> {
+function team(name: string, seasonId: string): Omit<Team, "_id"> {
 	return {
 		name,
 		passwordHash: "$2b$10$hash",
@@ -79,7 +79,7 @@ describe("teams", () => {
 		await createTeam(team("Ninjas", "count-spring"))
 		await createTeam(team("Owls", "count-spring"))
 		await createTeam(team("Foxes", "count-autumn"))
-		await createTeam(team("Bears", null))
+		await createTeam(team("Bears", "count-unassigned"))
 
 		expect(await countTeams("count-spring")).toBe(2)
 		expect(await countTeams("count-autumn")).toBe(1)
@@ -296,7 +296,7 @@ describe("fillQuestOrders", () => {
 		await (await collections()).seasons.insertOne(input)
 		const ordered = await createTeam(team("Ordered", input._id))
 		const progressed = await createTeam(team("Progressed", input._id))
-		const other = await createTeam(team("Other", null))
+		const other = await createTeam(team("Other", "other-season"))
 		await setTeamField(ordered._id, "questOrder", ["existing"])
 		await setTeamField(progressed._id, "progress", [{ questId: "old", hintsRevealed: [], pointsEarned: 10 }])
 		const before = await Promise.all([getTeam(ordered._id), getTeam(progressed._id), getTeam(other._id)])

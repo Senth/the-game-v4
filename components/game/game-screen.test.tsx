@@ -203,14 +203,6 @@ describe("player home route", () => {
 		expect(page.props.qr.props.team._id).toBe(team._id)
 	})
 
-	it("keeps seasonless waiting teams live on their own team channel", async () => {
-		vi.mocked(requireTeam).mockResolvedValue({ ...team, seasonId: null, passwordHash: "x" })
-		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting" })
-		const page = await Home()
-		expect(page.type).toBe(GameScreen)
-		expect(page.props.channels).toEqual([`team:${team._id}`])
-	})
-
 	it.each<PlayerGame>([
 		{ lifecycleState: "completed", teamId: team._id, finishers: [], score: 120, rank: 1, teamCount: 10 },
 		{ lifecycleState: "ended", teamId: team._id, finishers: [], score: 64, rank: 7, teamCount: 10 },

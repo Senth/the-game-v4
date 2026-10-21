@@ -8,7 +8,6 @@ export default async function Standings() {
 	const team = await requireTeam()
 	const standings = await loadStandings(team)
 	if (standings.lifecycleState === "waiting" || standings.lifecycleState === "countdown") redirect("/")
-	const channels = [teamChannel(team._id)]
-	if (team.seasonId) channels.push(seasonChannel(team.seasonId))
+	const channels = [teamChannel(team._id), seasonChannel(team.seasonId)]
 	return <StandingsScreen initial={standings} channels={channels} initialNow={Date.now()} />
 }

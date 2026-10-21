@@ -81,7 +81,7 @@ and Shiki for fenced code. There is no separate v3 `code` field.
 | `_id` | `string` | Team id, not its name |
 | `name` | `string` | Name unique within a season, ignoring case |
 | `passwordHash` | `string` | bcrypt hash, never plaintext |
-| `seasonId` | `string \| null` | Assigned season; null until active-season lookup assigns one |
+| `seasonId` | `string` | Assigned season |
 | `questOrder` | `string[]` | Quest ids in this team's generated play order |
 | `questIndex` | `number` | Index of the current quest in `questOrder` |
 | `reachedAt` | `Date?` | When the team reached its current quest; set on order build and each advance, including skips |
@@ -121,7 +121,9 @@ Use `requireAdmin` or `requireTeam` for guarded actions.
 The single login form tries admin then team in one request and returns one generic error on failure.
 Team login matches names ignoring case, like the per-season unique index, and keeps teams whose password matches.
 It picks the one in the registration-open season, else the latest season whose start has passed,
-else an unscheduled or future-scheduled season, else no season.
+else an unscheduled or future-scheduled season.
+A team whose season record is missing cannot use password-form login.
+QR login still accepts a valid join token without checking the season record.
 Admins land on `/admin`, teams on `/`. Deleting a team invalidates its sessions.
 `/logout` accepts only POST, so a link or prefetch cannot log anyone out.
 `pnpm admin:create <name>` prompts for a password. Production admins come from this CLI, not v3 users.
@@ -131,7 +133,7 @@ Admins land on `/admin`, teams on `/`. Deleting a team invalidates its sessions.
 ### Lifecycle and season lookup
 
 Waiting, countdown, running, completed and ended are distinct player states.
-Waiting means no season or no start time; countdown means a future start.
+Waiting means a missing season record or no start time; countdown means a future start.
 At start, enter the game without reloading.
 The game runs from `start` until `end`. At end, stop play and show the team's score.
 When every quest in the team's order is finished, show completed with score.
@@ -139,8 +141,8 @@ Completed outranks ended and running, so a team that finished early stays comple
 
 A season counts until it ends: `end` is null or now is before `end`.
 New teams join the counting season with `registrationOpen`, also while it runs, until it ends.
-Self-registration and a team without a season use this lookup. If no counting season has registration open,
-registration is not possible and a seasonless team sees waiting.
+Only self-registration uses this lookup.
+If no counting season has registration open, registration is not possible.
 At most one counting season may have registration open. Opening it while another counting season has it
 is rejected with an error naming that season; the flag never moves automatically.
 Opening registration on an ended season is rejected. Ended seasons keep their flag, but it no longer counts.

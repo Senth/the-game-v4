@@ -244,7 +244,6 @@ export function pickLoginTeam<
 		candidates.find((team) => team.seasonId === open?._id) ??
 		latestStarted ??
 		candidates.find((team) => startOf(team) !== undefined && !started(team)) ??
-		candidates.find((team) => team.seasonId === null) ??
 		null
 	)
 }

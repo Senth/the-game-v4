@@ -21,7 +21,7 @@ function team(name: string) {
 	return createTeam({
 		name,
 		passwordHash: "$2b$10$hash",
-		seasonId: null,
+		seasonId: "join-season",
 		questOrder: [],
 		questIndex: 0,
 		score: 0,

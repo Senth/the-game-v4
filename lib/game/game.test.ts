@@ -112,8 +112,8 @@ describe("loadGame", () => {
 		}
 	})
 
-	it("returns waiting for a seasonless team", async () => {
-		expect(await loadGame(await freshTeam({ seasonId: null }), now)).toEqual({ lifecycleState: "waiting" })
+	it("returns waiting when the team's season record is missing", async () => {
+		expect(await loadGame(await freshTeam({ seasonId: "missing-season" }), now)).toEqual({ lifecycleState: "waiting" })
 	})
 
 	it("keeps join URLs out of getGame JSON", async () => {
@@ -149,10 +149,10 @@ describe("loadGame", () => {
 })
 
 describe("loadStandings", () => {
-	it("returns waiting for a seasonless team or missing season", async () => {
-		for (const seasonId of [null, "missing-season"]) {
-			expect(await loadStandings({ ...standingsTeam, seasonId }, now)).toEqual({ lifecycleState: "waiting" })
-		}
+	it("returns waiting when the team's season record is missing", async () => {
+		expect(await loadStandings({ ...standingsTeam, seasonId: "missing-season" }, now)).toEqual({
+			lifecycleState: "waiting",
+		})
 	})
 
 	it.each(["running", "ended"] as const)("loads only the season's teams without secrets when %s", async (state) => {

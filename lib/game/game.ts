@@ -55,7 +55,6 @@ async function fillEmptyQuestOrders(season: Season | null, teams: Team[], now: D
 }
 
 export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame> {
-	if (!team.seasonId) return playerGame(null, team, [], now)
 	const [season, listed] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
 	let freshSeason = season
 	let teams = await fillEmptyQuestOrders(season, listed, now)
@@ -105,7 +104,6 @@ export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame
 }
 
 export async function loadStandings(team: Team, now = new Date()): Promise<PlayerStandings> {
-	if (!team.seasonId) return playerStandings(null, team, [], now)
 	const [season, listed] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
 	const teams = await fillEmptyQuestOrders(season, listed, now)
 	return playerStandings(season, teams.find((candidate) => candidate._id === team._id) ?? team, teams, now)
@@ -132,7 +130,7 @@ export async function submitAnswer(
 	now = new Date(),
 ): Promise<SubmitResult> {
 	if (typeof answer !== "string" || answer.length > maxAnswerLength) return { ok: false, reason: "invalid" }
-	const season = team.seasonId ? await getSeason(team.seasonId) : null
+	const season = await getSeason(team.seasonId)
 	let current: Team | null = team
 	for (let attempt = 0; attempt <= solveRetries && current; attempt++) {
 		if (!season || lifecycleState(season, current, now) !== "running") return { ok: false, reason: "not-running" }
@@ -160,7 +158,7 @@ export async function submitAnswer(
 }
 
 export async function revealHint(team: Team, hintId: string, now = new Date()): Promise<RevealResult> {
-	const season = team.seasonId ? await getSeason(team.seasonId) : null
+	const season = await getSeason(team.seasonId)
 	if (!season || lifecycleState(season, team, now) !== "running") return { ok: false, reason: "not-running" }
 	const found = currentQuest(season, team)
 	const hint = found?.quest.hints.find((candidate) => candidate.id === hintId)

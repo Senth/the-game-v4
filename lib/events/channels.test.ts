@@ -5,14 +5,12 @@ import { allowedChannels, authorizeChannels } from "./channels"
 const admin: SessionData = { kind: "admin", id: "a1" }
 const teamSession: SessionData = { kind: "team", id: "t1" }
 const seasoned = { _id: "t1", seasonId: "s1" }
-const unseasoned = { _id: "t1", seasonId: null }
 
 describe("allowedChannels", () => {
 	it.each([
 		["anonymous", null, null, ["board"]],
 		["a team without its record", teamSession, null, ["board"]],
 		["a team with a season", teamSession, seasoned, ["team:t1", "board", "season:s1"]],
-		["a team without a season", teamSession, unseasoned, ["team:t1", "board"]],
 		["an admin", admin, null, "any"],
 	] as const)("gives %s %o", (_, session, team, expected) => {
 		expect(allowedChannels(session, team)).toEqual(expected)
@@ -22,7 +20,6 @@ describe("allowedChannels", () => {
 describe("authorizeChannels", () => {
 	const anonymous = allowedChannels(null, null)
 	const seasonTeam = allowedChannels(teamSession, seasoned)
-	const plainTeam = allowedChannels(teamSession, unseasoned)
 	const anyChannel = allowedChannels(admin, null)
 
 	it.each([
@@ -30,8 +27,6 @@ describe("authorizeChannels", () => {
 		["anonymous team", ["team:t1"], anonymous, false],
 		["anonymous season", ["season:s1"], anonymous, false],
 		["team own channels", ["team:t1", "season:s1", "board"], seasonTeam, true],
-		["team without season asking for one", ["season:s1"], plainTeam, false],
-		["team own channels without season", ["team:t1", "board"], plainTeam, true],
 		["another team's channel", ["team:t1", "team:t2"], seasonTeam, false],
 		["another season's channel", ["season:s2"], seasonTeam, false],
 		["admin any team and season", ["team:t2", "season:s9", "board"], anyChannel, true],

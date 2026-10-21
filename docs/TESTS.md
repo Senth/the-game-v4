@@ -87,7 +87,8 @@ Lagom stays at 70 points, with the same standings order. Ninjas is unchanged.
 Fixture scores and progress must be internally consistent with PROJECT.md; mock numbers are illustrative,
 not separate scoring rules. M3 and M4 use different illustrative hint-loss totals.
 
-Use isolated test variants for no season, upcoming/countdown, ended, completed, no revealers and incomplete drafts.
+Use isolated test variants for a missing season record, upcoming/countdown, ended, completed, no revealers
+and incomplete drafts.
 Do not report intentionally hidden hints or unplayed quests as missing seed data.
 
 ## Application gates
