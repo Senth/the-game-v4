@@ -533,10 +533,20 @@ Keep −5 / +5 as outlines. End game uses `pace-3` and confirms in a native `<di
 
 Settings surface brief: job is setting up a season before play and checking it during play.
 Primary action is editing a field.
-Read first season title, second start and length, third shuffle and registration.
+Read first season title, second start, length and new quest points, third shuffle and registration.
 Must not look like a CMS form with a Save bar or preferences dashboard.
 Stack fields in M2's field style; booleans are switches. Quiet locked fields once live.
 Show errors as `warn` lines at the field.
+
+New quest points follows final variant G: [phone](https://artifacts.senth.org/g-phone-b70c01.png) and
+[desktop](https://artifacts.senth.org/g-desktop-ef9e7b.png).
+Empty state: [phone](https://artifacts.senth.org/d-phone-2b4a8a.png) and [desktop](https://artifacts.senth.org/d-desktop-c1dd89.png).
+Place it directly under Length, before Shuffle arcs. Label it "New quest points", with suffix `p` and placeholder "None".
+Use the same input width as Length. Never lock it or make it read-only.
+With a value, show `New quests start with <N>p. Existing quests never change.`
+When empty, show "Empty means new quests start without points. Existing quests never change."
+The helper follows the typed value before the save lands.
+Use [PROJECT.md's default quest points rule](PROJECT.md#nested-types) for behavior.
 
 #### Start now confirmation
 

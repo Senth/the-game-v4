@@ -36,6 +36,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `_id` | `string` | Season id; imported v3 seasons keep their v3 id |
 | `title` | `string` | Season name |
 | `lengthMinutes` | `number` | Configured game length |
+| `defaultQuestPoints` | `number \| null` | Points copied into quests created with "+ Quest"; null means none |
 | `start` | `Date \| null` | Scheduled or actual start; null before scheduling |
 | `end` | `Date \| null` | Scheduled or actual end; adjusted by live controls |
 | `shuffleArcs` | `boolean` | Shuffle arc order when building each team's order |
@@ -45,6 +46,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `arcs` | `Arc[]` | Arcs in authored order |
 
 A new season defaults to 60 minutes, no start or end, no arcs and shuffle off.
+New seasons have no default quest points. A missing `defaultQuestPoints` reads as null; no migration is needed.
 
 ### Nested types
 
@@ -60,6 +62,11 @@ Draft quests may have empty content, empty answers or missing points.
 A quest is complete with content or an asset, at least one answer and points. Display title is optional.
 Whitespace-only text is empty; 0 points is set. `missingForGame` defines this shared rule.
 Quest points are a whole number from 0 to 10000, or null on a draft.
+"+ Quest" copies the season's default into the new quest's points. Without a default, points stay null and show "Needs points".
+Changing the default never edits existing quests.
+Copied quests and arcs keep their source points, regardless of the destination default.
+The default is null or a whole number from 0 to 10000. Zero counts as set; it is editable in every season state.
+There is no action to fill existing quests without points.
 Hint points are a whole number from 0 to 10000.
 Answers are stored trimmed and NFC-normalized, 1 to 200 characters.
 Sequential additions deduplicate by `normalizeAnswer`; concurrent near-duplicates are possible and harmless.
@@ -269,7 +276,11 @@ While live, admins may add and remove arcs and quests. Moves stay pre-start only
 Ended seasons reject every structural edit.
 A move sends one id and its target, never the whole list, and never overwrites a concurrent field edit.
 A new arc is titled "New arc" and copies `shuffleArcs` into `shuffleQuests`.
-A new quest has empty display title, internal title and content, no answers, hints or asset, and `points: null`.
+A new quest has empty display title, internal title and content, and no answers, hints or asset.
+Its points follow the [default quest points rule](#nested-types).
+The server sets points in `newQuest`; the client sends no points. The creation API stays unchanged.
+`saveSeasonField` saves `defaultQuestPoints` with `requireAdmin` and the season live event.
+It follows the field-save rules above.
 Removing an arc removes its quests.
 A save publishes `season:<id>` and `board`. Open admin pages reload server data on `season:<id>`.
 A field accepts a value from another tab only when it is unfocused and has no unsaved edit.
@@ -380,7 +391,6 @@ No milestones or area labels. GitHub blocked-by relations carry ordering. This p
 
 ## Backlog decisions deferred to their implementation
 
-- I-34 adds default quest points per season, affecting new quests only, not existing ones.
 - I-35 researches LiveKit versus peer-to-peer WebRTC for 2-6 players on phones. No voice implementation.
 
 ## Do not reintroduce v3 bugs
