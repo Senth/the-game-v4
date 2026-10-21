@@ -46,6 +46,7 @@ describe("createSeasonAction", () => {
 			_id: expect.any(String),
 			title: "Cipher Night 2026",
 			lengthMinutes: 60,
+			defaultQuestPoints: null,
 			start: null,
 			end: null,
 			shuffleArcs: false,

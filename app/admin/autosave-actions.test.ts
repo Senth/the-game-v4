@@ -169,6 +169,42 @@ describe("autosave actions", () => {
 		expect((await seasons.getSeason(season._id))?.arcs[0]?.quests[0]?.points).toBe(value)
 	})
 
+	it.each([0, 10000, null])("saves default quest points %j", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field: "defaultQuestPoints" }, value)).toEqual({ ok: true })
+		expect((await seasons.getSeason(season._id))?.defaultQuestPoints).toBe(value)
+	})
+
+	it.each(["live", "ended"] as const)("saves default quest points while %s", async (status) => {
+		const season = await setup()
+		const start = new Date(Date.now() - 60_000)
+		const end = new Date(Date.now() + (status === "live" ? 60_000 : -60_000))
+		await (await collections()).seasons.updateOne({ _id: season._id }, { $set: { start, end } })
+		expect(await saveSeasonField(season._id, { field: "defaultQuestPoints" }, 30)).toEqual({ ok: true })
+		expect((await seasons.getSeason(season._id))?.defaultQuestPoints).toBe(30)
+	})
+
+	it.each([-1, 10001, 2.5, "30"])("rejects invalid default quest points %j without writing", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field: "defaultQuestPoints" }, value)).toEqual({
+			ok: false,
+			error: "Use a whole number from 0 to 10000.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("does not change existing quest points when the default changes", async () => {
+		const season = await setup()
+		await (await collections()).seasons.updateOne(
+			{ _id: season._id },
+			{ $push: { "arcs.0.quests": { ...season.arcs[0]?.quests[0], id: "unpointed", points: null } } },
+		)
+		expect(await saveSeasonField(season._id, { field: "defaultQuestPoints" }, 30)).toEqual({ ok: true })
+		const quests = (await seasons.getSeason(season._id))?.arcs[0]?.quests
+		expect(quests?.map(({ points }) => points)).toEqual([50, null])
+	})
+
 	it.each([-1, 10001, 2.5, Number.NaN])("rejects quest points %j with shared copy without writing", async (value) => {
 		const season = await setup()
 		expect(await saveSeasonField(season._id, { ...quest, field: "points" }, value)).toEqual({

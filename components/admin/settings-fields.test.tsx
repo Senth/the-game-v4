@@ -5,6 +5,7 @@ import { AutosaveDatetimeField } from "./autosave-datetime-field"
 import { AutosaveNumberField } from "./autosave-number-field"
 import { useAutosaveField } from "./autosave-provider"
 import { AutosaveSwitch, SeasonSwitch } from "./autosave-switch"
+import { NewQuestPointsField } from "./new-quest-points-field"
 import { RegistrationSwitch } from "./registration-switch"
 import { SeasonSettings } from "./season-settings"
 import { useSeasonClock } from "./use-season-clock"
@@ -146,6 +147,52 @@ it("shows Length action errors instead of its helper", () => {
 	expect(html).not.toContain("The game ends this long after start.")
 })
 
+it("renders New quest points with numeric bounds, suffix and value helper", () => {
+	vi.mocked(useAutosaveField).mockReturnValue({ ...field, value: 30 })
+	const html = renderToStaticMarkup(<NewQuestPointsField serverValue={30} />)
+	expect(useAutosaveField).toHaveBeenCalledWith({ field: "defaultQuestPoints" }, 30)
+	expect(html).toContain('type="number"')
+	expect(html).toContain('inputMode="numeric"')
+	expect(html).toContain('min="0" max="10000" step="1"')
+	expect(html).toContain('value="30"')
+	expect(html).toContain('placeholder="None"')
+	expect(html).toContain(">p</span>")
+	expect(html).toContain("New quests start with 30p. Existing quests never change.")
+	expect(html).not.toContain("readOnly")
+})
+
+it("renders an empty New quest points value and maps clear to null", () => {
+	vi.mocked(useAutosaveField).mockReturnValue({ ...field, value: null })
+	const html = renderToStaticMarkup(<NewQuestPointsField serverValue={null} />)
+	expect(html).toContain('value=""')
+	expect(html).toContain('placeholder="None"')
+	expect(html).toContain("Empty means new quests start without points. Existing quests never change.")
+	const input = NewQuestPointsField({ serverValue: 30 })
+	input.props.onChange({ target: { value: "40", valueAsNumber: 40 } })
+	expect(field.onChange).toHaveBeenCalledWith(40)
+	input.props.onChange({ target: { value: "", valueAsNumber: Number.NaN } })
+	expect(field.onChange).toHaveBeenLastCalledWith(null)
+})
+
+it.each(["live", "ended"] as const)("keeps New quest points editable while %s", (status) => {
+	const season = {
+		finisherBonuses: [],
+		finishers: [],
+		_id: "s1",
+		title: "Hunt",
+		start: new Date(now - 1000),
+		end: status === "ended" ? new Date(now) : new Date(now + 3_600_000),
+		lengthMinutes: 60,
+		defaultQuestPoints: 30,
+		shuffleArcs: false,
+		registrationOpen: true,
+	}
+	const html = renderToStaticMarkup(<SeasonSettings season={season} teams={[]} now={now} />)
+	const pointsField = html.slice(html.indexOf(">New quest points</label>"), html.indexOf(">Shuffle arcs</span>"))
+	expect(pointsField).toContain('value="30"')
+	expect(pointsField).not.toContain("readOnly")
+})
+
 it.each([false, true])("uses native keyboard-activatable autosaved switch with checked=%s", (checked) => {
 	const element = AutosaveSwitch({ serverValue: checked, started: false })
 	const html = renderToStaticMarkup(element)
@@ -175,6 +222,7 @@ it.each(["unscheduled", "upcoming", "live", "ended"] as const)(
 			_id: "s1",
 			title: "Cipher Night 2026",
 			lengthMinutes: 60,
+			defaultQuestPoints: null,
 			shuffleArcs: true,
 			registrationOpen: false,
 			start: status === "unscheduled" ? null : new Date(status === "upcoming" ? now + 20_000 : now - 1000),
@@ -185,7 +233,8 @@ it.each(["unscheduled", "upcoming", "live", "ended"] as const)(
 		expect(html).toContain('class="space-y-5 px-4 py-5 lg:px-8 lg:py-6"')
 		expect(html.indexOf(">Title</label>")).toBeLessThan(html.indexOf(">Start</"))
 		expect(html.indexOf(">Start</")).toBeLessThan(html.indexOf(">Length</label>"))
-		expect(html.indexOf(">Length</label>")).toBeLessThan(html.indexOf(">Shuffle arcs</span>"))
+		expect(html.indexOf(">Length</label>")).toBeLessThan(html.indexOf(">New quest points</label>"))
+		expect(html.indexOf(">New quest points</label>")).toBeLessThan(html.indexOf(">Shuffle arcs</span>"))
 		expect(html.indexOf(">Shuffle arcs</span>")).toBeLessThan(html.indexOf("Registration field"))
 		expect(html.includes("Applies to teams that join from now on.")).toBe(started)
 		expect(html.includes("Each team plays the arcs in its own order.")).toBe(!started)
@@ -207,6 +256,7 @@ it("locks Start and Length when the shared clock reaches scheduled start without
 		start: new Date(now + 1000),
 		end: new Date(now + 3_601_000),
 		lengthMinutes: 60,
+		defaultQuestPoints: null,
 		shuffleArcs: false,
 		registrationOpen: true,
 	}

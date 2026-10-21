@@ -64,6 +64,15 @@ describe("seasons", () => {
 		expect((await listSeasons()).map((s) => s._id)).toEqual(expect.arrayContaining([season._id, "cipher-night"]))
 	})
 
+	it("reads legacy seasons without default quest points as null", async () => {
+		const season = await createSeason(seasonInput())
+		await (await collections()).seasons.updateOne({ _id: season._id }, { $unset: { defaultQuestPoints: "" } })
+		expect(await getSeason(season._id)).toMatchObject({ defaultQuestPoints: null })
+		expect(await listSeasons()).toEqual(
+			expect.arrayContaining([expect.objectContaining({ _id: season._id, defaultQuestPoints: null })]),
+		)
+	})
+
 	it("sets a season, arc, quest and hint field on that path only", async () => {
 		const season = await createSeason(seasonInput())
 		await setSeasonField(season._id, { field: "title" }, "Cipher Night 2026")

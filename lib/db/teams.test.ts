@@ -239,6 +239,7 @@ describe("fillQuestOrders", () => {
 			start: new Date("2026-10-24T17:00:00Z"),
 			end: new Date("2026-10-24T18:00:00Z"),
 			lengthMinutes: 60,
+			defaultQuestPoints: null,
 			registrationOpen: false,
 			shuffleArcs: true,
 			arcs: ["a1", "a2"].map((id) => ({

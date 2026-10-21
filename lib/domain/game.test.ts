@@ -59,6 +59,7 @@ const season = (arcs: Arc[], shuffleArcs = false): Season => ({
 	_id: "s1",
 	title: "Cipher Night",
 	lengthMinutes: 120,
+	defaultQuestPoints: null,
 	start: null,
 	end: null,
 	shuffleArcs,

@@ -259,6 +259,17 @@ it.each([false, true])("copies a quest into a new arc with source shuffleQuests=
 	expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel("destination")]])
 })
 
+it("copies null quest points despite destination default", async () => {
+	await setup("source")
+	await seasons.setSeasonField("source", { arcId: "arc", questId: "quest", field: "points" }, null)
+	await setup("destination")
+	await seasons.setSeasonField("destination", { field: "defaultQuestPoints" }, 30)
+	const result = await copyQuest("source", "quest", { seasonId: "destination", arcId: "arc" })
+	expect(result.ok).toBe(true)
+	if (!result.ok) throw new Error(result.error)
+	expect((await seasons.getSeason("destination"))?.arcs[0]?.quests.at(-1)?.points).toBeNull()
+})
+
 it("rejects malformed quest targets and missing destination arcs", async () => {
 	await setup("source")
 	const destination = await setup("destination")

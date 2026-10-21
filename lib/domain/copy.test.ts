@@ -40,6 +40,7 @@ function season(
 		_id,
 		title,
 		lengthMinutes: 60,
+		defaultQuestPoints: null,
 		start,
 		end,
 		shuffleArcs: false,
