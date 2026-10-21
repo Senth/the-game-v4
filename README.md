@@ -29,7 +29,7 @@ Do not set test overrides in production.
 | --- | --- | --- | --- |
 | `MONGODB_URI` | App and database scripts | None; compose uses `mongodb://mongo:27017/the-game` | MongoDB connection. `pnpm dev` supplies local MongoDB when unset. |
 | `SESSION_SECRET` | Production | None in production; fixed local development secret | Session encryption secret, at least 32 characters. |
-| `ASSETS_DIR` | Real v3 imports | `.tmp/assets` locally; `/data/assets` in image | Uploaded and imported asset storage. |
+| `ASSETS_DIR` | No | `.tmp/assets` locally; `/data/assets` in image | Asset storage. |
 | `PORT` | No | `3000` in image | Standalone server port. Development allocates a checkout port instead. |
 | `HOSTNAME` | No | `0.0.0.0` in image | Standalone server bind address, not the public domain. |
 | `NODE_ENV` | Production | `production` in image; `development` with `pnpm dev` | Runtime mode and secure session cookies. |
@@ -37,7 +37,6 @@ Do not set test overrides in production.
 | `E2E_BASE_URL` | Tests only, setup supplies it | Allocated local test URL | Core-loop test target. Never point at production. |
 | `DEV_STACK_REGISTRY` | No | `~/.local/state/dev-ports` | Shared local port registry. |
 | `DEV_STACK_WEB_TIMEOUT` | No | `180` | Seconds `scripts/dev-stack.sh up` waits for development server readiness. |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Only without other Application Default Credentials | None | Credential file for the Firestore export CLI, not the deployed app. |
 | `NEXT_TELEMETRY_DISABLED` | No | `1` in image and image build | Disable Next.js telemetry. |
 
 Compose reads these values from `.env`. They configure compose, not arbitrary app environment overrides.
@@ -70,7 +69,7 @@ docker compose up -d
 ```
 
 MongoDB initialization manages ownership inside `data/mongo`; the app needs write access to `data/assets`.
-Both directories persist across container replacement. Back up both before upgrades or imports.
+Both directories persist across container replacement. Back up both before upgrades.
 MongoDB has no host port. The app binds `127.0.0.1:5009` unless `APP_PORT` changes.
 Configure DNS, HTTPS and nginx for the host's domain, including SSE proxy settings.
 
@@ -86,67 +85,13 @@ docker compose exec -it app node scripts/admin-create.mjs <name>
 Production compose lives in `terraform/services/the-game/` in server-infrastructure, not this checkout.
 The human runs `terraform apply`. Data lives under `/home/the-game/`.
 Main merges auto-deploy `ghcr.io/senth/the-game-v4:main` within 5 minutes.
-`gamev4.senth.org` serves v4 until I-33 moves `game.senth.org`.
+`game.senth.org` serves v4.
 
 Run one-off commands inside the app container, such as admin creation:
 
 ```sh
 docker exec -it the-game-app-1 node scripts/admin-create.mjs <name>
 ```
-
-### Migrating from v3
-
-On fenrir, confirm Application Default Credentials exist at `~/.config/gcloud/application_default_credentials.json`.
-Export season documents as JSON:
-
-```sh
-pnpm export:v3 --project <gcp-id> --out .tmp/v3-export.json
-```
-
-If the exporter reports an empty collection, rerun with the listed seasons collection:
-
-```sh
-pnpm export:v3 --project <gcp-id> --collection <seasons-collection> --out .tmp/v3-export.json
-```
-
-Copy `.tmp/v3-export.json` to a secure backup outside the repository. It contains every answer; never commit it.
-
-Optional: archive every other listed root collection before I-33. Repeat for each collection:
-
-```sh
-mkdir -p .tmp/v3-archive
-pnpm export:v3 --project <gcp-id> --collection <collection> --out .tmp/v3-archive/<collection>.json
-```
-
-On fenrir, stream the export as the app container's user, then dry-run the import.
-The container copy is private to that user, who can read and remove it:
-
-```sh
-docker exec -i the-game-app-1 sh -c 'umask 077; cat > /tmp/v3-export.json' < .tmp/v3-export.json
-docker exec -it the-game-app-1 node scripts/import-v3.mjs /tmp/v3-export.json --dry-run
-```
-
-Review asset warnings and fix bucket access or URLs before importing for real:
-
-```sh
-docker exec -it the-game-app-1 node scripts/import-v3.mjs /tmp/v3-export.json
-docker exec the-game-app-1 rm /tmp/v3-export.json
-```
-
-On other hosts, dry-run with this checkout's compose file:
-
-```sh
-docker compose run --rm -v ./.tmp/v3-export.json:/import.json:ro app node scripts/import-v3.mjs /import.json --dry-run
-```
-
-Run the real import after resolving warnings:
-
-```sh
-docker compose run --rm -v ./.tmp/v3-export.json:/import.json:ro app node scripts/import-v3.mjs /import.json
-```
-
-Existing seasons are skipped. Delete a season before retrying its assets.
-The importer copies seasons and quests, not teams or users. See [migration rules](docs/PROJECT.md#assets-migration-and-deployment).
 
 ## Releasing
 

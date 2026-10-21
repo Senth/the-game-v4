@@ -46,7 +46,7 @@ Keep temporary artifacts under `.tmp/`. Do not use live databases or services in
 | `lib/auth/` | Sessions, password hashing and server-side guards |
 | `lib/events/` | Single-container event bus and live update support |
 | `lib/game/` | Player game flows that load state, write team progress and publish live events |
-| `scripts/` | Development boot, seed, admin creation and v3 import CLIs |
+| `scripts/` | Development boot, seed and admin creation |
 | `.github/` | CI application gates, compose image checks and tagged GHCR releases |
 | `docs/mocks/` | Nine accepted HTML and PNG mock pairs |
 

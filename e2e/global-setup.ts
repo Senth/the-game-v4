@@ -9,11 +9,7 @@ import { allocPorts } from "@/scripts/dev-ports"
 import teardown, { type E2eStack } from "./global-teardown"
 
 export default async function setup() {
-	if (
-		!existsSync(".next/standalone/server.js") ||
-		!existsSync(".next/standalone/scripts/admin-create.mjs") ||
-		!existsSync(".next/standalone/scripts/import-v3.mjs")
-	)
+	if (!existsSync(".next/standalone/server.js") || !existsSync(".next/standalone/scripts/admin-create.mjs"))
 		throw new Error("run pnpm build first")
 	const stack: E2eStack = {}
 	try {
