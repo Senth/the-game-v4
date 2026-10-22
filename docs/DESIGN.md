@@ -126,6 +126,34 @@ The quest asset sits where the image sits and follows final mock F
 - Any other file shows a full-width bordered `↓ Download <EXT>` button, or "Download file" for `.bin`.
 - The team preview keeps all of these inert.
 
+### Team menu and invite
+
+Final mocks: [phone](https://artifacts.senth.org/final-kebab-team-heading-phone-01c18b.png),
+[desktop](https://artifacts.senth.org/final-kebab-team-heading-desktop-e21ea2.png).
+
+Surface brief: job is getting a late teammate in within seconds; primary action is showing the QR code;
+read first the QR code, second "Copy link", third "Close";
+must not compete with quest content or the answer dock, look like an app settings menu, or use emoji;
+remove the Show/Hide toggle from the dialog, quiet the ⋮ and team heading, sharpen the QR.
+
+Show the team menu only while running. Waiting and countdown keep their inline QR.
+
+- A ⋮ button sits at the header's right edge, after the pace label, with a 44 px target.
+- The ⋮ is `text-link` at rest and `text-head` while open.
+  It is the header's only addition and stays quieter than clock and pace.
+- The popover opens right-aligned under the button, in `bg-z1 rounded-md`.
+- It starts with the team name as a muted uppercase heading. The heading is not focusable.
+- Rows are text only, `min-h-11 font-cond text-sm text-ink`.
+- The only row is "Invite a teammate". Future rows, such as Log out, go below it.
+- A button tap, Escape, an outside tap or choosing a row closes the menu.
+
+"Invite a teammate" opens the existing native `<dialog>` style:
+
+- Title "Invite a teammate", then the QR, then "Teammates scan this to log in."
+- Then an outline "Copy link" and a quiet "Close".
+- The QR is the dialog's largest and lightest element. There is no "Hide QR code" toggle.
+- Escape and a backdrop tap close the dialog.
+
 ## S1: player standings
 
 Mock: [HTML](mocks/S1-standings.html), [PNG](mocks/S1-standings.png).
@@ -482,7 +510,7 @@ The preview heading is `What <team> see now`, with muted "live".
 Render the team's real screen, including waiting, countdown, "Time's up." and "You solved every quest." states.
 While running, show the team's quest, revealed hints, pace and standings strip.
 Hints and the answer dock stay inert. The standings strip and "Standings ›" are not links.
-Hide Log out and the QR code. Use the real player header, not the mock iframe's superseded pace wording.
+Hide Log out, the team menu and the QR code. Use the real player header, not the mock iframe's superseded pace wording.
 
 ## Unmocked surfaces
 
