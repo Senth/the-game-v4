@@ -1,14 +1,31 @@
-import type { ReactNode } from "react"
+import type { EffectCallback, ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, type Mock, vi } from "vitest"
+import { getJoinQr } from "@/app/actions"
 import { InviteDialog } from "./invite-dialog"
 import { TeamMenu } from "./team-menu"
 
-const hooks = vi.hoisted(() => ({ states: [] as unknown[], cursor: 0 }))
+type Qr = Awaited<ReturnType<typeof getJoinQr>>
+
+const hooks = vi.hoisted(() => ({
+	states: [] as unknown[],
+	cursor: 0,
+	setters: [] as Mock[],
+	effects: [] as EffectCallback[],
+	dialog: null as unknown,
+}))
 
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
-	useState: (initial: unknown) => [hooks.states[hooks.cursor++] ?? initial, vi.fn()],
+	useState: (initial: unknown) => {
+		const set = vi.fn()
+		hooks.setters.push(set)
+		return [hooks.states[hooks.cursor++] ?? initial, set]
+	},
+	useEffect: (effect: EffectCallback) => {
+		hooks.effects.push(effect)
+	},
+	useRef: (initial: unknown) => ({ current: initial ?? hooks.dialog }),
 }))
 vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }))
 vi.mock("@/app/actions", () => ({ getJoinQr: vi.fn() }))
@@ -16,11 +33,16 @@ vi.mock("@/app/actions", () => ({ getJoinQr: vi.fn() }))
 function render(node: ReactNode, ...states: unknown[]) {
 	hooks.states = states
 	hooks.cursor = 0
+	hooks.setters = []
+	hooks.effects = []
 	return renderToStaticMarkup(node)
 }
 
 beforeEach(() => vi.stubGlobal("document", { body: {} }))
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+	hooks.dialog = null
+	vi.unstubAllGlobals()
+})
 
 it("renders a closed ⋮ button that announces its menu", () => {
 	const html = render(<TeamMenu teamName="Ninjas" />)
@@ -38,12 +60,12 @@ it("opens with the team name heading and one invite item", () => {
 })
 
 it("shows a loading placeholder, then the code with Copy link and Close and no toggle", () => {
-	const loading = render(<InviteDialog open onClose={vi.fn()} />)
+	const loading = render(<InviteDialog onClose={vi.fn()} />)
 	expect(loading).toContain("Invite a teammate")
 	expect(loading).toContain("Loading…")
 	expect(loading).not.toContain("<img")
 
-	const html = render(<InviteDialog open onClose={vi.fn()} />, { url: "https://game.example/join/t", svg: "<svg/>" })
+	const html = render(<InviteDialog onClose={vi.fn()} />, { url: "https://game.example/join/t", svg: "<svg/>" })
 	expect(html).toContain("QR code to log in to your team")
 	expect(html).toContain("Teammates scan this to log in.")
 	expect(html.indexOf("Copy link")).toBeLessThan(html.indexOf("Close"))
@@ -52,12 +74,41 @@ it("shows a loading placeholder, then the code with Copy link and Close and no t
 })
 
 it("offers a retry when the code cannot load", () => {
-	const html = render(<InviteDialog open onClose={vi.fn()} />, "failed")
+	const html = render(<InviteDialog onClose={vi.fn()} />, "failed")
 	expect(html).toContain("Could not load the code. Try again.")
 	expect(html).toContain(">Try again</button>")
 	expect(html).not.toContain("Loading…")
 })
 
-it("renders nothing while closed", () => {
-	expect(render(<InviteDialog open={false} onClose={vi.fn()} />)).toBe("")
+it("mounts a fresh loading dialog for each invitation", () => {
+	const html = render(<TeamMenu teamName="Ninjas" />, false, true)
+	expect(html).toContain("<dialog")
+	expect(html).toContain("Loading…")
+})
+
+it("drops a code that arrives after its invitation closed", async () => {
+	const stale = Promise.withResolvers<Qr>()
+	const fresh = Promise.withResolvers<Qr>()
+	const oldQr = { url: "https://game.example/join/old", svg: "<svg/>" }
+	const newQr = { url: "https://game.example/join/new", svg: "<svg/>" }
+	vi.mocked(getJoinQr).mockReturnValueOnce(stale.promise).mockReturnValueOnce(fresh.promise)
+	hooks.dialog = { showModal: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() }
+
+	render(<InviteDialog onClose={vi.fn()} />)
+	const [setFirst] = hooks.setters
+	const close = hooks.effects[0]?.()
+	if (close) close()
+
+	expect(render(<InviteDialog onClose={vi.fn()} />)).toContain("Loading…")
+	const [setSecond] = hooks.setters
+	hooks.effects[0]?.()
+
+	stale.resolve(oldQr)
+	await stale.promise
+	expect(setFirst).not.toHaveBeenCalledWith(oldQr)
+	expect(setSecond).not.toHaveBeenCalledWith(oldQr)
+
+	fresh.resolve(newQr)
+	await fresh.promise
+	expect(setSecond).toHaveBeenCalledWith(newQr)
 })

@@ -79,7 +79,7 @@ export function TeamMenu({ teamName }: { teamName: string }) {
 					</button>
 				</div>
 			)}
-			<InviteDialog open={inviting} onClose={() => setInviting(false)} />
+			{inviting && <InviteDialog onClose={() => setInviting(false)} />}
 		</div>
 	)
 }

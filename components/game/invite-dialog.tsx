@@ -10,33 +10,43 @@ const quietClass =
 
 type Qr = Awaited<ReturnType<typeof getJoinQr>>
 
-export function InviteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function InviteDialog({ onClose }: { onClose: () => void }) {
 	const dialog = useRef<HTMLDialogElement>(null)
+	const live = useRef(true)
 	const titleId = useId()
 	const [qr, setQr] = useState<Qr | "loading" | "failed">("loading")
 
 	const load = useCallback(() => {
 		setQr("loading")
-		getJoinQr().then(setQr, () => setQr("failed"))
+		getJoinQr().then(
+			(next) => {
+				if (live.current) setQr(next)
+			},
+			() => {
+				if (live.current) setQr("failed")
+			},
+		)
 	}, [])
 
 	useEffect(() => {
 		const element = dialog.current
-		if (!open || !element) return
+		if (!element) return
+		live.current = true
 		element.showModal()
 		load()
 		function backdrop(event: MouseEvent) {
 			if (event.target === element) element?.close()
 		}
 		element.addEventListener("click", backdrop)
-		return () => element.removeEventListener("click", backdrop)
-	}, [open, load])
+		return () => {
+			live.current = false
+			element.removeEventListener("click", backdrop)
+		}
+	}, [load])
 
 	useEffect(() => {
 		if (typeof qr === "object") dialog.current?.querySelector("button")?.focus()
 	}, [qr])
-
-	if (!open) return null
 
 	return createPortal(
 		<dialog
