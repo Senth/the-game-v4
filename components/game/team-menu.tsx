@@ -23,16 +23,16 @@ export function TeamMenu({ teamName }: { teamName: string }) {
 			setOpen(false)
 			button.current?.focus()
 		}
-		function outside(event: PointerEvent) {
+		function outside(event: MouseEvent) {
 			if (!root.current?.contains(event.target as Node)) dismiss()
 		}
 		function keydown(event: KeyboardEvent) {
 			if (event.key === "Escape") dismiss()
 		}
-		document.addEventListener("pointerdown", outside)
+		document.addEventListener("click", outside)
 		document.addEventListener("keydown", keydown)
 		return () => {
-			document.removeEventListener("pointerdown", outside)
+			document.removeEventListener("click", outside)
 			document.removeEventListener("keydown", keydown)
 		}
 	}, [open])

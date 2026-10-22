@@ -59,6 +59,25 @@ it("opens with the team name heading and one invite item", () => {
 	expect(html).toMatch(/role="menuitem"[^>]*>Invite a teammate</)
 })
 
+it("closes on an outside click after default focus and returns focus to ⋮", () => {
+	const listeners = new Map<string, (event: Partial<MouseEvent>) => void>()
+	const focus = vi.fn()
+	vi.stubGlobal("document", {
+		addEventListener: (type: string, listener: (event: Partial<MouseEvent>) => void) => listeners.set(type, listener),
+		removeEventListener: vi.fn(),
+	})
+	hooks.dialog = { focus, contains: () => false }
+
+	render(<TeamMenu teamName="Ninjas" />, true)
+	const [setOpen] = hooks.setters
+	hooks.effects[0]?.()
+	expect(listeners.has("pointerdown")).toBe(false)
+
+	listeners.get("click")?.({ target: {} as EventTarget })
+	expect(setOpen).toHaveBeenCalledWith(false)
+	expect(focus).toHaveBeenCalledTimes(2)
+})
+
 it("shows a loading placeholder, then the code with Copy link and Close and no toggle", () => {
 	const loading = render(<InviteDialog onClose={vi.fn()} />)
 	expect(loading).toContain("Invite a teammate")

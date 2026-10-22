@@ -69,7 +69,7 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
 						</button>
 					</>
 				) : qr === "loading" ? (
-					<div className="flex size-56 items-center justify-center rounded-md bg-z1 font-cond text-sm text-muted">
+					<div className="flex size-56 items-center justify-center rounded-md bg-z2 font-cond text-sm text-ink">
 						Loading…
 					</div>
 				) : (
