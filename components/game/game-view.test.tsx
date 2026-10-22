@@ -77,6 +77,23 @@ describe("GameView preview", () => {
 		expect(html).not.toContain("/standings")
 		expect(html).not.toContain("3 behind")
 		expect(html).not.toContain("Ninjas")
+		expect(html).not.toContain("Team menu")
+	})
+
+	it("renders no team menu in the admin team preview", () => {
+		const html = renderToStaticMarkup(
+			<GameView
+				timeLeftMs={60_000}
+				pace={{ band: "pace-2", label: "3 behind" }}
+				rail={rail}
+				strip={[{ kind: "team", rank: 1, id: "team", name: "Ninjas", score: 50, you: true }]}
+				quest={quest}
+				preview="team"
+			/>,
+		)
+		expect(html).toContain("3 behind")
+		expect(html).not.toContain("Team menu")
+		expect(html).not.toContain("Invite a teammate")
 	})
 
 	it("keeps every hint locked without hidden text, progress fill or reveal controls", () => {

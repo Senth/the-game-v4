@@ -11,6 +11,7 @@ import type { AnswerFeedback } from "./answer-dock"
 import { gameTransitions } from "./game-transitions"
 import { GameView } from "./game-view"
 import { LifecycleScreen } from "./lifecycle-screen"
+import { TeamMenu } from "./team-menu"
 import { useGameClock } from "./use-game-clock"
 
 export function GameScreen({
@@ -123,6 +124,7 @@ export function GameScreen({
 	}
 
 	if (game.lifecycleState !== "running") return <LifecycleScreen game={game} now={now} qr={qr} />
+	const teamName = game.strip.flatMap((entry) => (entry.kind === "team" && entry.you ? [entry.name] : []))[0]
 	const pace = paceFromCounts({ start: game.start, end: game.end, solved: game.solved, total: game.total, now })
 	return (
 		<GameView
@@ -132,6 +134,7 @@ export function GameScreen({
 			strip={game.strip}
 			finishers={game.finishers}
 			notices={notices}
+			menu={teamName && <TeamMenu teamName={teamName} />}
 			nextBonus={game.nextBonus}
 			quest={game.quest}
 			answer={answer}

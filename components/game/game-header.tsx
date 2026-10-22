@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import type { PlayerFinisher } from "@/lib/domain/finishers"
 import type { PaceBand, RailArc, StripEntry } from "@/lib/domain/game"
 import type { useFinisherNotices } from "@/lib/events/use-finisher-notices"
@@ -20,6 +21,7 @@ export function GameHeader({
 	finishers,
 	preview = false,
 	notices,
+	menu,
 }: {
 	timeLeftMs: number
 	pace: { band: PaceBand; label: string } | null
@@ -28,6 +30,7 @@ export function GameHeader({
 	finishers?: PlayerFinisher[]
 	preview?: boolean
 	notices?: ReturnType<typeof useFinisherNotices>
+	menu?: ReactNode
 }) {
 	const color = pace ? paceColors[pace.band] : "text-muted"
 	return (
@@ -38,7 +41,10 @@ export function GameHeader({
 						<span className={`text-lg ${color}`}>{formatTimeLeft(timeLeftMs)}</span>{" "}
 						<span className="text-xs text-muted">left</span>
 					</span>
-					{pace && <span className={`text-xs ${color}`}>{pace.label}</span>}
+					<span className="flex items-center">
+						{pace && <span className={`text-xs ${color}`}>{pace.label}</span>}
+						{menu}
+					</span>
 				</div>
 				<ArcRail rail={rail} />
 			</div>

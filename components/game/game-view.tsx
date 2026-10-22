@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import type { PlayerFinisher } from "@/lib/domain/finishers"
 import type { PaceBand, PlayerQuest, RailArc, StripEntry } from "@/lib/domain/game"
 import type { useFinisherNotices } from "@/lib/events/use-finisher-notices"
@@ -21,6 +22,7 @@ type GameViewProps = {
 	| {
 			preview?: false
 			notices?: ReturnType<typeof useFinisherNotices>
+			menu?: ReactNode
 			nextBonus?: { place: number; points: number } | null
 			answer: string
 			onAnswerChange: (answer: string) => void
@@ -47,6 +49,7 @@ export function GameView(props: GameViewProps) {
 				finishers={props.finishers}
 				preview={props.preview === "team"}
 				notices={live?.notices}
+				menu={live?.menu}
 			/>
 			<div aria-live="polite" aria-atomic="true">
 				{live?.notices?.notice && live.notices.notice.points > 0 && (
