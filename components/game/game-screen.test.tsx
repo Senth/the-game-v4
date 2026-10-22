@@ -35,7 +35,7 @@ vi.mock("react", async (importOriginal) => {
 	}
 })
 
-vi.mock("@/app/actions", () => ({ getGame: vi.fn(), submitAnswer: vi.fn(), revealHint: vi.fn() }))
+vi.mock("@/app/actions", () => ({ getGame: vi.fn(), submitAnswer: vi.fn(), revealHint: vi.fn(), getJoinQr: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("@/lib/auth/guards", () => ({ requireTeam: vi.fn() }))
 vi.mock("@/components/team-qr", () => ({ TeamQr: () => <div>Test /join/token</div> }))
@@ -77,6 +77,15 @@ describe("GameScreen", () => {
 		expect(html).not.toContain("secret-hint-backwards-log-h3")
 	})
 
+	it("puts the closed team menu after the pace label while running", () => {
+		const html = renderToStaticMarkup(<GameScreen {...props} />)
+		expect(html).toMatch(
+			/behind<\/span><div[^>]*><button[^>]*aria-label="Team menu"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"/,
+		)
+		expect(html).not.toContain('role="menu"')
+		expect(html).not.toContain("<dialog")
+	})
+
 	it("keeps initial clock/pace markup stable across server and hydration times", () => {
 		vi.useFakeTimers()
 		vi.setSystemTime(now)
@@ -96,6 +105,7 @@ describe("GameScreen", () => {
 		expect(html).toContain("99p")
 		expect(html).toContain("Log out")
 		expect(html).not.toContain("<input")
+		expect(html).not.toContain("Team menu")
 	})
 
 	it("updates completed place after another team's solve through the existing season subscription", async () => {

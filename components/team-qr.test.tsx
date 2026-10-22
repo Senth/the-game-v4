@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { verifyJoinToken } from "@/lib/auth/join"
 import { getTeam } from "@/lib/db/teams"
 import { buildFixture } from "@/scripts/fixture"
-import { TeamQr } from "./team-qr"
-import { storedQrShown, TeamQrControls } from "./team-qr-controls"
+import { TeamQr, teamJoinQr } from "./team-qr"
+import { storedQrShown, TeamQrCode, TeamQrControls } from "./team-qr-controls"
 
 const hooks = vi.hoisted(() => ({
 	states: [] as boolean[],
@@ -76,6 +76,7 @@ describe("TeamQr", () => {
 		const element = await TeamQr({ team })
 		expect(element.type).toBe(TeamQrControls)
 		expect(Object.keys(element.props)).toEqual(["url", "svg"])
+		expect(element.props).toEqual(await teamJoinQr(team))
 		const html = renderToStaticMarkup(element)
 		const svg = decodeURIComponent(/src="data:image\/svg\+xml,([^"]+)"/.exec(html)?.[1] ?? "")
 		expect(svg).toContain('width="224"')
@@ -182,6 +183,14 @@ describe("TeamQrControls", () => {
 		const html = controls().html
 		expect(html).toContain("Could not copy. Try again.")
 		expect(html).not.toContain("Copied")
+	})
+
+	it("renders the code without the show/hide toggle", () => {
+		const html = renderToStaticMarkup(TeamQrCode({ url, svg: "<svg/>" }))
+		expect(html).toContain("QR code to log in to your team")
+		expect(html).toContain("Copy link")
+		expect(html).not.toContain("Hide QR code")
+		expect(html).not.toContain("Show QR code")
 	})
 
 	it("clears the copied timer when unmounted", async () => {

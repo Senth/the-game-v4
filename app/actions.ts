@@ -1,5 +1,6 @@
 "use server"
 
+import { teamJoinQr } from "@/components/team-qr"
 import { requireTeam } from "@/lib/auth/guards"
 import { loadGame, revealHint as revealTeamHint, submitAnswer as submitTeamAnswer } from "@/lib/game/game"
 
@@ -13,4 +14,8 @@ export async function submitAnswer(questId: string, answer: string) {
 
 export async function revealHint(hintId: string) {
 	return revealTeamHint(await requireTeam(), hintId)
+}
+
+export async function getJoinQr() {
+	return teamJoinQr(await requireTeam())
 }
