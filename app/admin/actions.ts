@@ -13,7 +13,9 @@ export type CreateSeasonState = { error?: string }
 
 export async function getPuzzlePreviewAssets(questId: string, assetPath: string, value: unknown) {
 	await requireAdmin()
-	const { rows, cols } = Puzzle.parse(value)
+	const parsed = Puzzle.safeParse(value)
+	if (!parsed.success) return null
+	const { rows, cols } = parsed.data
 	const [{ aspect }, ids] = await Promise.all([
 		getPuzzleTiles(assetPath, rows, cols),
 		pieceIds(questId, assetPath, rows, cols, sessionOptions().password),

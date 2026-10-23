@@ -17,6 +17,15 @@ describe("createSeasonAction", () => {
 		vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
 		await expect(getPuzzlePreviewAssets("quest", "/assets/missing.png", { rows: 99 })).rejects.toThrow("Unauthorized")
 	})
+	it.each([
+		{ rows: 8, cols: 4 },
+		{ rows: 4, cols: 1 },
+		{ rows: 2.5, cols: 4 },
+		{ rows: 4, cols: Number.NaN },
+	])("returns no preview assets for invalid dimensions %j without reading the missing image", async (value) => {
+		await expect(getPuzzlePreviewAssets("quest", "/assets/missing.png", value)).resolves.toBeNull()
+		expect(requireAdmin).toHaveBeenCalledOnce()
+	})
 	it("checks admin access before reading or validating the title", async () => {
 		vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
 		const formData = new FormData()
