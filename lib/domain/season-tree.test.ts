@@ -28,6 +28,7 @@ describe("newQuest", () => {
 			internalTitle: "",
 			content: "",
 			assetPath: null,
+			puzzle: null,
 			answers: [],
 			points: null,
 			adminNotes: "",

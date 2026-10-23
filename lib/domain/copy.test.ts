@@ -11,6 +11,7 @@ const quest: Quest = {
 	internalTitle: "Internal title",
 	content: "Quest content",
 	assetPath: "/assets/shared.png",
+	puzzle: { rows: 3, cols: 4, showFull: true },
 	answers: ["answer"],
 	points: 20,
 	adminNotes: "Admin notes",
@@ -60,6 +61,7 @@ describe("copyQuest", () => {
 			internalTitle: quest.internalTitle,
 			content: quest.content,
 			assetPath: quest.assetPath,
+			puzzle: quest.puzzle,
 			answers: quest.answers,
 			points: quest.points,
 			adminNotes: quest.adminNotes,
@@ -75,6 +77,8 @@ describe("copyQuest", () => {
 		const copiedHint = copied.hints[0]
 		if (!copiedHint) throw new Error("Copy lost hint")
 		copiedHint.text = "Changed hint"
+		if (!copied.puzzle) throw new Error("Copy lost puzzle")
+		copied.puzzle.rows = 7
 		expect(quest).toEqual(original)
 	})
 })
@@ -98,6 +102,7 @@ describe("copyArc", () => {
 					internalTitle: quest.internalTitle,
 					content: quest.content,
 					assetPath: quest.assetPath,
+					puzzle: quest.puzzle,
 					answers: quest.answers,
 					points: quest.points,
 					adminNotes: quest.adminNotes,

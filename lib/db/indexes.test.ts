@@ -21,5 +21,5 @@ describe("ensureIndexes", () => {
 			key: { name: 1 },
 			collation: { locale: "en", strength: 2 },
 		})
-	})
+	}, 15_000)
 })

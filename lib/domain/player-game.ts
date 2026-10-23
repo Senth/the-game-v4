@@ -5,6 +5,7 @@ import {
 	lifecycleState,
 	type PaceBand,
 	type PlayerQuest,
+	type PuzzleAssets,
 	paceFromCounts,
 	paceLabel,
 	playerView,
@@ -105,6 +106,7 @@ export function playerGame(
 	team: Pick<Team, "_id" | "questOrder" | "questIndex" | "score" | "completed" | "progress">,
 	teams: Pick<Team, "_id" | "name" | "score" | "progress">[],
 	now: Date,
+	puzzleAssets?: PuzzleAssets,
 ): PlayerGame {
 	const state = lifecycleState(season ?? null, team, now)
 	if (state === "waiting" || !season?.start) return { lifecycleState: "waiting" }
@@ -128,7 +130,7 @@ export function playerGame(
 		teamId: team._id,
 		finishers,
 		nextBonus: nextOpenBonus(season),
-		quest: current ? playerView(current.quest, current.progress) : null,
+		quest: current ? playerView(current.quest, current.progress, puzzleAssets) : null,
 		score: team.score,
 		...counts,
 		start: season.start,

@@ -1,5 +1,5 @@
 import { playableArcs } from "./playable-quests"
-import type { Quest, Season, Team, TeamQuestProgress } from "./schemas"
+import type { Quest, Season, Spot, Team, TeamQuestProgress } from "./schemas"
 import { hintPenalty } from "./scoring"
 
 export const maxAnswerLength = 200
@@ -148,13 +148,44 @@ export type PlayerHint =
 	| { id: string; position: number; points: number; text: string; revealed: true }
 	| { id: string; position: number; points: number; revealed: false }
 
-export type PlayerQuest = Pick<Quest, "id" | "displayTitle" | "content" | "assetPath" | "points"> & {
+export type PuzzleAssets = { ids: string[]; aspect: number; fullUrl: string }
+
+export type PlayerPuzzle = {
+	rows: number
+	cols: number
+	aspect: number
+	pieces: { id: string; spot: Spot }[]
+	fullUrl: string | null
+}
+
+export type PlayerQuest = Pick<Quest, "id" | "displayTitle" | "content" | "points"> & {
+	assetPath?: string | null
+	puzzle?: PlayerPuzzle | null
 	worth: number
 	hints: PlayerHint[]
 }
 
-export function playerView(quest: Quest, progress?: TeamQuestProgress): PlayerQuest {
+export function playerView(quest: Quest, progress?: TeamQuestProgress, assets?: PuzzleAssets): PlayerQuest {
 	const revealed = progress?.hintsRevealed ?? []
+	const puzzleState = progress?.puzzle
+	let puzzle: PlayerPuzzle | null = null
+	if (quest.puzzle && assets && puzzleState) {
+		if (
+			puzzleState.spots.length !== quest.puzzle.rows * quest.puzzle.cols ||
+			assets.ids.length !== puzzleState.spots.length
+		) {
+			throw new Error("Puzzle piece metadata does not match board")
+		}
+		puzzle = {
+			rows: quest.puzzle.rows,
+			cols: quest.puzzle.cols,
+			aspect: assets.aspect,
+			pieces: puzzleState.spots
+				.map((spot, index) => ({ id: assets.ids[index] as string, spot: { ...spot } }))
+				.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+			fullUrl: quest.puzzle.showFull ? assets.fullUrl : null,
+		}
+	}
 	const snapshots = new Map(revealed.map((snapshot) => [snapshot.hintId, snapshot]))
 	const currentIds = new Set(quest.hints.map((hint) => hint.id))
 	const shown = [
@@ -165,7 +196,7 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress): PlayerQu
 		id: quest.id,
 		displayTitle: quest.displayTitle,
 		content: quest.content,
-		assetPath: quest.assetPath,
+		...(quest.puzzle ? { puzzle } : { assetPath: quest.assetPath }),
 		points: quest.points,
 		worth: scoreForSolve(quest, { hintsRevealed: revealed }),
 		hints: shown.map((hint, index) =>
