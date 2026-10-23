@@ -23,6 +23,7 @@ import {
 	maxAnswerLength,
 	scoreForSolve,
 } from "@/lib/domain/game"
+import { evaluateFix, type Fix } from "@/lib/domain/location"
 import {
 	type PlayerGame,
 	type PlayerStandings,
@@ -34,6 +35,7 @@ import {
 import { dropPiece, isSolved, pieceIds, randomSpread } from "@/lib/domain/puzzle"
 import { type Season, Spot, type Team } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
+import { recordFix } from "./location-fixes"
 
 export type SubmitResult =
 	| { ok: false; reason: "invalid" | "not-running" | "stale" }
@@ -223,6 +225,58 @@ export async function loadBoard(now = new Date()): Promise<PublicBoard> {
 
 function publishTeamChange(teamId: string, seasonId: string) {
 	for (const channel of [teamChannel(teamId), seasonChannel(seasonId), boardChannel]) publish(channel)
+}
+
+export type PositionResult =
+	| { status: "outside" | "rough" | "stale" | "stop" }
+	| { status: "solved"; pointsEarned: number }
+
+export async function reportPosition(
+	team: Team,
+	phoneId: string,
+	questId: string,
+	fix: Fix,
+	now = new Date(),
+): Promise<PositionResult> {
+	for (let attempt = 0; attempt <= solveRetries; attempt++) {
+		const [season, current] = await Promise.all([getSeason(team.seasonId), getTeam(team._id)])
+		if (!season || !current || current.seasonId !== team.seasonId || lifecycleState(season, current, now) !== "running")
+			return { status: "stop" }
+		const found = currentQuest(season, current)
+		if (found?.quest.id !== questId || !found.quest.location) return { status: "stop" }
+		const status = evaluateFix(found.quest.location, fix, now.getTime())
+		if (status === "rough" || status === "stale") return { status }
+		recordFix(current._id, phoneId, fix, now.getTime())
+		if (status === "outside") return { status }
+		const { questIndex, questOrder } = current
+		const hintsRevealed = found.progress?.hintsRevealed ?? []
+		const pointsEarned = scoreForSolve(found.quest, { hintsRevealed })
+		const expected = {
+			questIndex,
+			questId,
+			orderLength: questOrder.length,
+			hintCount: hintsRevealed.length,
+			location: found.quest.location,
+		}
+		if (await solveCurrentQuest(current._id, expected, now, pointsEarned)) {
+			if (questIndex + 1 === questOrder.length) await claimFinish(season._id, current._id, now)
+			publishTeamChange(current._id, season._id)
+			return { status: "solved", pointsEarned }
+		}
+		const fresh = await getTeam(team._id)
+		if (!fresh || fresh.questOrder[fresh.questIndex] !== questId) return { status: "stop" }
+	}
+	return { status: "stop" }
+}
+
+export async function getSolvedLocation(team: Team, questId: string): Promise<{ pointsEarned: number } | null> {
+	const current = await getTeam(team._id)
+	if (!current || current.seasonId !== team.seasonId) return null
+	const progress = current.progress.find((entry) => entry.questId === questId && entry.solvedAt)
+	if (!progress) return null
+	const season = await getSeason(current.seasonId)
+	if (!season || !findQuest(season, questId)?.location) return null
+	return { pointsEarned: progress.pointsEarned }
 }
 
 export async function submitAnswer(

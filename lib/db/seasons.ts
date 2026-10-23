@@ -60,6 +60,7 @@ export class FinisherBonusClaimedError extends Error {
 }
 
 export class PuzzleEditError extends Error {}
+export class LocationEditError extends Error {}
 
 async function checkPuzzleLock(season: Season, questId: string): Promise<void> {
 	if (puzzleLocked(season, await listSeasonTeams(season._id), questId)) {
@@ -630,18 +631,41 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 		}
 		const { path, schema, filter, arrayFilters } = locate(target)
 		const parsed = schema.parse(value)
-		if ("questId" in target && !("hintId" in target) && target.field === "puzzle") {
+		if ("questId" in target && !("hintId" in target) && (target.field === "puzzle" || target.field === "location")) {
 			const season = await getSeason(seasonId)
 			const quest = season?.arcs
 				.find((arc) => arc.id === target.arcId)
 				?.quests.find((quest) => quest.id === target.questId)
 			if (season && quest) {
-				const next = parsed as Quest["puzzle"]
-				if (!!quest.puzzle !== !!next || quest.puzzle?.rows !== next?.rows || quest.puzzle?.cols !== next?.cols) {
-					await checkPuzzleLock(season, quest.id)
+				if (target.field === "location") {
+					const next = parsed as Quest["location"]
+					if (next && quest.puzzle) throw new LocationEditError("Turn off puzzle mode to add a place.")
+					const before = quest.location?.places[0]
+					const after = next?.places[0]
+					if (
+						!!quest.location !== !!next ||
+						before?.lat !== after?.lat ||
+						before?.lng !== after?.lng ||
+						before?.radius !== after?.radius
+					) {
+						if (
+							await (await collections()).teams.countDocuments(
+								{ seasonId, progress: { $elemMatch: { questId: quest.id, solvedAt: { $exists: true } } } },
+								{ limit: 1 },
+							)
+						) {
+							throw new LocationEditError("Locked: a team has found this place.")
+						}
+					}
+				} else {
+					const next = parsed as Quest["puzzle"]
+					if (next && quest.location) throw new PuzzleEditError("Puzzle mode is off while this quest has a place.")
+					if (!!quest.puzzle !== !!next || quest.puzzle?.rows !== next?.rows || quest.puzzle?.cols !== next?.cols) {
+						await checkPuzzleLock(season, quest.id)
+					}
+					if (next && (!quest.assetPath || assetKind(quest.assetPath) !== "image"))
+						throw new PuzzleEditError("Puzzle mode requires an image.")
 				}
-				if (next && (!quest.assetPath || assetKind(quest.assetPath) !== "image"))
-					throw new PuzzleEditError("Puzzle mode requires an image.")
 			}
 		}
 		if (target.field === "end") {
@@ -659,7 +683,7 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 		)
 		if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
 	}
-	if ("questId" in target && !("hintId" in target) && target.field === "puzzle") {
+	if ("questId" in target && !("hintId" in target) && (target.field === "puzzle" || target.field === "location")) {
 		return withSeasonStructure(seasonId, async () => {
 			await finishSeasonStructure(seasonId)
 			await write()
