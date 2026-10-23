@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { type ReactNode, useCallback, useEffect, useState, useTransition } from "react"
-import { dropPuzzlePiece, getGame, getSolvedPuzzle, revealHint, submitAnswer } from "@/app/actions"
+import { dropPuzzlePiece, getGame, getSolvedLocation, getSolvedPuzzle, revealHint, submitAnswer } from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import type { Spot } from "@/lib/domain/schemas"
@@ -14,6 +14,7 @@ import { GameView } from "./game-view"
 import { LifecycleScreen } from "./lifecycle-screen"
 import { TeamMenu } from "./team-menu"
 import { useGameClock } from "./use-game-clock"
+import { useLocationReporter } from "./use-location-reporter"
 
 export function GameScreen({
 	initial,
@@ -39,7 +40,7 @@ export function GameScreen({
 	const [previous, setPrevious] = useState(initial)
 	const [completion, setCompletion] = useState<{
 		game: Extract<PlayerGame, { lifecycleState: "running" }>
-		solved?: { ids: string[]; pointsEarned: number }
+		solved?: { ids?: string[]; pointsEarned: number }
 	} | null>(null)
 	const now = useGameClock(game, initialNow, getGame, setGame)
 	const [answer, setAnswer] = useState("")
@@ -51,6 +52,12 @@ export function GameScreen({
 		game.lifecycleState === "running" ? game.start.toISOString() : "",
 		"teamId" in game ? game.teamId : undefined,
 	)
+	const location = useLocationReporter(
+		!completion && game.lifecycleState === "running" && game.quest?.location ? game.quest.id : null,
+		() => {
+			void getGame().then(setGame, () => {})
+		},
+	)
 
 	if (previous !== game) {
 		const changes = gameTransitions(previous, game)
@@ -58,7 +65,7 @@ export function GameScreen({
 		if (changes.questChanged) {
 			if (
 				previous.lifecycleState === "running" &&
-				previous.quest?.puzzle &&
+				(previous.quest?.puzzle || previous.quest?.location) &&
 				(game.lifecycleState === "running" || game.lifecycleState === "completed")
 			) {
 				setCompletion({ game: previous })
@@ -78,7 +85,8 @@ export function GameScreen({
 		if (!completingGame?.quest) return
 		let cancelled = false
 		let timer: ReturnType<typeof setTimeout> | undefined
-		getSolvedPuzzle(completingGame.quest.id).then(
+		const solvedQuest = completingGame.quest.location ? getSolvedLocation : getSolvedPuzzle
+		solvedQuest(completingGame.quest.id).then(
 			(solved) => {
 				if (cancelled) return
 				if (!solved) {
@@ -169,7 +177,7 @@ export function GameScreen({
 	if (shown.lifecycleState !== "running") return <LifecycleScreen game={shown} now={now} qr={qr} />
 	const quest = shown.quest
 	const solvedQuest =
-		completion?.solved && quest?.puzzle
+		completion?.solved?.ids && quest?.puzzle
 			? {
 					...quest,
 					puzzle: { ...quest.puzzle, pieces: completion.solved.ids.map((id, cell) => ({ id, spot: { cell } })) },
@@ -188,7 +196,10 @@ export function GameScreen({
 			menu={teamName && <TeamMenu teamName={teamName} />}
 			nextBonus={shown.nextBonus}
 			quest={solvedQuest}
-			puzzleComplete={completion?.solved?.pointsEarned}
+			puzzleComplete={quest?.puzzle ? completion?.solved?.pointsEarned : undefined}
+			locationComplete={quest?.location ? completion?.solved?.pointsEarned : undefined}
+			locationStatus={location}
+			onShareLocation={location.share}
 			onPuzzleDrop={completion ? undefined : drop}
 			answer={answer}
 			onAnswerChange={setAnswer}

@@ -24,6 +24,23 @@ const quest: PlayerQuest = {
 const rail: RailArc[] = [{ arcId: "arc-one", segments: [{ questId: "quest-one", state: "current" }] }]
 
 describe("GameView preview", () => {
+	it.each([true, "team"] as const)("keeps location preview=%s Off and hides codes without answers", (preview) => {
+		for (const hasAnswers of [true, false]) {
+			const html = renderToStaticMarkup(
+				<GameView
+					timeLeftMs={0}
+					pace={null}
+					rail={rail}
+					preview={preview}
+					quest={{ ...quest, location: { guidance: "none" }, hasAnswers }}
+				/>,
+			)
+			expect(html).toContain("Location off")
+			expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Share location<\/button>/)
+			expect(html.includes("<input")).toBe(hasAnswers)
+			if (hasAnswers) expect(html).toContain('placeholder="Code from the sign"')
+		}
+	})
 	it.each([true, false])("shows the puzzle answer dock only with answers=%s", (hasAnswers) => {
 		const html = renderToStaticMarkup(
 			<GameView
