@@ -70,19 +70,21 @@ Commit a landscape PNG under 300 KB in `scripts/fixture/`, such as a drawn keepe
 Seed copies it to `ASSETS_DIR`.
 Mock photos are placeholders, not fixture content.
 Rävarna is already on it, with eight pieces in cells, including two in wrong cells; the remaining pieces are loose.
-Standings, counts and every other team stay unchanged.
-Fixture tests validate puzzle configuration and progress against the zod schemas.
+Old Town ends with "Next stop", a 20-point location quest at Svedala station, with a 40 m radius, one
+5-point hint and no answer or file.
+Every team has it unsolved, so quest orders total 13; scores, ranks and solved counts stay unchanged.
+Fixture tests validate puzzle and location configuration plus progress against the zod schemas.
 
 | Arc | Quests | Authored order |
 | --- | --- | --- |
 | Lighthouse | 4 | Backwards log; Fog horn morse; Keeper's ledger; Lamp room |
-| Old Town | 5 | Church bells; Cobblestones; Baker's riddle; Clock tower; Harbour map |
+| Old Town | 6 | Church bells; Cobblestones; Baker's riddle; Clock tower; Harbour map; Next stop |
 | Finale | 3 | Gather the pieces; The vault; Last word |
 
 Lighthouse and Old Town shuffle quests; Finale is ordered. Team quest orders differ from authored order.
 The names and representative standings come from S1:
 
-| Rank | Team | Solved out of 12 | Score |
+| Rank | Team | Solved out of 13 | Score |
 | --- | --- | --- | --- |
 | 1 | Rävarna | 9 | 120 |
 | 2 | Team Kaos | 8 | 105 |
@@ -95,8 +97,9 @@ The names and representative standings come from S1:
 | 9 | Sista Laget | 4 | 41 |
 | 10 | Lösenord123 | 2 | 20 |
 
-Ninjas is currently on Backwards log, with display title "The keeper's last log" and answers
-`["lighthouse", "fyren"]`. Give it content, an asset and hints at 5, 10 and 20 points, with the first revealed.
+Ninjas is currently on Backwards log, with Next stop next and three behind pace. Backwards log
+has display title "The keeper's last log" and answers `["lighthouse", "fyren"]`. Give it content,
+an asset and hints at 5, 10 and 20 points, with the first revealed.
 Retain revealed hints on solved quests too, so M1 completion/revealer chips and M4 history have real records.
 Lagom has a removed, skipped quest with one 5-point hint snapshot and no earned points.
 Its solved Backwards log has a deleted-hint snapshot, already charged against that quest's 15 earned points.

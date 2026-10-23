@@ -157,7 +157,7 @@ describe("BoardScreen", () => {
 		expect(html).toContain("text-5xl")
 		expect(html).toContain("h-4")
 		expect(html).toContain("64p")
-		expect(html).toContain("5/12")
+		expect(html).toContain("5/13")
 		for (const forbidden of ["bg-accent/15", "aria-current", "<button", "<a ", "behind", "ahead"])
 			expect(html).not.toContain(forbidden)
 		expect(html).not.toMatch(/\btext-(xs|sm|base|lg|xl|2xl)\b/)

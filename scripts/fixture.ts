@@ -142,6 +142,21 @@ const arcs: Arc[] = [
 					["Ships drop it in the harbour.", 8],
 				],
 			),
+			quest(
+				"svedala-station",
+				"Svedala station",
+				20,
+				"Trains to Malmö stop here twice an hour. Stand where the tickets are sold and the quest is yours.",
+				[],
+				[["Look for the yellow ticket machine.", 5]],
+				{
+					displayTitle: "Next stop",
+					location: {
+						guidance: "none",
+						places: [{ id: "svedala-station-place", lat: 55.50682, lng: 13.23289, radius: 40 }],
+					},
+				},
+			),
 		],
 	},
 	{
@@ -377,6 +392,7 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 		title: "Cipher Night 2026",
 		lengthMinutes: 120,
 		defaultQuestPoints: null,
+		placeRadius: 40,
 		start: new Date(start),
 		end: new Date(start + 120 * minute),
 		shuffleArcs: true,
@@ -387,6 +403,7 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 
 	const teams = teamSpecs.map(({ _id, name, order, solved, reveals }): FixtureTeam => {
 		const questOrder = [...order, ...finale]
+		questOrder.splice(solved + 1, 0, "svedala-station")
 		const step = (now.getTime() - start) / (solved + 1)
 		const progress = questOrder.slice(0, solved + 1).map((questId, index): TeamQuestProgress => {
 			const { hints, points } = quests.get(questId) as Quest

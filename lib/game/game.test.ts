@@ -164,7 +164,7 @@ describe("loadStandings", () => {
 			throw new Error(standings.lifecycleState)
 		expect(standings.rows).toHaveLength(10)
 		expect(standings.rows.map((row) => row.id).toSorted()).toEqual(standingsTeams.map((team) => team._id).toSorted())
-		expect(standings.you).toMatchObject({ name: ninjas.name, score: ninjas.score, solved: 5, total: 12 })
+		expect(standings.you).toMatchObject({ name: ninjas.name, score: ninjas.score, solved: 5, total: 13 })
 		const currents = standings.rows
 			.flatMap((row) => row.rail.flatMap((arc) => arc.segments))
 			.filter((segment) => segment.state === "current")
@@ -249,7 +249,7 @@ describe("loader snapshots", () => {
 			const game = await loadGame(authenticated, at)
 			expect(game).toMatchObject({ lifecycleState: state, score: team.score + 15 })
 			if (game.lifecycleState === "running") {
-				expect(game).toMatchObject({ solved: 6, total: 12, quest: { id: next } })
+				expect(game).toMatchObject({ solved: 6, total: 13, quest: { id: next } })
 			} else {
 				expect(game).toMatchObject({ rank: 6 })
 			}
@@ -620,8 +620,8 @@ describe("lazy quest orders", () => {
 		expect(vi.mocked(fillQuestOrders)).not.toHaveBeenCalled()
 		const game = await loadGame(registered.team, now)
 		const stored = await getTeam(registered.team._id)
-		expect(stored?.questOrder).toHaveLength(12)
-		expect(game).toMatchObject({ lifecycleState: "running", total: 12, quest: { id: stored?.questOrder[0] } })
+		expect(stored?.questOrder).toHaveLength(13)
+		expect(game).toMatchObject({ lifecycleState: "running", total: 13, quest: { id: stored?.questOrder[0] } })
 		expect(JSON.stringify(game)).not.toContain("secret-")
 	})
 
@@ -634,13 +634,13 @@ describe("lazy quest orders", () => {
 		const second = await load(team, now)
 		unsubscribe()
 		const stored = await getTeam(team._id)
-		expect(stored?.questOrder).toHaveLength(12)
+		expect(stored?.questOrder).toHaveLength(13)
 		expect(first).toMatchObject(
 			name === "loadGame"
-				? { total: 12, quest: { id: stored?.questOrder[0] } }
+				? { total: 13, quest: { id: stored?.questOrder[0] } }
 				: name === "loadStandings"
-					? { you: { total: 12 }, rows: [{ total: 12 }] }
-					: { rows: [{ total: 12 }] },
+					? { you: { total: 13 }, rows: [{ total: 13 }] }
+					: { rows: [{ total: 13 }] },
 		)
 		expect(second).toEqual(first)
 		expect(firstReads).toBe(2)
@@ -656,7 +656,7 @@ describe("lazy quest orders", () => {
 		const games = await Promise.all(Array.from({ length: 10 }, () => loadGame(team, now)))
 		unsubscribe()
 		const stored = await getTeam(team._id)
-		expect(stored?.questOrder).toHaveLength(12)
+		expect(stored?.questOrder).toHaveLength(13)
 		for (const game of games) {
 			expect(game).toEqual(games[0])
 			expect(game).toMatchObject({ lifecycleState: "running", quest: { id: stored?.questOrder[0] } })
