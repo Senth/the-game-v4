@@ -394,12 +394,6 @@ No milestones or area labels. GitHub blocked-by relations carry ordering. This p
 ## Backlog decisions deferred to their implementation
 
 - I-35 researches LiveKit versus peer-to-peer WebRTC for 2-6 players on phones. No voice implementation.
-- [I-71 researched location quests](https://github.com/Senth/the-game-v4/issues/71#issuecomment-6351985612), deferred to
-  [I-81](https://github.com/Senth/the-game-v4/issues/81), [I-82](https://github.com/Senth/the-game-v4/issues/82),
-  [I-83](https://github.com/Senth/the-game-v4/issues/83), [I-84](https://github.com/Senth/the-game-v4/issues/84),
-  [I-85](https://github.com/Senth/the-game-v4/issues/85), [I-86](https://github.com/Senth/the-game-v4/issues/86)
-  and [I-87](https://github.com/Senth/the-game-v4/issues/87).
-  Coordinates stay server-side except on map quests; arrival auto-solves through the normal solve path.
 
 ## Do not reintroduce v3 bugs
 
