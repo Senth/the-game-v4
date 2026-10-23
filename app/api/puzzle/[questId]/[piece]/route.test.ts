@@ -170,6 +170,23 @@ describe("GET /api/puzzle/[questId]/[piece]", () => {
 		expect((await get("full", "hidden")).status).toBe(200)
 	})
 
+	it("serves unsaved preview dimensions only to admins, never through team query overrides", async () => {
+		const previewIds = await pieceIds("puzzle", assetPath, 3, 2, sessionOptions().password)
+		const query = new URLSearchParams({ assetPath, rows: "3", cols: "2" })
+		const piece = previewIds[0]
+		if (!piece) throw new Error("Missing preview piece")
+		const request = () =>
+			GET(new Request(`http://localhost/api/puzzle/puzzle/${previewIds[0]}?${query}`), {
+				params: Promise.resolve({ questId: "puzzle", piece }),
+			})
+		await login({ kind: "admin", id: adminId })
+		const response = await request()
+		expect(response.status).toBe(200)
+		expect(await sharp(Buffer.from(await response.arrayBuffer())).metadata()).toMatchObject({ width: 60, height: 26 })
+		await login({ kind: "team", id: current._id })
+		expect((await request()).status).toBe(404)
+	})
+
 	it.each(["0", "unknown-piece", "../full", "..%2Ffull", "full.webp", "/assets/original.png"])(
 		"rejects unknown or traversal piece %s",
 		async (piece) => {

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import type { PlayerFinisher } from "@/lib/domain/finishers"
 import type { PaceBand, PlayerQuest, RailArc, StripEntry } from "@/lib/domain/game"
+import type { Spot } from "@/lib/domain/schemas"
 import type { useFinisherNotices } from "@/lib/events/use-finisher-notices"
 import { AnswerDock, type AnswerFeedback } from "./answer-dock"
 import { FinishRibbon } from "./finish-ribbon"
@@ -17,6 +18,7 @@ type GameViewProps = {
 	strip?: StripEntry[]
 	finishers?: PlayerFinisher[]
 	quest: PlayerQuest | null
+	puzzleComplete?: number
 } & (
 	| { preview: true | "team" }
 	| {
@@ -32,12 +34,14 @@ type GameViewProps = {
 			onReveal: (hintId: string) => Promise<void>
 			decrypting: ReadonlySet<string>
 			onDecryptComplete: (hintId: string) => void
+			onPuzzleDrop?: (pieceId: string, target: Spot) => Promise<void>
 	  }
 )
 
 export function GameView(props: GameViewProps) {
 	const live = props.preview ? null : props
 	const { timeLeftMs, pace, rail, strip, quest } = props
+	const showDock = quest && quest.hasAnswers !== false && props.puzzleComplete === undefined
 
 	return (
 		<>
@@ -62,10 +66,17 @@ export function GameView(props: GameViewProps) {
 					/>
 				)}
 			</div>
-			<main className="mx-auto max-w-2xl px-4 pt-5 pb-[calc(var(--spacing)*40+env(safe-area-inset-bottom))]">
+			<main
+				className={`mx-auto max-w-2xl px-4 pt-5 ${showDock ? "pb-[calc(var(--spacing)*40+env(safe-area-inset-bottom))]" : "pb-16"}`}
+			>
 				{quest ? (
 					<>
-						<QuestContent quest={quest} preview={!!props.preview} />
+						<QuestContent
+							quest={quest}
+							preview={!!props.preview}
+							onPuzzleDrop={live?.onPuzzleDrop}
+							puzzleComplete={props.puzzleComplete}
+						/>
 						{live ? (
 							<Intel
 								quest={quest}
@@ -81,7 +92,7 @@ export function GameView(props: GameViewProps) {
 					<p className="text-muted">Waiting for a quest.</p>
 				)}
 			</main>
-			{quest &&
+			{showDock &&
 				(live ? (
 					<AnswerDock
 						answer={live.answer}

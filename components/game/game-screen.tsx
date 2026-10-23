@@ -1,10 +1,11 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { type ReactNode, useCallback, useState, useTransition } from "react"
-import { getGame, revealHint, submitAnswer } from "@/app/actions"
+import { type ReactNode, useCallback, useEffect, useState, useTransition } from "react"
+import { dropPuzzlePiece, getGame, getSolvedPuzzle, revealHint, submitAnswer } from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
 import type { PlayerGame } from "@/lib/domain/player-game"
+import type { Spot } from "@/lib/domain/schemas"
 import { useFinisherNotices } from "@/lib/events/use-finisher-notices"
 import { useLiveState } from "@/lib/events/use-live-state"
 import type { AnswerFeedback } from "./answer-dock"
@@ -36,6 +37,10 @@ export function GameScreen({
 		initial,
 	)
 	const [previous, setPrevious] = useState(initial)
+	const [completion, setCompletion] = useState<{
+		game: Extract<PlayerGame, { lifecycleState: "running" }>
+		ids?: string[]
+	} | null>(null)
 	const now = useGameClock(game, initialNow, getGame, setGame)
 	const [answer, setAnswer] = useState("")
 	const [feedback, setFeedback] = useState<(AnswerFeedback & { questId: string }) | null>(null)
@@ -51,6 +56,13 @@ export function GameScreen({
 		const changes = gameTransitions(previous, game)
 		setPrevious(game)
 		if (changes.questChanged) {
+			if (
+				previous.lifecycleState === "running" &&
+				previous.quest?.puzzle &&
+				(game.lifecycleState === "running" || game.lifecycleState === "completed")
+			) {
+				setCompletion({ game: previous })
+			}
 			setAnswer("")
 			setDecrypting(new Set())
 			if (!changes.solvedQuestId) setFeedback(null)
@@ -61,6 +73,30 @@ export function GameScreen({
 			setFeedback({ id: (feedback?.id ?? 0) + 1, kind: "correct", points: null, questId: changes.solvedQuestId })
 		}
 	}
+	const completingGame = completion?.game
+	useEffect(() => {
+		if (!completingGame?.quest) return
+		let cancelled = false
+		let timer: ReturnType<typeof setTimeout> | undefined
+		getSolvedPuzzle(completingGame.quest.id).then(
+			(ids) => {
+				if (cancelled) return
+				if (!ids) {
+					setCompletion(null)
+					return
+				}
+				setCompletion({ game: completingGame, ids })
+				timer = setTimeout(() => setCompletion(null), 1500)
+			},
+			() => {
+				if (!cancelled) setCompletion(null)
+			},
+		)
+		return () => {
+			cancelled = true
+			clearTimeout(timer)
+		}
+	}, [completingGame])
 
 	const end = game.lifecycleState === "running" ? (game.end?.getTime() ?? null) : null
 
@@ -73,7 +109,7 @@ export function GameScreen({
 	}, [])
 
 	function submit(value: string) {
-		if (pending || game.lifecycleState !== "running" || !game.quest || !value.trim()) return
+		if (completion || pending || game.lifecycleState !== "running" || !game.quest || !value.trim()) return
 		const questId = game.quest.id
 		startTransition(async () => {
 			try {
@@ -122,25 +158,39 @@ export function GameScreen({
 			})
 		})
 	}
+	async function drop(pieceId: string, target: Spot) {
+		if (game.lifecycleState !== "running" || !game.quest) throw new Error("No current puzzle")
+		const result = await dropPuzzlePiece(game.quest.id, pieceId, target)
+		setGame(await getGame())
+		if (result.status === "stale") throw new Error("Puzzle drop rejected")
+	}
 
-	if (game.lifecycleState !== "running") return <LifecycleScreen game={game} now={now} qr={qr} />
-	const teamName = game.strip.flatMap((entry) => (entry.kind === "team" && entry.you ? [entry.name] : []))[0]
-	const pace = paceFromCounts({ start: game.start, end: game.end, solved: game.solved, total: game.total, now })
+	const shown = completingGame ?? game
+	if (shown.lifecycleState !== "running") return <LifecycleScreen game={shown} now={now} qr={qr} />
+	const quest = shown.quest
+	const solvedQuest =
+		completion?.ids && quest?.puzzle
+			? { ...quest, puzzle: { ...quest.puzzle, pieces: completion.ids.map((id, cell) => ({ id, spot: { cell } })) } }
+			: quest
+	const teamName = shown.strip.flatMap((entry) => (entry.kind === "team" && entry.you ? [entry.name] : []))[0]
+	const pace = paceFromCounts({ start: shown.start, end: shown.end, solved: shown.solved, total: shown.total, now })
 	return (
 		<GameView
 			timeLeftMs={end === null ? 0 : Math.max(0, end - now.getTime())}
 			pace={pace && { band: pace.band, label: paceLabel(pace.n) }}
-			rail={game.rail}
-			strip={game.strip}
-			finishers={game.finishers}
+			rail={shown.rail}
+			strip={shown.strip}
+			finishers={shown.finishers}
 			notices={notices}
 			menu={teamName && <TeamMenu teamName={teamName} />}
-			nextBonus={game.nextBonus}
-			quest={game.quest}
+			nextBonus={shown.nextBonus}
+			quest={solvedQuest}
+			puzzleComplete={completion?.ids ? quest?.worth : undefined}
+			onPuzzleDrop={completion ? undefined : drop}
 			answer={answer}
 			onAnswerChange={setAnswer}
 			onSubmit={submit}
-			pending={pending}
+			pending={pending || !!completion}
 			feedback={feedback}
 			onReveal={reveal}
 			decrypting={decrypting}

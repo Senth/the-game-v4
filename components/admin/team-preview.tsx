@@ -4,6 +4,7 @@ import { GameView } from "@/components/game/game-view"
 import { LifecycleScreen } from "@/components/game/lifecycle-screen"
 import { playerGame } from "@/lib/domain/player-game"
 import type { Season, Team } from "@/lib/domain/schemas"
+import { usePuzzlePreviewAssets } from "./use-puzzle-preview-assets"
 import { useSeasonClock } from "./use-season-clock"
 
 export function TeamPreview({
@@ -18,7 +19,9 @@ export function TeamPreview({
 	now: number
 }) {
 	const clock = useSeasonClock(now, season.start, season.end)
-	const game = playerGame(season, team, teams, new Date(clock))
+	const quest = season.arcs.flatMap((arc) => arc.quests).find((quest) => quest.id === team.questOrder[team.questIndex])
+	const assets = usePuzzlePreviewAssets(quest)
+	const game = playerGame(season, team, teams, new Date(clock), assets)
 	const view =
 		game.lifecycleState === "running" ? (
 			<GameView {...game} timeLeftMs={game.end ? Math.max(0, game.end.getTime() - clock) : 0} preview="team" />

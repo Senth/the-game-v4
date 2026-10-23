@@ -148,7 +148,7 @@ export type PlayerHint =
 	| { id: string; position: number; points: number; text: string; revealed: true }
 	| { id: string; position: number; points: number; revealed: false }
 
-export type PuzzleAssets = { ids: string[]; aspect: number; fullUrl: string }
+export type PuzzleAssets = { ids: string[]; aspect: number; fullUrl: string; tileQuery?: string }
 
 export type PlayerPuzzle = {
 	rows: number
@@ -156,11 +156,13 @@ export type PlayerPuzzle = {
 	aspect: number
 	pieces: { id: string; spot: Spot }[]
 	fullUrl: string | null
+	tileQuery?: string
 }
 
 export type PlayerQuest = Pick<Quest, "id" | "displayTitle" | "content" | "points"> & {
 	assetPath?: string | null
 	puzzle?: PlayerPuzzle | null
+	hasAnswers?: boolean
 	worth: number
 	hints: PlayerHint[]
 }
@@ -184,6 +186,7 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress, assets?: 
 				.map((spot, index) => ({ id: assets.ids[index] as string, spot: { ...spot } }))
 				.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
 			fullUrl: quest.puzzle.showFull ? assets.fullUrl : null,
+			...(assets.tileQuery ? { tileQuery: assets.tileQuery } : {}),
 		}
 	}
 	const snapshots = new Map(revealed.map((snapshot) => [snapshot.hintId, snapshot]))
@@ -196,7 +199,7 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress, assets?: 
 		id: quest.id,
 		displayTitle: quest.displayTitle,
 		content: quest.content,
-		...(quest.puzzle ? { puzzle } : { assetPath: quest.assetPath }),
+		...(quest.puzzle ? { puzzle, hasAnswers: quest.answers.length > 0 } : { assetPath: quest.assetPath }),
 		points: quest.points,
 		worth: scoreForSolve(quest, { hintsRevealed: revealed }),
 		hints: shown.map((hint, index) =>
