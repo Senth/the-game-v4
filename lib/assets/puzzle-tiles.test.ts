@@ -37,18 +37,17 @@ describe("private puzzle tiles", () => {
 		const tiles = results[0]
 		if (!tiles) throw new Error("No tiles generated")
 		expect(results.every((result) => result.directory === tiles.directory)).toBe(true)
-		const key = createHash("sha256").update(`${assetPath}:3x7`).digest("hex")
+		const key = createHash("sha256").update(`v2:${assetPath}:3x7`).digest("hex")
 		expect(tiles.directory).toBe(path.join(directory, ".puzzles", key))
 		const full = await sharp(await readFile(path.join(tiles.directory, "full.webp"))).metadata()
-		expect(full).toMatchObject({ width: 1600, height: 900, format: "webp", hasAlpha: false })
+		expect(full).toMatchObject({ width: 1596, height: 900, format: "webp", hasAlpha: false })
 		expect(full.exif).toBeUndefined()
-		expect(tiles.aspect).toBe(1600 / 900)
+		expect(tiles.aspect).toBe(1596 / 900)
 		expect((await readdir(tiles.directory)).filter((file) => file.endsWith(".webp"))).toHaveLength(22)
 		for (let index = 0; index < 21; index++) {
 			const tile = await sharp(await readFile(path.join(tiles.directory, `${index}.webp`))).metadata()
-			const col = index % 7
 			expect(tile).toMatchObject({
-				width: Math.floor(((col + 1) * 1600) / 7) - Math.floor((col * 1600) / 7),
+				width: 228,
 				height: 300,
 				format: "webp",
 				hasAlpha: false,

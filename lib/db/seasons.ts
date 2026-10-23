@@ -588,22 +588,25 @@ export async function setQuestAsset(
 	questId: string,
 	assetPath: string | null,
 ): Promise<string | null> {
-	const target = { arcId, questId, field: "assetPath" } as const
-	const { path, schema, filter, arrayFilters } = locate(target)
-	const parsed = schema.parse(assetPath)
-	const season = await getSeason(seasonId)
-	const quest = season?.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
-	if (season && quest?.puzzle) {
-		await checkPuzzleLock(season, questId)
-		if (assetPath && assetKind(assetPath) !== "image") throw new PuzzleEditError("Puzzle mode requires an image.")
-	}
-	const before = await (await collections()).seasons.findOneAndUpdate(
-		{ ...filter, _id: seasonId },
-		{ $set: { [path]: parsed, ...(assetPath === null ? { [path.replace(/assetPath$/, "puzzle")]: null } : {}) } },
-		{ arrayFilters, returnDocument: "before" },
-	)
-	if (!before) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
-	return before.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)?.assetPath ?? null
+	return withSeasonStructure(seasonId, async () => {
+		await finishSeasonStructure(seasonId)
+		const target = { arcId, questId, field: "assetPath" } as const
+		const { path, schema, filter, arrayFilters } = locate(target)
+		const parsed = schema.parse(assetPath)
+		const season = await getSeason(seasonId)
+		const quest = season?.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
+		if (season && quest?.puzzle) {
+			await checkPuzzleLock(season, questId)
+			if (assetPath && assetKind(assetPath) !== "image") throw new PuzzleEditError("Puzzle mode requires an image.")
+		}
+		const before = await (await collections()).seasons.findOneAndUpdate(
+			{ ...filter, _id: seasonId },
+			{ $set: { [path]: parsed, ...(assetPath === null ? { [path.replace(/assetPath$/, "puzzle")]: null } : {}) } },
+			{ arrayFilters, returnDocument: "before" },
+		)
+		if (!before) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
+		return before.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)?.assetPath ?? null
+	})
 }
 
 export async function isAssetReferenced(assetPath: string): Promise<boolean> {
@@ -621,39 +624,48 @@ export async function isAssetReferenced(assetPath: string): Promise<boolean> {
 }
 
 export async function setSeasonField(seasonId: string, target: SeasonFieldTarget, value: unknown): Promise<void> {
-	if (target.field === "registrationOpen") {
-		throw new Error("Use setRegistrationOpen to change registrationOpen")
-	}
-	const { path, schema, filter, arrayFilters } = locate(target)
-	const parsed = schema.parse(value)
-	if ("questId" in target && !("hintId" in target) && target.field === "puzzle") {
-		const season = await getSeason(seasonId)
-		const quest = season?.arcs
-			.find((arc) => arc.id === target.arcId)
-			?.quests.find((quest) => quest.id === target.questId)
-		if (season && quest) {
-			const next = parsed as Quest["puzzle"]
-			if (!!quest.puzzle !== !!next || quest.puzzle?.rows !== next?.rows || quest.puzzle?.cols !== next?.cols) {
-				await checkPuzzleLock(season, quest.id)
+	const write = async () => {
+		if (target.field === "registrationOpen") {
+			throw new Error("Use setRegistrationOpen to change registrationOpen")
+		}
+		const { path, schema, filter, arrayFilters } = locate(target)
+		const parsed = schema.parse(value)
+		if ("questId" in target && !("hintId" in target) && target.field === "puzzle") {
+			const season = await getSeason(seasonId)
+			const quest = season?.arcs
+				.find((arc) => arc.id === target.arcId)
+				?.quests.find((quest) => quest.id === target.questId)
+			if (season && quest) {
+				const next = parsed as Quest["puzzle"]
+				if (!!quest.puzzle !== !!next || quest.puzzle?.rows !== next?.rows || quest.puzzle?.cols !== next?.cols) {
+					await checkPuzzleLock(season, quest.id)
+				}
+				if (next && (!quest.assetPath || assetKind(quest.assetPath) !== "image"))
+					throw new PuzzleEditError("Puzzle mode requires an image.")
 			}
-			if (next && (!quest.assetPath || assetKind(quest.assetPath) !== "image"))
-				throw new PuzzleEditError("Puzzle mode requires an image.")
 		}
-	}
-	if (target.field === "end") {
-		const seasons = await listSeasons()
-		const season = seasons.find((s) => s._id === seasonId)
-		if (season?.registrationOpen) {
-			const edited = seasons.map((s) => (s === season ? { ...s, end: parsed as Season["end"] } : s))
-			refuseOtherOpen(edited, seasonId, new Date())
+		if (target.field === "end") {
+			const seasons = await listSeasons()
+			const season = seasons.find((s) => s._id === seasonId)
+			if (season?.registrationOpen) {
+				const edited = seasons.map((s) => (s === season ? { ...s, end: parsed as Season["end"] } : s))
+				refuseOtherOpen(edited, seasonId, new Date())
+			}
 		}
+		const result = await (await collections()).seasons.updateOne(
+			{ ...filter, _id: seasonId },
+			{ $set: { [path]: parsed } },
+			{ arrayFilters },
+		)
+		if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
 	}
-	const result = await (await collections()).seasons.updateOne(
-		{ ...filter, _id: seasonId },
-		{ $set: { [path]: parsed } },
-		{ arrayFilters },
-	)
-	if (result.matchedCount === 0) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
+	if ("questId" in target && !("hintId" in target) && target.field === "puzzle") {
+		return withSeasonStructure(seasonId, async () => {
+			await finishSeasonStructure(seasonId)
+			await write()
+		})
+	}
+	await write()
 }
 
 const AnswerPatch = z.discriminatedUnion("op", [

@@ -12,7 +12,7 @@ cache.theGamePuzzleCuts ??= new Map()
 const cuts = cache.theGamePuzzleCuts
 
 function cacheDirectory(assetPath: string, rows: number, cols: number): string {
-	const key = createHash("sha256").update(`${assetPath}:${rows}x${cols}`).digest("hex")
+	const key = createHash("sha256").update(`v2:${assetPath}:${rows}x${cols}`).digest("hex")
 	return path.join(assetsDir(), ".puzzles", key)
 }
 
@@ -42,28 +42,34 @@ async function cutTiles(source: string, directory: string, rows: number, cols: n
 		.raw()
 		.toBuffer({ resolveWithObject: true })
 	const { width, height, channels } = info
+	const tileWidth = Math.max(1, Math.floor(width / cols))
+	const tileHeight = Math.max(1, Math.floor(height / rows))
+	const normalizedWidth = tileWidth * cols
+	const normalizedHeight = tileHeight * rows
+	const normalized = await sharp(data, { raw: { width, height, channels } })
+		.resize(normalizedWidth, normalizedHeight, { fit: "fill" })
+		.raw()
+		.toBuffer()
 	await mkdir(path.dirname(directory), { recursive: true })
 	const temporary = await mkdtemp(`${directory}-`)
 	try {
-		const image = sharp(data, { raw: { width, height, channels } })
+		const image = sharp(normalized, { raw: { width: normalizedWidth, height: normalizedHeight, channels } })
 		await image.clone().webp().toFile(path.join(temporary, "full.webp"))
 		for (let index = 0; index < rows * cols; index++) {
 			const col = index % cols
 			const row = Math.floor(index / cols)
-			const left = Math.floor((col * width) / cols)
-			const top = Math.floor((row * height) / rows)
 			await image
 				.clone()
 				.extract({
-					left,
-					top,
-					width: Math.floor(((col + 1) * width) / cols) - left,
-					height: Math.floor(((row + 1) * height) / rows) - top,
+					left: col * tileWidth,
+					top: row * tileHeight,
+					width: tileWidth,
+					height: tileHeight,
 				})
 				.webp()
 				.toFile(path.join(temporary, `${index}.webp`))
 		}
-		const aspect = width / height
+		const aspect = normalizedWidth / normalizedHeight
 		await writeFile(path.join(temporary, "aspect.json"), JSON.stringify(aspect))
 		await rename(temporary, directory)
 		return { directory, aspect }

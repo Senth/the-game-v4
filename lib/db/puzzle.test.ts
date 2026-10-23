@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import * as actions from "@/app/actions"
 import { saveSeasonField } from "@/app/admin/autosave-actions"
+import { getPuzzleTiles } from "@/lib/assets/puzzle-tiles"
 import { requireAdmin, requireTeam } from "@/lib/auth/guards"
 import { sessionOptions } from "@/lib/auth/session"
 import { pieceIds, puzzleLocked } from "@/lib/domain/puzzle"
@@ -9,8 +10,11 @@ import { newQuest } from "@/lib/domain/season-tree"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
 import { dropPuzzlePiece, getSolvedPuzzle, loadGame, submitAnswer } from "@/lib/game/game"
 import { useTestDb } from "@/test/db"
+import * as database from "./collections"
 import { collections } from "./collections"
-import { createSeason, getSeason, setQuestAsset, setSeasonField } from "./seasons"
+import * as seasons from "./seasons"
+import { createSeason, getSeason, removeQuest, setQuestAsset, setSeasonField } from "./seasons"
+import * as structure from "./structural-writes"
 import * as teams from "./teams"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn(), requireTeam: vi.fn() }))
@@ -65,6 +69,23 @@ async function setState(spots: Spot[]) {
 }
 
 describe("shared puzzle writes", () => {
+	it("initializes from current setup when edits race an unbuilt order's first load", async () => {
+		await teams.setTeamField(team._id, "questOrder", [])
+		const original = seasons.getSeason
+		vi.spyOn(seasons, "getSeason").mockImplementationOnce(async (...args) => {
+			const stale = await original(...args)
+			await setSeasonField("season", target, { ...puzzle, rows: 3 })
+			await setQuestAsset("season", target.arcId, quest.id, "/assets/replaced.png")
+			return stale
+		})
+		const game = await loadGame((await teams.getTeam(team._id)) as Team, now)
+		const currentIds = await pieceIds(quest.id, "/assets/replaced.png", 3, 2, sessionOptions().password)
+		expect(game).toMatchObject({ quest: { puzzle: { rows: 3, cols: 2 } } })
+		if (game.lifecycleState !== "running") throw new Error("Expected running puzzle")
+		expect(game.quest?.puzzle?.pieces.map(({ id }) => id)).toEqual(currentIds.sort())
+		expect((await state())?.spots).toHaveLength(6)
+	})
+
 	it("writes exactly one spread and returns the persisted board to concurrent loads", async () => {
 		const initialize = vi.spyOn(teams, "ensurePuzzleState")
 		const games = await Promise.all(Array.from({ length: 8 }, () => loadGame(team, now)))
@@ -103,15 +124,12 @@ describe("shared puzzle writes", () => {
 		const next = { ...quest, id: "next", assetPath: "/assets/next.png", puzzle: { ...puzzle, rows: 3 } }
 		await setSeasonField("season", { arcId: target.arcId, field: "quests" }, [quest, next])
 		await teams.setTeamField(team._id, "questOrder", [quest.id, next.id])
-		const original = teams.ensurePuzzleState
-		const initialize = vi.spyOn(teams, "ensurePuzzleState")
-		initialize.mockImplementationOnce(async (...args) => {
-			const written = await original(...args)
+		vi.mocked(getPuzzleTiles).mockImplementationOnce(async () => {
 			expect(await submitAnswer((await teams.getTeam(team._id)) as Team, quest.id, "lamp", now)).toMatchObject({
 				ok: true,
 				correct: true,
 			})
-			return written
+			return { directory: "", aspect: 1.5 }
 		})
 		expect(await loadGame(team, now)).toMatchObject({
 			quest: { id: next.id, puzzle: { rows: 3, pieces: expect.any(Array) } },
@@ -159,7 +177,7 @@ describe("shared puzzle writes", () => {
 		expect((await getSeason("season"))?.finishers).toEqual([{ teamId: team._id, place: 1, points: 20, at: now }])
 		expect(events.filter((channel) => channel === boardChannel)).toHaveLength(1)
 		expect(events.filter((channel) => channel === seasonChannel("season"))).toHaveLength(1)
-		expect(await getSolvedPuzzle(team, quest.id)).toEqual(ids)
+		expect(await getSolvedPuzzle(team, quest.id)).toEqual({ ids, pointsEarned: 43 })
 	})
 
 	it("recalculates penalties when a hint is revealed between the final drop and solve", async () => {
@@ -184,6 +202,8 @@ describe("shared puzzle writes", () => {
 		})
 		expect(solve).toHaveBeenCalledTimes(2)
 		expect((await teams.getTeam(team._id))?.score).toBe(62)
+		await setSeasonField("season", { ...target, field: "points" }, 100)
+		expect(await actions.getSolvedPuzzle(quest.id)).toEqual({ ids, pointsEarned: 42 })
 	})
 
 	it("never solves a board moved out of completion between the final drop and solve", async () => {
@@ -212,7 +232,7 @@ describe("shared puzzle writes", () => {
 		await loadGame(team, now)
 		expect(await getSolvedPuzzle(team, quest.id)).toBeNull()
 		expect(await submitAnswer(team, quest.id, "lamp", now)).toMatchObject({ ok: true, correct: true, pointsEarned: 50 })
-		expect(await actions.getSolvedPuzzle(quest.id)).toEqual(ids)
+		expect(await actions.getSolvedPuzzle(quest.id)).toEqual({ ids, pointsEarned: 50 })
 		const other = await teams.createTeam({ ...team, _id: "other", name: "Other", questOrder: ["elsewhere"] })
 		expect(await getSolvedPuzzle(other, quest.id)).toBeNull()
 		expect(await dropPuzzlePiece(other, quest.id, ids[0] as string, { cell: 0 }, now)).toEqual({ status: "stale" })
@@ -248,6 +268,81 @@ describe("shared puzzle writes", () => {
 })
 
 describe("puzzle authoring locks", () => {
+	describe.each(["initialization", "advancement", "skip"])("during %s", (reach) => {
+		it.each(["dimensions", "mode", "replace", "remove"])(
+			"serializes %s validation behind an in-flight reach",
+			async (edit) => {
+				if (reach === "initialization") {
+					await teams.setTeamField(team._id, "questOrder", [])
+				} else {
+					await setSeasonField("season", { arcId: target.arcId, field: "quests" }, [
+						{ ...newQuest(10), id: "first" },
+						quest,
+					])
+					await teams.setTeamField(team._id, "questOrder", ["first", quest.id])
+				}
+				const db = await collections()
+				vi.spyOn(database, "collections").mockResolvedValue(db)
+				const started = Promise.withResolvers<void>()
+				const resume = Promise.withResolvers<void>()
+				if (reach === "initialization") {
+					const originalWrite = db.teams.bulkWrite.bind(db.teams)
+					vi.spyOn(db.teams, "bulkWrite").mockImplementationOnce(async (...args) => {
+						started.resolve()
+						await resume.promise
+						return originalWrite(...args)
+					})
+				} else {
+					const originalWrite = db.teams.updateOne.bind(db.teams)
+					vi.spyOn(db.teams, "updateOne").mockImplementation(async (...args) => {
+						if ("$inc" in args[1] || ("$set" in args[1] && args[1].$set?.questOrder)) {
+							started.resolve()
+							await resume.promise
+						}
+						return originalWrite(...args)
+					})
+				}
+				const season = await getSeason("season")
+				if (!season) throw new Error("Missing puzzle season")
+				const initialization =
+					reach === "initialization"
+						? teams.fillQuestOrders(season, [(await teams.getTeam(team._id)) as Team])
+						: reach === "skip"
+							? removeQuest("season", target.arcId, "first", now)
+							: teams.solveCurrentQuest(
+									team._id,
+									{ questId: "first", questIndex: 0, orderLength: 2, hintCount: 0 },
+									now,
+									10,
+								)
+				await started.promise
+				const queued = Promise.withResolvers<string>()
+				const originalLock = structure.withSeasonStructure
+				vi.spyOn(structure, "withSeasonStructure").mockImplementation((...args) => {
+					queued.resolve("queued")
+					return originalLock(...args)
+				})
+				const mutation =
+					edit === "replace" || edit === "remove"
+						? setQuestAsset("season", target.arcId, quest.id, edit === "remove" ? null : "/assets/new.png")
+						: setSeasonField("season", target, edit === "mode" ? null : { ...puzzle, rows: 3 })
+				const outcome = mutation.then(
+					() => "edited",
+					() => "rejected",
+				)
+				try {
+					expect(await Promise.race([queued.promise, outcome])).toBe("queued")
+				} finally {
+					resume.resolve()
+					await initialization
+					await outcome
+				}
+				await expect(mutation).rejects.toThrow("Locked: a team has reached this puzzle.")
+				expect((await getSeason("season"))?.arcs[0]?.quests.find((entry) => entry.id === quest.id)).toEqual(quest)
+			},
+		)
+	})
+
 	it("counts each reached team once, rejects mode and dimension edits, allows showFull", async () => {
 		await loadGame(team, now)
 		expect(puzzleLocked({ _id: "season" }, await teams.listTeams("season"), quest.id)).toBe(1)

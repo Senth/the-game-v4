@@ -3,6 +3,7 @@ import path from "node:path"
 import { sealData } from "iron-session"
 import sharp from "sharp"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { getGame } from "@/app/actions"
 import { saveAsset } from "@/lib/assets/files"
 import { type SessionData, sessionOptions } from "@/lib/auth/session"
 import { createAdmin } from "@/lib/db/admins"
@@ -117,6 +118,75 @@ function get(piece = ids[0] ?? "", questId = "puzzle") {
 }
 
 describe("GET /api/puzzle/[questId]/[piece]", () => {
+	it.each([
+		[121, 81, 2, 2],
+		[1, 1, 7, 7],
+	])("serves equal nonzero tiles for %ix%i images on a %ix%i grid", async (width, height, rows, cols) => {
+		const image = await saveAsset(
+			await sharp({ create: { width, height, channels: 3, background: "blue" } })
+				.png()
+				.toBuffer(),
+			"png",
+		)
+		const questId = `image-${width}-${height}`
+		const season = await createSeason({
+			title: questId,
+			lengthMinutes: 60,
+			start: new Date(Date.now() - 1000),
+			end: new Date(Date.now() + 60_000),
+			shuffleArcs: false,
+			arcs: [
+				{
+					id: "arc",
+					title: "Arc",
+					shuffleQuests: false,
+					quests: [
+						{
+							id: questId,
+							displayTitle: "",
+							internalTitle: "",
+							content: "",
+							assetPath: image,
+							puzzle: { rows, cols, showFull: false },
+							answers: [],
+							points: 20,
+							adminNotes: "",
+							hints: [],
+						},
+					],
+				},
+			],
+		})
+		const player = await createTeam({
+			...current,
+			_id: questId,
+			name: questId,
+			seasonId: season._id,
+			questOrder: [questId],
+		})
+		await login({ kind: "team", id: player._id })
+		const game = await getGame()
+		expect(game).toMatchObject({
+			lifecycleState: "running",
+			quest: { id: questId, puzzle: { rows, cols, fullUrl: null } },
+		})
+		expect(JSON.stringify(game)).not.toContain(image)
+		if (game.lifecycleState !== "running") throw new Error("Expected running puzzle")
+		expect(game.quest?.puzzle?.pieces).toHaveLength(rows * cols)
+		const pieces = await pieceIds(questId, image, rows, cols, sessionOptions().password)
+		const sizes = []
+		for (const piece of pieces) {
+			const response = await get(piece, questId)
+			expect(response.status).toBe(200)
+			const tile = await sharp(Buffer.from(await response.arrayBuffer())).metadata()
+			expect(tile.width).toBeGreaterThan(0)
+			expect(tile.height).toBeGreaterThan(0)
+			sizes.push(`${tile.width}x${tile.height}`)
+		}
+		expect(new Set(sizes).size).toBe(1)
+		expect((await get("full", questId)).status).toBe(404)
+	})
+
 	it("serves current and solved teams only opaque webp tiles with private caching", async () => {
 		for (const team of [current, solved]) {
 			await login({ kind: "team", id: team._id })

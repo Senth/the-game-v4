@@ -86,7 +86,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	hooks.states = []
 	hooks.game = initial
-	vi.mocked(getSolvedPuzzle).mockResolvedValue(["a", "b", "c", "d"])
+	vi.mocked(getSolvedPuzzle).mockResolvedValue({ ids: ["a", "b", "c", "d"], pointsEarned: 7 })
 })
 afterEach(() => vi.useRealTimers())
 
@@ -101,7 +101,7 @@ it.each(["next", "completed"])("holds a teammate's solved picture for 1.5 second
 	await Promise.resolve()
 	const solved = render()
 	expect(getSolvedPuzzle).toHaveBeenCalledWith(base.quest?.id)
-	expect(solved.props.puzzleComplete).toBe(base.quest?.worth)
+	expect(solved.props.puzzleComplete).toBe(7)
 	expect(solved.props.quest?.puzzle?.pieces).toEqual(["a", "b", "c", "d"].map((id, cell) => ({ id, spot: { cell } })))
 	expect("onPuzzleDrop" in solved.props && solved.props.onPuzzleDrop).toBeUndefined()
 	vi.advanceTimersByTime(1499)
@@ -130,5 +130,18 @@ it("sends drops through the guarded action, refetches, and rejects stale writes 
 	if (props.preview || !props.onPuzzleDrop) throw new Error("Expected live puzzle")
 	await expect(props.onPuzzleDrop("a", { cell: 2 })).rejects.toThrow("Puzzle drop rejected")
 	expect(dropPuzzlePiece).toHaveBeenCalledWith(base.quest?.id, "a", { cell: 2 })
+	expect(getGame).toHaveBeenCalledOnce()
+})
+
+it("shows persisted earnings after a concurrent hint reveal without an intermediate refetch on the solving phone", async () => {
+	vi.mocked(dropPuzzlePiece).mockResolvedValue({ status: "solved", pointsEarned: 7 })
+	vi.mocked(getGame).mockResolvedValue({ ...base, quest: nextQuest })
+	const props = render().props
+	if (props.preview || !props.onPuzzleDrop) throw new Error("Expected live puzzle")
+	await props.onPuzzleDrop("d", { cell: 3 })
+	render()
+	hooks.effect?.()
+	await Promise.resolve()
+	expect(render().props.puzzleComplete).toBe(7)
 	expect(getGame).toHaveBeenCalledOnce()
 })

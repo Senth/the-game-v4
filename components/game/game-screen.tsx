@@ -39,7 +39,7 @@ export function GameScreen({
 	const [previous, setPrevious] = useState(initial)
 	const [completion, setCompletion] = useState<{
 		game: Extract<PlayerGame, { lifecycleState: "running" }>
-		ids?: string[]
+		solved?: { ids: string[]; pointsEarned: number }
 	} | null>(null)
 	const now = useGameClock(game, initialNow, getGame, setGame)
 	const [answer, setAnswer] = useState("")
@@ -79,13 +79,13 @@ export function GameScreen({
 		let cancelled = false
 		let timer: ReturnType<typeof setTimeout> | undefined
 		getSolvedPuzzle(completingGame.quest.id).then(
-			(ids) => {
+			(solved) => {
 				if (cancelled) return
-				if (!ids) {
+				if (!solved) {
 					setCompletion(null)
 					return
 				}
-				setCompletion({ game: completingGame, ids })
+				setCompletion({ game: completingGame, solved })
 				timer = setTimeout(() => setCompletion(null), 1500)
 			},
 			() => {
@@ -169,8 +169,11 @@ export function GameScreen({
 	if (shown.lifecycleState !== "running") return <LifecycleScreen game={shown} now={now} qr={qr} />
 	const quest = shown.quest
 	const solvedQuest =
-		completion?.ids && quest?.puzzle
-			? { ...quest, puzzle: { ...quest.puzzle, pieces: completion.ids.map((id, cell) => ({ id, spot: { cell } })) } }
+		completion?.solved && quest?.puzzle
+			? {
+					...quest,
+					puzzle: { ...quest.puzzle, pieces: completion.solved.ids.map((id, cell) => ({ id, spot: { cell } })) },
+				}
 			: quest
 	const teamName = shown.strip.flatMap((entry) => (entry.kind === "team" && entry.you ? [entry.name] : []))[0]
 	const pace = paceFromCounts({ start: shown.start, end: shown.end, solved: shown.solved, total: shown.total, now })
@@ -185,7 +188,7 @@ export function GameScreen({
 			menu={teamName && <TeamMenu teamName={teamName} />}
 			nextBonus={shown.nextBonus}
 			quest={solvedQuest}
-			puzzleComplete={completion?.ids ? quest?.worth : undefined}
+			puzzleComplete={completion?.solved?.pointsEarned}
 			onPuzzleDrop={completion ? undefined : drop}
 			answer={answer}
 			onAnswerChange={setAnswer}

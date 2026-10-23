@@ -212,30 +212,35 @@ export async function solveCurrentQuest(
 ): Promise<boolean> {
 	const current = CurrentSolve.parse(expected)
 	const solve = Solve.parse({ questId: current.questId, solvedAt, pointsEarned })
-	await ensureProgress(teamId, current)
-	const result = await (await collections()).teams.updateOne(
-		{
-			...currentFilter(teamId, current),
-			questOrder: { $size: current.orderLength },
-			progress: {
-				$elemMatch: {
-					questId: current.questId,
-					solvedAt: { $exists: false },
-					hintsRevealed: { $size: current.hintCount },
-					...(current.puzzleVersion === undefined ? {} : { "puzzle.version": current.puzzleVersion }),
+	const team = await getTeam(teamId)
+	if (!team) throw new NotFoundError(`Team ${teamId} not found`)
+	return withSeasonStructure(team.seasonId, async () => {
+		await finishSeasonStructure(team.seasonId)
+		await ensureProgress(teamId, current)
+		const result = await (await collections()).teams.updateOne(
+			{
+				...currentFilter(teamId, current),
+				questOrder: { $size: current.orderLength },
+				progress: {
+					$elemMatch: {
+						questId: current.questId,
+						solvedAt: { $exists: false },
+						hintsRevealed: { $size: current.hintCount },
+						...(current.puzzleVersion === undefined ? {} : { "puzzle.version": current.puzzleVersion }),
+					},
 				},
 			},
-		},
-		{
-			$set: {
-				"progress.$.solvedAt": solve.solvedAt,
-				"progress.$.pointsEarned": solve.pointsEarned,
-				completed: current.questIndex + 1 === current.orderLength,
-				...(current.questIndex + 1 === current.orderLength ? { finisherBonusApplied: false } : {}),
-				reachedAt: solve.solvedAt,
+			{
+				$set: {
+					"progress.$.solvedAt": solve.solvedAt,
+					"progress.$.pointsEarned": solve.pointsEarned,
+					completed: current.questIndex + 1 === current.orderLength,
+					...(current.questIndex + 1 === current.orderLength ? { finisherBonusApplied: false } : {}),
+					reachedAt: solve.solvedAt,
+				},
+				$inc: { score: solve.pointsEarned, questIndex: 1 },
 			},
-			$inc: { score: solve.pointsEarned, questIndex: 1 },
-		},
-	)
-	return result.modifiedCount === 1
+		)
+		return result.modifiedCount === 1
+	})
 }
