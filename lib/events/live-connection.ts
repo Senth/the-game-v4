@@ -18,6 +18,7 @@ export function createLiveConnection<T>({
 	let source: LiveSource | null = null
 	let pollTimer: ReturnType<typeof setInterval> | undefined
 	let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+	let fetchTimer: ReturnType<typeof setTimeout> | undefined
 	let disconnected = false
 	let hidden = false
 	let stopped = false
@@ -31,12 +32,11 @@ export function createLiveConnection<T>({
 		}
 		inFlight = true
 		let timedOut = false
-		let timeout: ReturnType<typeof setTimeout> | undefined
 		try {
 			const data = await Promise.race([
 				fetcher(),
 				new Promise<never>((_, reject) => {
-					timeout = setTimeout(() => {
+					fetchTimer = setTimeout(() => {
 						timedOut = true
 						reject()
 					}, fetchTimeoutMs)
@@ -45,7 +45,8 @@ export function createLiveConnection<T>({
 			if (!stopped && !timedOut) onData(data)
 		} catch {
 		} finally {
-			clearTimeout(timeout)
+			clearTimeout(fetchTimer)
+			fetchTimer = undefined
 			inFlight = false
 			if (queued && !stopped) {
 				queued = false
@@ -88,6 +89,8 @@ export function createLiveConnection<T>({
 			source = null
 			stopPolling()
 			clearTimeout(reconnectTimer)
+			clearTimeout(fetchTimer)
+			fetchTimer = undefined
 		},
 		setHidden(value: boolean) {
 			hidden = value

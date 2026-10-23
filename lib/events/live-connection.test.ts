@@ -149,6 +149,18 @@ describe("createLiveConnection", () => {
 		expect(onData).not.toHaveBeenCalled()
 	})
 
+	it("clears a pending fetch timeout on stop", async () => {
+		const slow = deferred<number>()
+		const { source, onData, connection } = setup(vi.fn().mockReturnValueOnce(slow.promise))
+		source().open()
+		expect(vi.getTimerCount()).toBe(1)
+		connection.stop()
+		expect(vi.getTimerCount()).toBe(0)
+		slow.resolve(1)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(onData).not.toHaveBeenCalled()
+	})
+
 	it("keeps the last state and keeps polling when a fetch rejects", async () => {
 		const fetcher = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(2)
 		const { source, onData } = setup(fetcher)
