@@ -10,6 +10,7 @@ import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
 import { hintRevealers } from "@/lib/domain/hints"
+import { puzzleLocked } from "@/lib/domain/puzzle"
 import { questLiveStats } from "@/lib/domain/quest-stats"
 import { questLabel } from "@/lib/domain/season-tree"
 
@@ -59,6 +60,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 						arcId={arc.id}
 						arcTitle={arc.title}
 						hintCount={quest.hints.length}
+						reachedTeams={puzzleLocked(season, teams, quest.id)}
 						quest={{
 							id: quest.id,
 							displayTitle: quest.displayTitle,
@@ -67,6 +69,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 							assetPath: quest.assetPath,
 							answers: quest.answers,
 							points: quest.points,
+							puzzle: quest.puzzle,
 							adminNotes: quest.adminNotes,
 							...(quest.hidden ? { hidden: true } : {}),
 						}}

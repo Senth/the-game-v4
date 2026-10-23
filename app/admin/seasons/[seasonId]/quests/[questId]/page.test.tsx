@@ -9,6 +9,7 @@ import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
 import { hintRevealers } from "@/lib/domain/hints"
+import { puzzleLocked } from "@/lib/domain/puzzle"
 import { questLiveStats } from "@/lib/domain/quest-stats"
 import { buildFixture } from "@/scripts/fixture"
 import QuestPage from "./page"
@@ -73,8 +74,10 @@ it("selects the quest's own arc and passes editor fields without hints across th
 		answers: quest.answers,
 		points: quest.points,
 		adminNotes: quest.adminNotes,
+		puzzle: quest.puzzle,
 	})
 	expect(titles.props.arcId).toBe(arc.id)
+	expect(titles.props.reachedTeams).toBe(puzzleLocked(season, fixture.teams, quest.id))
 	expect(titles.props.start).toBe(season.start)
 	expect(titles.props.end).toBe(season.end)
 	expect(titles.props.now).toBeGreaterThanOrEqual(before)

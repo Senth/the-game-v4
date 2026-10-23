@@ -90,6 +90,7 @@ const defaults = {
 		assetPath: "/assets/12345678-abcd.png",
 		answers: ["harbour"],
 		points: 10,
+		puzzle: null,
 		adminNotes: "Bring a map",
 	},
 	start: null,
@@ -121,7 +122,11 @@ function render(props: Partial<Parameters<typeof QuestEditor>[0]> = {}) {
 	return {
 		html: renderToStaticMarkup(cloneElement(element, {}, children[0], children[1], dialog, children[3], children[4])),
 		root: element,
-		asset: content[offset + 2] as ReactElement<{ assetPath: string | null; onChange: (path: string | null) => void }>,
+		asset: content[offset + 2] as ReactElement<{
+			assetPath: string | null
+			onChange: (path: string | null) => void
+			locked?: boolean
+		}>,
 		fields: Children.toArray(fields.props.children) as ReactElement<{ autoFocus?: boolean }>[],
 		copy: controls.find((button) => button.props.children === "Copy to another season…"),
 		remove: controls.find((button) => button.props.children === "Remove quest"),
@@ -176,7 +181,7 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 })
 
-it("renders all seven fields in M2 order with helper text, desktop pairs and quiet removal", () => {
+it("renders fields in M2 order with helper text, desktop pairs and quiet removal", () => {
 	const view = render()
 	expect(view.html).toContain("Display title")
 	expect(view.html).toContain("players see this")
@@ -184,13 +189,14 @@ it("renders all seven fields in M2 order with helper text, desktop pairs and qui
 	expect(view.html).toContain("admin only")
 	expect(view.html).toContain("font-body normal-case tracking-normal")
 	expect(view.html).toContain("space-y-5")
-	const labels = ["Display title", "Internal title", "Content", "File", "Answers", "Points", "Admin notes"]
+	const labels = ["Display title", "Internal title", "Content", "File", "Answers", "Points", "Puzzle", "Admin notes"]
 	const positions = labels.map((label) => view.html.indexOf(`>${label}`))
 	expect(positions.every((position) => position >= 0)).toBe(true)
 	expect(positions).toEqual([...positions].sort((a, b) => a - b))
 	expect(view.html.match(/admin only/g)).toHaveLength(2)
 	expect(view.html).toContain("Markdown")
 	expect(view.html).toContain("any match, case-insensitive")
+	expect(view.html).toContain("Players get shuffled pieces, never the picture.")
 	expect(view.html).toContain("max-w-2xl")
 	expect(view.html.match(/lg:grid-cols-2 lg:gap-5/g)).toHaveLength(2)
 	expect(view.html.match(/<input/g)).toHaveLength(5)
@@ -282,6 +288,21 @@ it("keeps complete quests quiet, including zero points", () => {
 	expect(view.html).not.toContain("Needs ")
 	expect(view.html).not.toContain("-missing")
 	expect(view.html).not.toContain("border-warn")
+})
+
+it("allows puzzle quests to omit answers and shows the puzzle answer helper", () => {
+	const view = render({ quest: { ...defaults.quest, answers: [], puzzle: { rows: 4, cols: 4, showFull: false } } })
+	expect(view.html).toContain("optional, finishing the puzzle solves it")
+	expect(view.html).not.toContain("Needs an answer")
+})
+
+it("locks the File row when teams have reached an active puzzle", () => {
+	const view = render({
+		reachedTeams: 2,
+		quest: { ...defaults.quest, puzzle: { rows: 4, cols: 4, showFull: false } },
+	})
+	expect(view.asset.props.locked).toBe(true)
+	expect(view.html).toContain("Locked: 2 teams have reached this puzzle.")
 })
 
 it("updates the content warning when the local file is added or removed", () => {
@@ -377,6 +398,7 @@ it("shows Upload and empty File row when the quest has no asset", () => {
 	expect(view.html).toContain("Upload</button>")
 	expect(view.html).toContain("No file")
 	expect(view.html).toContain("Answers")
+	expect(view.html).toContain("Upload an image to enable puzzle mode.")
 })
 
 it("places Hints after Admin notes and before Remove quest without adding them to the quest prop", () => {

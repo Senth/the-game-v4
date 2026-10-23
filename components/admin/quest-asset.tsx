@@ -18,6 +18,7 @@ export function QuestAsset({
 	questId,
 	assetPath,
 	onChange,
+	locked = false,
 	ref,
 }: {
 	seasonId: string
@@ -25,6 +26,7 @@ export function QuestAsset({
 	questId: string
 	assetPath: string | null
 	onChange: (assetPath: string | null) => void
+	locked?: boolean
 	ref?: Ref<QuestAssetHandle>
 }) {
 	const input = useRef<HTMLInputElement>(null)
@@ -39,7 +41,7 @@ export function QuestAsset({
 	const removeType = kind === "pdf" ? "PDF" : (kind ?? "image")
 
 	async function upload(file: File) {
-		if (busy.current || confirming) return
+		if (busy.current || confirming || locked) return
 		const invalid = assetFileError(file)
 		setError(invalid)
 		if (invalid) return
@@ -62,7 +64,7 @@ export function QuestAsset({
 	useImperativeHandle(ref, () => ({ upload, setError }))
 
 	async function remove() {
-		if (busy.current || !assetPath) return
+		if (busy.current || !assetPath || locked) return
 		busy.current = true
 		setPending("remove")
 		setConfirming(false)
@@ -90,7 +92,7 @@ export function QuestAsset({
 				type="file"
 				className="hidden"
 				aria-label="Upload quest file"
-				disabled={pending !== null}
+				disabled={pending !== null || locked}
 				onChange={(event) => {
 					const file = event.currentTarget.files?.[0]
 					event.currentTarget.value = ""
@@ -122,7 +124,7 @@ export function QuestAsset({
 				<button
 					type="button"
 					className={`${outlineClass.replace("text-ink", "text-head")} shrink-0 border-z2`}
-					disabled={pending !== null}
+					disabled={pending !== null || locked}
 					onClick={() => input.current?.click()}
 				>
 					{pending === "upload" ? "Uploading…" : assetPath ? "Replace" : "Upload"}
@@ -131,7 +133,7 @@ export function QuestAsset({
 					<button
 						type="button"
 						className="h-11 shrink-0 px-2 font-cond text-sm text-muted hover:underline active:text-head focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
-						disabled={pending !== null}
+						disabled={pending !== null || locked}
 						onClick={() => setConfirming(true)}
 					>
 						Remove
@@ -148,7 +150,7 @@ export function QuestAsset({
 				title={`Remove this ${removeType}?`}
 				body="Players stop seeing it and the file is deleted."
 				confirmLabel={`Remove ${removeType}`}
-				disabled={pending !== null}
+				disabled={pending !== null || locked}
 				onConfirm={() => void remove()}
 				onClose={() => setConfirming(false)}
 			/>

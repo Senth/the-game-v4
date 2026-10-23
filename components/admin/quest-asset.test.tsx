@@ -43,10 +43,10 @@ const uploaded = "/assets/8d02b4c1-1234-5678-90ab-cdef12345678.pdf"
 const props = { seasonId: "season", arcId: "arc", questId: "quest", assetPath: image, onChange: vi.fn() }
 const handle = { current: null as QuestAssetHandle | null }
 
-function view(assetPath: string | null = image) {
+function view(assetPath: string | null = image, locked = false) {
 	hooks.cursor = 0
 	hooks.refCursor = 0
-	return QuestAsset({ ...props, assetPath, ref: handle })
+	return QuestAsset({ ...props, assetPath, locked, ref: handle })
 }
 function html(assetPath: string | null = image) {
 	return renderToStaticMarkup(view(assetPath))
@@ -102,6 +102,16 @@ it("shows thumbnail, shortened name, bordered Replace and quiet Remove with focu
 	}
 	expect(controls().at(-2).props.className).toContain("border-z2")
 	expect(controls().at(-1).props.className).toContain("text-muted")
+})
+
+it("disables File controls and imperative upload while puzzle is locked", async () => {
+	const element = view(image, true)
+	const buttons = element.props.children[2].props.children
+	expect(element.props.children[1].props.disabled).toBe(true)
+	expect(buttons[2].props.disabled).toBe(true)
+	expect(buttons[3].props.disabled).toBe(true)
+	await handle.current?.upload(new File(["image"], "chart.png"))
+	expect(uploadQuestAsset).not.toHaveBeenCalled()
 })
 
 it.each([
