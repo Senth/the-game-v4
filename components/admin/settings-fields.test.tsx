@@ -7,7 +7,7 @@ import { useAutosaveField } from "./autosave-provider"
 import { AutosaveSwitch, SeasonSwitch } from "./autosave-switch"
 import { NewQuestPointsField } from "./new-quest-points-field"
 import { RegistrationSwitch } from "./registration-switch"
-import { SeasonSettings } from "./season-settings"
+import { NewPlaceRadiusField, SeasonSettings } from "./season-settings"
 import { useSeasonClock } from "./use-season-clock"
 
 const hooks = vi.hoisted(() => ({ mounted: false, effects: [] as EffectCallback[], setMounted: vi.fn() }))
@@ -161,6 +161,24 @@ it("renders New quest points with numeric bounds, suffix and value helper", () =
 	expect(html).not.toContain("readOnly")
 })
 
+it("renders New place radius with its range error and existing-place helper", () => {
+	vi.mocked(useAutosaveField).mockReturnValue({ ...field, value: 40 } as ReturnType<typeof useAutosaveField>)
+	const fieldElement = NewPlaceRadiusField({ serverValue: 40 })
+	const html = renderToStaticMarkup(fieldElement)
+	expect(useAutosaveField).toHaveBeenCalledWith({ field: "placeRadius" }, 40)
+	expect(html).toContain('min="5" max="500" step="1"')
+	expect(html).toContain('value="40"')
+	expect(html).toContain(">m</span>")
+	expect(html).toContain("New places start with 40 m. Existing places never change.")
+	vi.mocked(useAutosaveField).mockReturnValue({
+		...field,
+		value: 501,
+		failed: true,
+		error: "Use 5 to 500.",
+	} as ReturnType<typeof useAutosaveField>)
+	expect(renderToStaticMarkup(NewPlaceRadiusField({ serverValue: 40 }))).toContain("Use 5 to 500.")
+})
+
 it("renders an empty New quest points value and maps clear to null", () => {
 	vi.mocked(useAutosaveField).mockReturnValue({ ...field, value: null })
 	const html = renderToStaticMarkup(<NewQuestPointsField serverValue={null} />)
@@ -178,6 +196,7 @@ it.each(["live", "ended"] as const)("keeps New quest points editable while %s", 
 	const season = {
 		finisherBonuses: [],
 		finishers: [],
+		placeRadius: 40,
 		_id: "s1",
 		title: "Hunt",
 		start: new Date(now - 1000),
@@ -219,6 +238,7 @@ it.each(["unscheduled", "upcoming", "live", "ended"] as const)(
 		const season = {
 			finisherBonuses: [],
 			finishers: [],
+			placeRadius: 40,
 			_id: "s1",
 			title: "Cipher Night 2026",
 			lengthMinutes: 60,
@@ -234,7 +254,8 @@ it.each(["unscheduled", "upcoming", "live", "ended"] as const)(
 		expect(html.indexOf(">Title</label>")).toBeLessThan(html.indexOf(">Start</"))
 		expect(html.indexOf(">Start</")).toBeLessThan(html.indexOf(">Length</label>"))
 		expect(html.indexOf(">Length</label>")).toBeLessThan(html.indexOf(">New quest points</label>"))
-		expect(html.indexOf(">New quest points</label>")).toBeLessThan(html.indexOf(">Shuffle arcs</span>"))
+		expect(html.indexOf(">New quest points</label>")).toBeLessThan(html.indexOf(">New place radius</label>"))
+		expect(html.indexOf(">New place radius</label>")).toBeLessThan(html.indexOf(">Shuffle arcs</span>"))
 		expect(html.indexOf(">Shuffle arcs</span>")).toBeLessThan(html.indexOf("Registration field"))
 		expect(html.includes("Applies to teams that join from now on.")).toBe(started)
 		expect(html.includes("Each team plays the arcs in its own order.")).toBe(!started)
@@ -251,6 +272,7 @@ it("locks Start and Length when the shared clock reaches scheduled start without
 	const season = {
 		finisherBonuses: [],
 		finishers: [],
+		placeRadius: 40,
 		_id: "s1",
 		title: "Hunt",
 		start: new Date(now + 1000),

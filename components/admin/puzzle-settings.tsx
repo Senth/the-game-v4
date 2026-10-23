@@ -63,18 +63,28 @@ export function PuzzleSettings({
 	questId,
 	assetPath,
 	puzzle,
+	location = null,
 	reachedTeams,
 }: {
 	arcId: string
 	questId: string
 	assetPath: string | null
 	puzzle: Quest["puzzle"]
+	location?: Quest["location"]
 	reachedTeams: number
 }) {
 	const field = useAutosaveField<Quest["puzzle"]>({ arcId, questId, field: "puzzle" }, puzzle ?? null)
 	const value = field.value ?? null
 	const imageAvailable = !!assetPath && assetKind(assetPath) === "image"
 	const locked = reachedTeams > 0
+	if (location) {
+		return (
+			<div>
+				<span className={labelClass}>Puzzle</span>
+				<p className="font-cond text-xs text-muted">Puzzle mode is off while this quest has a place.</p>
+			</div>
+		)
+	}
 	if (!imageAvailable) {
 		return (
 			<div>

@@ -12,7 +12,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { uploadQuestAsset } from "@/app/admin/asset-actions"
 import { addQuestToGame, getAddQuestImpact, getRemoveQuestImpact, removeQuest } from "@/app/admin/tree-actions"
-import { useAutosaveField, useAutosaveList } from "./autosave-provider"
+import { useAutosaveField, useAutosaveList, useDraftValue } from "./autosave-provider"
 import { ConfirmDialog } from "./confirm-dialog"
 import { CopyDialog } from "./copy-dialog"
 import { QuestEditor } from "./quest-editor"
@@ -33,7 +33,8 @@ vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
 	useState: (initial: unknown) => {
 		const index = hooks.cursor++
-		if (!(index in hooks.states)) hooks.states[index] = initial
+		if (!(index in hooks.states))
+			hooks.states[index] = typeof initial === "function" ? (initial as () => unknown)() : initial
 		return [
 			hooks.states[index],
 			(value: unknown) => {
@@ -66,6 +67,7 @@ vi.mock("@/app/admin/asset-actions", () => ({ uploadQuestAsset: vi.fn(), removeQ
 vi.mock("./autosave-provider", () => ({
 	useAutosaveField: vi.fn(),
 	useAutosaveList: vi.fn(),
+	useDraftValue: vi.fn((_target: unknown, value: unknown) => value),
 	useAutosave: () => null,
 	useAssetDraft: (_target: unknown, serverValue: string | null) => {
 		const [value, onChange] = useState(serverValue)
@@ -91,6 +93,7 @@ const defaults = {
 		answers: ["harbour"],
 		points: 10,
 		puzzle: null,
+		location: null,
 		adminNotes: "Bring a map",
 	},
 	start: null,
@@ -173,6 +176,7 @@ beforeEach(() => {
 		failed: false,
 		error: undefined,
 	}))
+	vi.mocked(useDraftValue).mockImplementation((_target, serverValue) => serverValue)
 })
 afterEach(() => {
 	cleanup?.()
@@ -189,7 +193,17 @@ it("renders fields in M2 order with helper text, desktop pairs and quiet removal
 	expect(view.html).toContain("admin only")
 	expect(view.html).toContain("font-body normal-case tracking-normal")
 	expect(view.html).toContain("space-y-5")
-	const labels = ["Display title", "Internal title", "Content", "File", "Answers", "Points", "Puzzle", "Admin notes"]
+	const labels = [
+		"Display title",
+		"Internal title",
+		"Content",
+		"File",
+		"Answers",
+		"Points",
+		"Place",
+		"Puzzle",
+		"Admin notes",
+	]
 	const positions = labels.map((label) => view.html.indexOf(`>${label}`))
 	expect(positions.every((position) => position >= 0)).toBe(true)
 	expect(positions).toEqual([...positions].sort((a, b) => a - b))
@@ -199,7 +213,7 @@ it("renders fields in M2 order with helper text, desktop pairs and quiet removal
 	expect(view.html).toContain("Players get shuffled pieces, never the picture.")
 	expect(view.html).toContain("max-w-2xl")
 	expect(view.html.match(/lg:grid-cols-2 lg:gap-5/g)).toHaveLength(2)
-	expect(view.html.match(/<input/g)).toHaveLength(5)
+	expect(view.html.match(/<input/g)).toHaveLength(7)
 	expect(view.html).toMatch(/rows="5"[^>]*font-mono/)
 	expect(view.html).toMatch(/rows="1"[^>]*font-body/)
 	expect(view.html).toContain("mt-8 border-t border-z1")
@@ -294,6 +308,47 @@ it("allows puzzle quests to omit answers and shows the puzzle answer helper", ()
 	const view = render({ quest: { ...defaults.quest, answers: [], puzzle: { rows: 4, cols: 4, showFull: false } } })
 	expect(view.html).toContain("optional, finishing the puzzle solves it")
 	expect(view.html).not.toContain("Needs an answer")
+})
+
+it("allows location quests to omit answers and shows backup-code helper", () => {
+	const view = render({
+		quest: {
+			...defaults.quest,
+			answers: [],
+			location: { guidance: "none", places: [{ id: "p1", lat: 55, lng: 13, radius: 40 }] },
+		},
+	})
+	expect(view.html).toContain("optional backup codes, arriving solves it")
+	expect(view.html).not.toContain("Needs an answer")
+	expect(view.html).toContain("Getting within the radius solves it. Players never see the coordinates.")
+})
+
+it("uses unsaved location and puzzle values for mutual exclusion", () => {
+	const location = { guidance: "none" as const, places: [{ id: "p1", lat: 55, lng: 13, radius: 40 }] }
+	vi.mocked(useDraftValue).mockImplementation((target, value) => (target.field === "location" ? location : value))
+	vi.mocked(useAutosaveField).mockImplementation((target, serverValue) => ({
+		value: target.field === "location" ? location : serverValue,
+		onChange: vi.fn(),
+		onFocus: vi.fn(),
+		onBlur: vi.fn(),
+		failed: false,
+		error: undefined,
+	}))
+	const withLocation = render({ quest: { ...defaults.quest, answers: [] } })
+	expect(withLocation.html).toContain("Puzzle mode is off while this quest has a place.")
+	expect(withLocation.html).toContain("Getting within the radius solves it. Players never see the coordinates.")
+	vi.mocked(useDraftValue).mockImplementation((target, value) =>
+		target.field === "puzzle" ? { rows: 4, cols: 4, showFull: false } : value,
+	)
+	vi.mocked(useAutosaveField).mockImplementation((_target, serverValue) => ({
+		value: serverValue,
+		onChange: vi.fn(),
+		onFocus: vi.fn(),
+		onBlur: vi.fn(),
+		failed: false,
+		error: undefined,
+	}))
+	expect(render().html).toContain("Turn off puzzle mode to add a place.")
 })
 
 it("locks the File row when teams have reached an active puzzle", () => {
@@ -552,9 +607,9 @@ it.each(["live", "ended"] as const)("shows removal only while live and keeps all
 		expect(view.remove).toBeUndefined()
 		expect(view.html).not.toContain("Remove quest")
 	}
-	expect(view.html.match(/<input/g)).toHaveLength(5)
+	expect(view.html.match(/<input/g)).toHaveLength(7)
 	expect(view.html.match(/<textarea/g)).toHaveLength(2)
-	expect(view.html).not.toContain('disabled=""')
+	expect(view.html).not.toMatch(/aria-label="Place coordinates"[^>]*disabled=""/)
 	expect(view.html).not.toContain('readonly=""')
 })
 

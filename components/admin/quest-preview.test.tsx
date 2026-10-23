@@ -17,6 +17,7 @@ const quest = {
 	assetPath: null,
 	points: 20,
 	hints: [{ id: "hint", text: "Hidden hint text", points: 5 }],
+	location: null,
 	internalTitle: "Secret internal title",
 	adminNotes: "Secret admin notes",
 	answers: ["Secret answer"],
@@ -89,6 +90,15 @@ it("renders live drafts through the real player components without leaking admin
 	expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Send/)
 	expect(html).not.toContain("/standings")
 	expect(html).not.toContain("On pace")
+})
+
+it("uses the draft location in the player preview", () => {
+	const location = { guidance: "none" as const, places: [{ id: "secret-place", lat: 55, lng: 13, radius: 40 }] }
+	vi.mocked(useDraftValue).mockImplementation((target, value) => (target.field === "location" ? location : value))
+	const html = renderToStaticMarkup(<QuestPreview {...props} quest={{ ...quest, answers: [], location: null }} />)
+	expect(useDraftValue).toHaveBeenCalledWith({ arcId: "arc", questId: "quest", field: "location" }, null)
+	expect(html).not.toContain('aria-label="Your answer"')
+	expect(html).not.toContain("secret-place")
 })
 
 it("uses the local clock without adding a frame to the unframed variant", () => {

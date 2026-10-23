@@ -1,0 +1,146 @@
+"use client"
+
+import { useEffect, useId, useState } from "react"
+import { inputClass, labelClass } from "@/components/auth-form"
+import { newPlace, osmUrl, parseCoordinates } from "@/lib/domain/location"
+import type { Quest } from "@/lib/domain/schemas"
+import { useAutosaveField } from "./autosave-provider"
+
+export function PlaceField({
+	arcId,
+	questId,
+	location,
+	puzzle,
+	seasonRadius,
+	solvedTeams,
+}: {
+	arcId: string
+	questId: string
+	location: Quest["location"]
+	puzzle: Quest["puzzle"]
+	seasonRadius: number
+	solvedTeams: number
+}) {
+	const field = useAutosaveField<Quest["location"]>({ arcId, questId, field: "location" }, location ?? null)
+	const value = field.value ?? null
+	const place = value?.places[0]
+	const savedCoordinates = place ? `${place.lat}, ${place.lng}` : ""
+	const [coordinates, setCoordinates] = useState(() => (place ? `${place.lat}, ${place.lng}` : ""))
+	const [pasteError, setPasteError] = useState(false)
+	const id = useId()
+	const locked = solvedTeams > 0
+	const error = locked
+		? undefined
+		: pasteError
+			? "Paste latitude, longitude, like 55.5079, 13.2353."
+			: field.failed
+				? field.error
+				: undefined
+	const helper = locked
+		? `Locked: ${solvedTeams} ${solvedTeams === 1 ? "team has" : "teams have"} found this place.`
+		: place
+			? "Getting within the radius solves it. Players never see the coordinates."
+			: "Empty means players type an answer."
+	const coordinatesClass = error
+		? inputClass.replaceAll("border-z2", "border-warn").replaceAll("focus:border-accent", "focus:border-warn")
+		: inputClass
+	const radiusClass = field.failed
+		? inputClass.replaceAll("border-z2", "border-warn").replaceAll("focus:border-accent", "focus:border-warn")
+		: inputClass
+
+	useEffect(() => {
+		if (!pasteError) setCoordinates(savedCoordinates)
+	}, [savedCoordinates, pasteError])
+
+	function changeCoordinates(input: string) {
+		setCoordinates(input)
+		if (!input.trim()) {
+			setPasteError(false)
+			field.onChange(null)
+			return
+		}
+		try {
+			const parsed = parseCoordinates(input)
+			setPasteError(false)
+			field.onChange(
+				value && place
+					? { ...value, places: [{ ...place, ...parsed }] }
+					: { guidance: "none", places: [newPlace({ placeRadius: seasonRadius }, parsed.lat, parsed.lng)] },
+			)
+		} catch {
+			setPasteError(true)
+		}
+	}
+
+	if (puzzle) {
+		return (
+			<div>
+				<span className={labelClass}>Place</span>
+				<p className="font-cond text-xs text-muted">Turn off puzzle mode to add a place.</p>
+			</div>
+		)
+	}
+
+	return (
+		<div>
+			<label htmlFor={`${id}-coordinates`} className={labelClass}>
+				Place <span className="ml-2 font-body normal-case tracking-normal">optional</span>
+			</label>
+			<div className="flex min-w-0 items-center gap-2">
+				<input
+					id={`${id}-coordinates`}
+					aria-label="Place coordinates"
+					aria-invalid={error ? true : undefined}
+					aria-describedby={error ? `${id}-error` : `${id}-helper`}
+					className={`${coordinatesClass} min-w-0 flex-1 text-sm${locked ? " text-muted" : ""}`}
+					type="text"
+					placeholder="Paste latitude, longitude"
+					value={coordinates}
+					disabled={locked}
+					onChange={(event) => changeCoordinates(event.target.value)}
+					onFocus={field.onFocus}
+					onBlur={() => void field.onBlur()}
+				/>
+				<input
+					aria-label="Place radius"
+					aria-invalid={field.failed ? true : undefined}
+					aria-describedby={error ? `${id}-error` : `${id}-helper`}
+					className={`${radiusClass} w-16 px-2 text-sm${locked || !place ? " text-muted" : ""}`}
+					type="number"
+					inputMode="numeric"
+					min={5}
+					max={500}
+					step={1}
+					value={place?.radius ?? seasonRadius}
+					disabled={locked || !place}
+					onChange={(event) => {
+						if (!place || !value || locked) return
+						field.onChange({ ...value, places: [{ ...place, radius: event.target.valueAsNumber }] })
+					}}
+					onFocus={field.onFocus}
+					onBlur={() => void field.onBlur()}
+				/>
+				<span className="font-cond text-sm text-muted">m</span>
+			</div>
+			{error ? (
+				<p id={`${id}-error`} role="alert" className="mt-1.5 font-cond text-xs text-warn">
+					{error}
+				</p>
+			) : (
+				<p id={`${id}-helper`} className="mt-1.5 font-cond text-xs text-muted">
+					{helper}
+				</p>
+			)}
+			{place && (
+				<a
+					className="inline-flex min-h-11 items-center font-cond text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+					href={osmUrl(place.lat, place.lng)}
+					target="_blank"
+					rel="noreferrer"
+				>
+					Check on map ›
+				</a>
+			)}
+		</div>
+	)
+}

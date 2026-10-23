@@ -5,16 +5,18 @@ import { type ReactNode, useEffect, useRef, useState } from "react"
 import { addQuestToGame, getAddQuestImpact, getRemoveQuestImpact, removeQuest } from "@/app/admin/tree-actions"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
 import type { StructuralEditImpact } from "@/lib/domain/game"
+import { defaultPlaceRadius } from "@/lib/domain/location"
 import { missingLabel as formatMissingFields, missingForGame } from "@/lib/domain/playable-quests"
 import type { Quest } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
 import { AnswerChips } from "./answer-chips"
 import { AutosavePointsField } from "./autosave-points-field"
-import { useAssetDraft, useAutosave } from "./autosave-provider"
+import { useAssetDraft, useAutosave, useDraftValue } from "./autosave-provider"
 import { AutosaveTextField } from "./autosave-text-field"
 import { AutosaveTextarea } from "./autosave-textarea"
 import { ConfirmDialog, primaryClass } from "./confirm-dialog"
 import { CopyDialog } from "./copy-dialog"
+import { PlaceField } from "./place-field"
 import { PuzzleSettings } from "./puzzle-settings"
 import { QuestAsset, type QuestAssetHandle } from "./quest-asset"
 import { RemovalImpact } from "./removal-impact"
@@ -28,6 +30,8 @@ export function QuestEditor({
 	hintCount,
 	quest,
 	reachedTeams = 0,
+	solvedTeams = 0,
+	placeRadius = defaultPlaceRadius,
 	start,
 	end,
 	now,
@@ -40,6 +44,8 @@ export function QuestEditor({
 	hintCount: number
 	quest: Omit<Quest, "hints">
 	reachedTeams?: number
+	solvedTeams?: number
+	placeRadius?: number
 	start: Date | null
 	end: Date | null
 	now: number
@@ -66,6 +72,8 @@ export function QuestEditor({
 		{ arcId, questId: quest.id, field: "assetPath" },
 		quest.assetPath,
 	)
+	const location = useDraftValue({ arcId, questId: quest.id, field: "location" }, quest.location ?? null)
+	const puzzle = useDraftValue({ arcId, questId: quest.id, field: "puzzle" }, quest.puzzle ?? null)
 	const lockedPuzzle = !!quest.puzzle && reachedTeams > 0
 	const asset = useRef<QuestAssetHandle>(null)
 	const dragDepth = useRef(0)
@@ -289,16 +297,31 @@ export function QuestEditor({
 						arcId={arcId}
 						questId={quest.id}
 						answers={quest.answers}
-						missing={quest.puzzle ? undefined : "Needs an answer"}
-						helper={quest.puzzle ? "optional, finishing the puzzle solves it" : undefined}
+						missing={puzzle || location ? undefined : "Needs an answer"}
+						helper={
+							location
+								? "optional backup codes, arriving solves it"
+								: puzzle
+									? "optional, finishing the puzzle solves it"
+									: undefined
+						}
 					/>
 					<AutosavePointsField arcId={arcId} questId={quest.id} serverValue={quest.points} missing="Needs points" />
 				</div>
+				<PlaceField
+					arcId={arcId}
+					questId={quest.id}
+					location={location}
+					puzzle={puzzle}
+					seasonRadius={placeRadius}
+					solvedTeams={solvedTeams}
+				/>
 				<PuzzleSettings
 					arcId={arcId}
 					questId={quest.id}
 					assetPath={assetPath}
-					puzzle={quest.puzzle}
+					puzzle={puzzle}
+					location={location}
 					reachedTeams={reachedTeams}
 				/>
 				<AutosaveTextarea

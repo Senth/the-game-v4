@@ -10,6 +10,7 @@ import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
 import { hintRevealers } from "@/lib/domain/hints"
+import { defaultPlaceRadius } from "@/lib/domain/location"
 import { puzzleLocked } from "@/lib/domain/puzzle"
 import { questLiveStats } from "@/lib/domain/quest-stats"
 import { questLabel } from "@/lib/domain/season-tree"
@@ -23,6 +24,9 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 	if (!season || !arc || !quest) redirect(`/admin/seasons/${seasonId}`)
 	const label = questLabel(quest)
 	const teams = await listSeasonTeams(seasonId)
+	const solvedTeams = teams.filter((team) =>
+		team.progress.some((progress) => progress.questId === quest.id && progress.solvedAt),
+	).length
 	const now = Date.now()
 	const revealers = hintRevealers(teams, questId)
 	const stats = seasonStatus(season, new Date(now)) === "live" ? questLiveStats(season, teams)[questId] : null
@@ -61,6 +65,8 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 						arcTitle={arc.title}
 						hintCount={quest.hints.length}
 						reachedTeams={puzzleLocked(season, teams, quest.id)}
+						solvedTeams={solvedTeams}
+						placeRadius={season.placeRadius ?? defaultPlaceRadius}
 						quest={{
 							id: quest.id,
 							displayTitle: quest.displayTitle,
@@ -70,6 +76,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 							answers: quest.answers,
 							points: quest.points,
 							puzzle: quest.puzzle,
+							location: quest.location,
 							adminNotes: quest.adminNotes,
 							...(quest.hidden ? { hidden: true } : {}),
 						}}
