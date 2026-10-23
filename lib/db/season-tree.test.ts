@@ -151,6 +151,7 @@ describe("season tree writes", () => {
 			internalTitle: "",
 			content: "",
 			assetPath: null,
+			puzzle: null,
 			answers: [],
 			points: null,
 			adminNotes: "",

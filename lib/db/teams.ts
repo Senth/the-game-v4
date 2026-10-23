@@ -2,7 +2,7 @@ import { z } from "zod"
 import { sortByArrival } from "@/lib/domain/finishers"
 import { applyStructuralEdit, buildQuestOrder, type StructuralEdit } from "@/lib/domain/game"
 import { playableArcs } from "@/lib/domain/playable-quests"
-import { RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
+import { PuzzleState, RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
 import { publish, teamChannel } from "@/lib/events/bus"
 import { collections, NotFoundError } from "./collections"
 import { claimFinish } from "./finishers"
@@ -18,6 +18,7 @@ export type CurrentQuest = z.infer<typeof CurrentQuest>
 const CurrentSolve = CurrentQuest.extend({
 	orderLength: z.number().int().positive(),
 	hintCount: z.number().int().min(0),
+	puzzleVersion: z.number().int().nonnegative().optional(),
 })
 export type CurrentSolve = z.infer<typeof CurrentSolve>
 
@@ -152,6 +153,37 @@ function currentFilter(teamId: string, { questIndex, questId }: CurrentQuest) {
 	return { _id: teamId, questIndex, [`questOrder.${questIndex}`]: questId }
 }
 
+export async function ensurePuzzleState(teamId: string, current: CurrentQuest, state: PuzzleState): Promise<boolean> {
+	const expected = CurrentQuest.parse(current)
+	const parsed = PuzzleState.parse(state)
+	await ensureProgress(teamId, expected)
+	const result = await (await collections()).teams.updateOne(
+		{
+			...currentFilter(teamId, expected),
+			completed: false,
+			progress: { $elemMatch: { questId: expected.questId, solvedAt: { $exists: false }, puzzle: { $exists: false } } },
+		},
+		{ $set: { "progress.$.puzzle": parsed } },
+	)
+	return result.modifiedCount === 1
+}
+
+export async function writePuzzleDrop(teamId: string, current: CurrentQuest, state: PuzzleState): Promise<boolean> {
+	const expected = CurrentQuest.parse(current)
+	const parsed = PuzzleState.parse(state)
+	const result = await (await collections()).teams.updateOne(
+		{
+			...currentFilter(teamId, expected),
+			completed: false,
+			progress: {
+				$elemMatch: { questId: expected.questId, solvedAt: { $exists: false }, "puzzle.version": parsed.version - 1 },
+			},
+		},
+		{ $set: { "progress.$.puzzle": parsed } },
+	)
+	return result.modifiedCount === 1
+}
+
 export async function revealHint(teamId: string, current: CurrentQuest, snapshot: RevealedHint): Promise<boolean> {
 	const parsed = RevealedHint.parse(snapshot)
 	const expected = CurrentQuest.parse(current)
@@ -180,29 +212,35 @@ export async function solveCurrentQuest(
 ): Promise<boolean> {
 	const current = CurrentSolve.parse(expected)
 	const solve = Solve.parse({ questId: current.questId, solvedAt, pointsEarned })
-	await ensureProgress(teamId, current)
-	const result = await (await collections()).teams.updateOne(
-		{
-			...currentFilter(teamId, current),
-			questOrder: { $size: current.orderLength },
-			progress: {
-				$elemMatch: {
-					questId: current.questId,
-					solvedAt: { $exists: false },
-					hintsRevealed: { $size: current.hintCount },
+	const team = await getTeam(teamId)
+	if (!team) throw new NotFoundError(`Team ${teamId} not found`)
+	return withSeasonStructure(team.seasonId, async () => {
+		await finishSeasonStructure(team.seasonId)
+		await ensureProgress(teamId, current)
+		const result = await (await collections()).teams.updateOne(
+			{
+				...currentFilter(teamId, current),
+				questOrder: { $size: current.orderLength },
+				progress: {
+					$elemMatch: {
+						questId: current.questId,
+						solvedAt: { $exists: false },
+						hintsRevealed: { $size: current.hintCount },
+						...(current.puzzleVersion === undefined ? {} : { "puzzle.version": current.puzzleVersion }),
+					},
 				},
 			},
-		},
-		{
-			$set: {
-				"progress.$.solvedAt": solve.solvedAt,
-				"progress.$.pointsEarned": solve.pointsEarned,
-				completed: current.questIndex + 1 === current.orderLength,
-				...(current.questIndex + 1 === current.orderLength ? { finisherBonusApplied: false } : {}),
-				reachedAt: solve.solvedAt,
+			{
+				$set: {
+					"progress.$.solvedAt": solve.solvedAt,
+					"progress.$.pointsEarned": solve.pointsEarned,
+					completed: current.questIndex + 1 === current.orderLength,
+					...(current.questIndex + 1 === current.orderLength ? { finisherBonusApplied: false } : {}),
+					reachedAt: solve.solvedAt,
+				},
+				$inc: { score: solve.pointsEarned, questIndex: 1 },
 			},
-			$inc: { score: solve.pointsEarned, questIndex: 1 },
-		},
-	)
-	return result.modifiedCount === 1
+		)
+		return result.modifiedCount === 1
+	})
 }

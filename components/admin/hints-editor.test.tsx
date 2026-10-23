@@ -72,7 +72,10 @@ vi.mock("react", async (importOriginal) => ({
 		})
 	},
 }))
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
+vi.mock("next/navigation", () => ({
+	useRouter: () => ({ refresh: vi.fn() }),
+	useSelectedLayoutSegments: () => [],
+}))
 vi.mock("@/app/admin/autosave-actions", () => ({
 	moveHint: vi.fn(),
 	saveSeasonField: vi.fn(),

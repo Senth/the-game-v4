@@ -11,11 +11,13 @@ export function AnswerChips({
 	questId,
 	answers,
 	missing,
+	helper = "any match, case-insensitive",
 }: {
 	arcId: string
 	questId: string
 	answers: string[]
 	missing?: string
+	helper?: string
 }) {
 	const list = useAutosaveList({ arcId, questId, field: "answers" }, answers)
 	const [text, setText] = useState("")
@@ -51,7 +53,7 @@ export function AnswerChips({
 	return (
 		<div>
 			<label htmlFor={id} className={labelClass}>
-				Answers <span className="ml-2 font-body normal-case tracking-normal">any match, case-insensitive</span>
+				Answers <span className="ml-2 font-body normal-case tracking-normal">{helper}</span>
 			</label>
 			<div
 				className={`${failed || isMissing ? style.replaceAll("border-z2", "border-warn").replaceAll("focus-within:border-accent", "focus-within:border-warn") : style} flex flex-wrap items-center gap-2`}

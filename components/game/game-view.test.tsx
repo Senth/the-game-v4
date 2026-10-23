@@ -24,6 +24,24 @@ const quest: PlayerQuest = {
 const rail: RailArc[] = [{ arcId: "arc-one", segments: [{ questId: "quest-one", state: "current" }] }]
 
 describe("GameView preview", () => {
+	it.each([true, false])("shows the puzzle answer dock only with answers=%s", (hasAnswers) => {
+		const html = renderToStaticMarkup(
+			<GameView
+				timeLeftMs={0}
+				pace={null}
+				rail={rail}
+				preview
+				quest={{
+					...quest,
+					hasAnswers,
+					puzzle: { rows: 2, cols: 2, aspect: 2, fullUrl: null, pieces: [{ id: "opaque", spot: { x: 0, y: 0 } }] },
+				}}
+			/>,
+		)
+		expect(html.includes('aria-label="Your answer"')).toBe(hasAnswers)
+		expect(html).toContain('aria-label="Puzzle board"')
+		expect(html).toContain("/api/puzzle/quest-one/opaque")
+	})
 	it.each([true, "team"] as const)("renders preview=%s links as plain readable content", (preview) => {
 		const html = renderToStaticMarkup(
 			<GameView

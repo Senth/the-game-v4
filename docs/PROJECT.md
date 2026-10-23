@@ -18,6 +18,7 @@ Use pnpm, Biome, `tsc --noEmit`, Vitest and Playwright. MongoDB 8 uses the offic
 | Season | Scheduled collection of arcs with a start, end and game settings |
 | Arc | Authored group of quests, called a theme in v3 |
 | Quest | Puzzle with player content, accepted answers, points and hints |
+| Puzzle quest | Image quest solved by assembling rectangular pieces; see [puzzle quests](#puzzle-quests) |
 | Hint | Revealable help for one quest, with a points penalty |
 | Team | Shared player identity belonging to a season, with its own quest order and progress |
 | Admin | Game-master account allowed to author and control seasons |
@@ -58,8 +59,11 @@ New seasons have no default quest points. A missing `defaultQuestPoints` reads a
 
 A quest and each hint must have a stable id. Assign ids to hints that lack them.
 `Quest` also has `hidden?: boolean`; absent means visible.
+`Quest.puzzle` is `{rows: number, cols: number, showFull: boolean} | null`; absent reads as null.
+Rows and columns are whole numbers from 2 to 7, defaulting to 4 each. `showFull` defaults to false.
 Draft quests may have empty content, empty answers or missing points.
-A quest is complete with content or an asset, at least one answer and points. Display title is optional.
+A regular quest is complete with content or an asset, at least one answer and points.
+A puzzle quest is complete with an image and points; answers are optional. Display title is optional for either kind.
 Whitespace-only text is empty; 0 points is set. `missingForGame` defines this shared rule.
 Quest points are a whole number from 0 to 10000, or null on a draft.
 "+ Quest" copies the season's default into the new quest's points. Without a default, points stay null and show "Needs points".
@@ -90,6 +94,10 @@ and Shiki for fenced code. There is no separate v3 `code` field.
 | `progress` | `TeamQuestProgress[]` | Persistent history for each reached quest |
 
 `TeamQuestProgress` is `{questId: string, solvedAt?: Date, hintsRevealed: RevealedHint[], pointsEarned: number}`.
+Its optional `puzzle` field is `{version: number, spots: Spot[]}`, absent until the team reaches a puzzle quest.
+`spots[i]` locates the piece whose correct cell is `i`.
+`Spot` is `{cell: number}` in the frame, or `{x: number, y: number}` loose in the tray.
+Tray coordinates range from 0 to 1 across the tray's free area.
 `RevealedHint` is `{hintId: string, text: string, points: number, revealedAt: Date}`.
 Each reveal stores the hint's stable id, text and penalty at reveal time, plus its reveal timestamp.
 History survives advancement to the next quest. Deleting or editing a hint never rewrites these snapshots.
@@ -221,6 +229,31 @@ A row added after its place was claimed awards nothing. That place is already ta
 Deleting a team preserves its claimed place. Nobody moves up.
 With no rows, scores stay unchanged. Finishes are still recorded, flagged and announced.
 
+### Puzzle quests
+
+Puzzle mode requires an image asset: jpg, png, webp, gif or svg.
+GIF uses its first frame; SVG is rasterized. Pieces are rectangular and never rotate.
+Answers remain optional. With answers, show the answer dock and let a correct typed answer solve as usual.
+Without answers, hide the dock.
+
+The first load of a reached puzzle quest writes a random spread, with every piece loose at a random tray spot.
+Exactly one concurrent load writes it, like order builds.
+A drop inside the frame snaps to the nearest cell, without revealing whether that cell is correct.
+A filled cell swaps: its occupant moves to the dragged piece's previous spot.
+A drop outside the frame stays loose where it lands.
+
+Each drop conditionally writes against `puzzle.version`, retrying up to 3 times.
+Concurrent drops never lose a write; the last drop of the same piece wins.
+When every `spots[i]` equals `{cell: i}`, the same write path calls `solveCurrentQuest`.
+Use the usual hint penalties, finisher claim and live events. Retries never double-award points or bonuses.
+
+Puzzle mode, rows, columns, Replace and Remove lock once any team reaches the quest. `showFull` stays editable.
+Reached means the team has a progress entry for the quest, or the quest is its current quest.
+Removing an unreached puzzle quest's image also clears puzzle mode.
+Reject replacement with a non-image while puzzle mode is on.
+Quest copies include `puzzle` and share the image path, following the [copy rules](#authoring-and-live-edits).
+Team puzzle state never copies.
+
 ### Pace
 
 This is the sole definition used by the header, standings and admin views.
@@ -338,6 +371,21 @@ Players reveal hints by id, not by index, so edits and deletions cannot shift a 
 Construct a player view without deleting fields from the shared season object.
 The player finisher list exposes only team id, name, place and points, never claim times or other season fields.
 
+A puzzle quest's player view omits `assetPath` and exposes this shape:
+
+```ts
+puzzle: {rows, cols, aspect, pieces: {id, spot}[], fullUrl: string | null}
+```
+
+Order `pieces` by piece id, never by correct index. Set `fullUrl` only when `showFull` is true.
+Piece ids use the first 16 characters of this value:
+
+```text
+base64url(HMAC-SHA256(SESSION_SECRET, questId:assetPath:rowsxcols:index))
+```
+
+Ids stay stable per quest setup and reveal nothing about the correct index.
+
 Team join URLs are absolute, built from the request's `host` and `x-forwarded-proto`.
 They log teammates into that team's own `/`, never standings, board or admin JSON.
 
@@ -349,12 +397,13 @@ then switch back to SSE when connected. UI updates from teammates and live contr
 
 | Channel | Triggers and readers |
 | --- | --- |
-| `team:<id>` | Correct solve, finish, first hint reveal, team changes and structural edits affecting the team; its sessions and admin preview |
+| `team:<id>` | Correct solve, puzzle drop, finish, first hint reveal, team changes and structural edits; its sessions and admin preview |
 | `season:<id>` | Content, settings, timing, structure or teams change; solve, finish and reveal update admin stats and standings |
 | `board` | Running-season changes, timing changes, solves, finishes, reveals and team changes; public TV standings |
 
-`getGame`, `submitAnswer` and `revealHint` use authorized data. Successful game mutations publish to all
-three channels after writes. Wrong answers and repeated hint reveals are no-ops.
+`getGame`, `submitAnswer`, `revealHint` and puzzle operations use authorized data.
+Successful game mutations publish to all three channels after writes, except unsolved puzzle drops, which publish only `team:<id>`.
+Puzzle solves publish all three channels. Wrong answers and repeated hint reveals are no-ops.
 Channel access must not expose another team's private data or admin-only content.
 
 ## Assets, migration and deployment
@@ -374,6 +423,9 @@ Stream responses with `Accept-Ranges: bytes`; single byte ranges return 206 and
 Upload, replace and remove work before start and while live. Replace saves the new file before
 deleting the old one. Remove, Replace, Remove quest and Remove arc delete a file only when no
 quest in any season still references its path.
+
+Puzzle tiles are cut on demand into a private cache, never served by `/assets/`.
+Only the guarded puzzle route serves tiles. The original image stays in the assets folder under its random name.
 
 v3 seasons were imported once in October 2026. v3 is archived and its backup is under `/mnt/lvm/backups/the-game-v3/`.
 

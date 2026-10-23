@@ -4,6 +4,7 @@ import { hintPenalty } from "@/lib/domain/scoring"
 const minute = 60_000
 
 export const backwardsLogAsset = "/assets/3f9c1a7e-5b2d-4c8a-9e61-0d4f7b2a6c13.png"
+export const gatherThePiecesAsset = "/assets/7a91c4e2-6d35-4b80-a1f7-2c9e5d6b3084.png"
 
 function quest(
 	id: string,
@@ -152,12 +153,16 @@ const arcs: Arc[] = [
 				"gather-the-pieces",
 				"Gather the pieces",
 				15,
-				"Take the first letters of the answers to Fog horn morse, Keeper's ledger and Baker's riddle, in that order.",
-				["she"],
+				"The keeper's chart was torn into sixteen pieces. Put them back together to find the way forward.",
+				[],
 				[
 					["Fog horn morse gave you SOS.", 3],
 					["Three letters, one word.", 5],
 				],
+				{
+					assetPath: gatherThePiecesAsset,
+					puzzle: { rows: 4, cols: 4, showFull: false },
+				},
 			),
 			quest(
 				"the-vault",
@@ -381,8 +386,9 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 	const quests = new Map(arcs.flatMap((arc) => arc.quests.map((q) => [q.id, q] as const)))
 
 	const teams = teamSpecs.map(({ _id, name, order, solved, reveals }): FixtureTeam => {
+		const questOrder = [...order, ...finale]
 		const step = (now.getTime() - start) / (solved + 1)
-		const progress = order.slice(0, solved + 1).map((questId, index): TeamQuestProgress => {
+		const progress = questOrder.slice(0, solved + 1).map((questId, index): TeamQuestProgress => {
 			const { hints, points } = quests.get(questId) as Quest
 			const hintsRevealed = hints.slice(0, reveals[questId] ?? 0).map((hint, hintIndex) => ({
 				hintId: _id === "team-lagom" && questId === "backwards-log" ? "backwards-log-deleted-hint" : hint.id,
@@ -390,7 +396,38 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 				points: hint.points,
 				revealedAt: new Date(start + index * step + ((hintIndex + 1) * step) / 4),
 			}))
-			if (index === solved) return { questId, hintsRevealed, pointsEarned: 0 }
+			if (index === solved) {
+				return {
+					questId,
+					hintsRevealed,
+					pointsEarned: 0,
+					...(_id === "team-ravarna" && questId === "gather-the-pieces"
+						? {
+								puzzle: {
+									version: 8,
+									spots: [
+										{ cell: 1 },
+										{ cell: 0 },
+										{ cell: 2 },
+										{ cell: 3 },
+										{ cell: 4 },
+										{ cell: 5 },
+										{ cell: 6 },
+										{ cell: 7 },
+										{ x: 0.12, y: 0.16 },
+										{ x: 0.38, y: 0.72 },
+										{ x: 0.67, y: 0.2 },
+										{ x: 0.83, y: 0.46 },
+										{ x: 0.24, y: 0.87 },
+										{ x: 0.54, y: 0.4 },
+										{ x: 0.91, y: 0.82 },
+										{ x: 0.46, y: 0.08 },
+									],
+								},
+							}
+						: {}),
+				}
+			}
 			const pointsEarned = (points ?? 0) - hintPenalty(hintsRevealed)
 			return { questId, solvedAt: new Date(start + (index + 1) * step), hintsRevealed, pointsEarned }
 		})
@@ -413,7 +450,7 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 			name,
 			password: name.toLowerCase(),
 			seasonId: season._id,
-			questOrder: [...order, ...finale],
+			questOrder,
 			questIndex: solved,
 			score: progress.reduce((sum, entry) => sum + entry.pointsEarned, 0),
 			completed: false,

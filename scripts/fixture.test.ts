@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { rankTeams } from "@/lib/domain/game"
-import { Admin, Season, Team } from "@/lib/domain/schemas"
+import { Admin, Puzzle, PuzzleState, Season, Team } from "@/lib/domain/schemas"
 import { hintPenalty } from "@/lib/domain/scoring"
 import { buildFixture } from "./fixture"
 
@@ -101,6 +101,27 @@ describe("buildFixture", () => {
 		expect(Math.round(timeFraction * authored.length) - ninjas.questIndex).toBe(2)
 		expect(behindPercent).toBeGreaterThan(10)
 		expect(behindPercent).toBeLessThanOrEqual(20)
+	})
+
+	it("seeds Gather the pieces as a puzzle and Rävarna halfway through it", () => {
+		const puzzleQuest = quests.get("gather-the-pieces")
+		if (!puzzleQuest) throw new Error("fixture")
+		expect(Puzzle.parse(puzzleQuest.puzzle)).toEqual({ rows: 4, cols: 4, showFull: false })
+		expect(puzzleQuest.assetPath).toMatch(/^\/assets\/[0-9a-f-]{36}\.png$/)
+		expect(puzzleQuest.answers).toEqual([])
+		expect(puzzleQuest.points).toBe(15)
+		expect(puzzleQuest.hints.map(({ text, points }) => [text, points])).toEqual([
+			["Fog horn morse gave you SOS.", 3],
+			["Three letters, one word.", 5],
+		])
+
+		const ravarna = teams.find((team) => team.name === "Rävarna")
+		if (!ravarna) throw new Error("fixture")
+		const state = PuzzleState.parse(ravarna.progress.find((entry) => entry.questId === puzzleQuest.id)?.puzzle)
+		expect(ravarna.questOrder[ravarna.questIndex]).toBe("gather-the-pieces")
+		expect(state.spots.filter((spot) => "cell" in spot)).toHaveLength(8)
+		expect(state.spots.filter((spot, index) => "cell" in spot && spot.cell !== index)).toHaveLength(2)
+		expect(state.spots.filter((spot) => !("cell" in spot))).toHaveLength(8)
 	})
 
 	it("describes Backwards log as the G2 mock does", () => {

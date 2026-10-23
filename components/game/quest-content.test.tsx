@@ -25,6 +25,24 @@ const strip: StripEntry[] = [
 const quest = { displayTitle: "The keeper's last log", assetPath: null, content: "Read the log." }
 
 describe("QuestContent", () => {
+	it("keeps quest prose separated from the puzzle helper like the replaced File slot", () => {
+		const html = renderToStaticMarkup(
+			<QuestContent
+				quest={{
+					...quest,
+					id: "puzzle",
+					puzzle: {
+						rows: 2,
+						cols: 2,
+						aspect: 2,
+						fullUrl: null,
+						pieces: [],
+					},
+				}}
+			/>,
+		)
+		expect(html).toContain('class="mt-4 break-words')
+	})
 	it.each([false, true])("omits empty and whitespace titles in player and admin preview=%s", (preview) => {
 		for (const displayTitle of ["", " \t\n"]) {
 			const html = renderToStaticMarkup(

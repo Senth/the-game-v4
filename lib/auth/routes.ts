@@ -10,7 +10,7 @@ const publicPaths = [
 	"/icon.svg",
 	"/favicon.ico",
 ]
-const publicPrefixes = ["/assets/", "/_next/", "/join/"]
+const publicPrefixes = ["/assets/", "/_next/", "/join/", "/api/puzzle/"]
 
 const isAdminPath = (pathname: string) => pathname === "/admin" || pathname.startsWith("/admin/")
 

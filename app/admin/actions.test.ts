@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { requireAdmin } from "@/lib/auth/guards"
 import { listSeasons } from "@/lib/db/seasons"
 import { useTestDb } from "@/test/db"
-import { createSeasonAction } from "./actions"
+import { createSeasonAction, getPuzzlePreviewAssets } from "./actions"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 
@@ -13,6 +13,19 @@ beforeEach(() => {
 })
 
 describe("createSeasonAction", () => {
+	it("guards puzzle draft metadata before validating or reading assets", async () => {
+		vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
+		await expect(getPuzzlePreviewAssets("quest", "/assets/missing.png", { rows: 99 })).rejects.toThrow("Unauthorized")
+	})
+	it.each([
+		{ rows: 8, cols: 4 },
+		{ rows: 4, cols: 1 },
+		{ rows: 2.5, cols: 4 },
+		{ rows: 4, cols: Number.NaN },
+	])("returns no preview assets for invalid dimensions %j without reading the missing image", async (value) => {
+		await expect(getPuzzlePreviewAssets("quest", "/assets/missing.png", value)).resolves.toBeNull()
+		expect(requireAdmin).toHaveBeenCalledOnce()
+	})
 	it("checks admin access before reading or validating the title", async () => {
 		vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
 		const formData = new FormData()

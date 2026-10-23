@@ -1,6 +1,7 @@
 import { Children, type EffectCallback, isValidElement, type ReactElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { getPuzzlePreviewAssets } from "@/app/admin/actions"
 import { patchSeasonList, removeLastFinisherBonus, saveSeasonField } from "@/app/admin/autosave-actions"
 import TeamPage from "@/app/admin/seasons/[seasonId]/teams/[teamId]/page"
 import TeamsPage from "@/app/admin/seasons/[seasonId]/teams/page"
@@ -26,6 +27,7 @@ import { AutosaveHeader, SaveStatus } from "./save-status"
 import { SeasonPreview } from "./season-preview"
 import { SeasonTree } from "./season-tree"
 import { useMoveQueue } from "./sortable/use-move-queue"
+import { usePuzzlePreviewAssets } from "./use-puzzle-preview-assets"
 
 type Scope = {
 	values: unknown[]
@@ -94,6 +96,7 @@ vi.mock("@/app/admin/tree-actions", () => ({
 	moveQuest: vi.fn(),
 }))
 vi.mock("@/lib/events/live-connection", () => ({ createLiveConnection: vi.fn(() => hooks.connection) }))
+vi.mock("@/app/admin/actions", () => ({ getPuzzlePreviewAssets: vi.fn() }))
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn() }))
 vi.mock("@/lib/db/teams", () => ({ listSeasonTeams: vi.fn() }))
@@ -522,6 +525,61 @@ it("refreshes on season events and stops the live connection on unmount", async 
 	expect(hooks.connection.setHidden).toHaveBeenCalledWith(false)
 	unmount(state)
 	expect(hooks.connection.stop).toHaveBeenCalledOnce()
+})
+
+it("subscribes to the open team's ordinary puzzle drops on phone and desktop, switching on navigation", async () => {
+	hooks.segments = ["teams", "team-ravarna"]
+	const { state } = provider()
+	const options = vi.mocked(createLiveConnection).mock.calls[0]?.[0]
+	expect(options?.url).toBe("/api/events?channel=season%3Aseason-1&channel=team%3Ateam-ravarna")
+	options?.onData(await options.fetcher())
+	expect(hooks.refresh).toHaveBeenCalledOnce()
+	hooks.segments = ["teams", "team-ninjas"]
+	provider(state)
+	expect(hooks.connection.stop).toHaveBeenCalledOnce()
+	expect(vi.mocked(createLiveConnection).mock.lastCall?.[0].url).toBe(
+		"/api/events?channel=season%3Aseason-1&channel=team%3Ateam-ninjas",
+	)
+	hooks.segments = ["quests", "gather-the-pieces"]
+	provider(state)
+	expect(hooks.connection.stop).toHaveBeenCalledTimes(2)
+	expect(vi.mocked(createLiveConnection).mock.lastCall?.[0].url).toBe("/api/events?channel=season%3Aseason-1")
+	unmount(state)
+})
+
+it.each([
+	{ rows: 8, cols: 4 },
+	{ rows: 4, cols: 1 },
+	{ rows: 2.5, cols: 4 },
+	{ rows: 4, cols: Number.NaN },
+])("skips invalid puzzle preview requests for %j and resumes after correction", async (dimensions) => {
+	const state = scope()
+	const quest = { id: "quest", assetPath: "/assets/chart.png", puzzle: { ...dimensions, showFull: false } }
+	const preview = () => render(state, () => usePuzzlePreviewAssets(quest))
+	const assets = { aspect: 2, ids: ["a", "b", "c", "d"], fullUrl: "/api/puzzle/quest/full", tileQuery: "" }
+	vi.mocked(getPuzzlePreviewAssets).mockResolvedValue(assets)
+	expect(preview()).toBeUndefined()
+	expect(getPuzzlePreviewAssets).not.toHaveBeenCalled()
+	quest.puzzle = { rows: 2, cols: 2, showFull: false }
+	preview()
+	await vi.advanceTimersByTimeAsync(0)
+	expect(preview()).toEqual(assets)
+	expect(getPuzzlePreviewAssets).toHaveBeenCalledOnce()
+	quest.puzzle = { ...dimensions, showFull: false }
+	expect(preview()).toBeUndefined()
+	expect(getPuzzlePreviewAssets).toHaveBeenCalledOnce()
+	unmount(state)
+})
+
+it("leaves the puzzle preview empty when the server rejects its assets", async () => {
+	const state = scope()
+	const quest = { id: "quest", assetPath: "/assets/chart.png", puzzle: { rows: 2, cols: 2, showFull: false } }
+	vi.mocked(getPuzzlePreviewAssets).mockResolvedValue(null)
+	const preview = () => render(state, () => usePuzzlePreviewAssets(quest))
+	preview()
+	await vi.advanceTimersByTimeAsync(0)
+	expect(preview()).toBeUndefined()
+	unmount(state)
 })
 
 it("adopts only idle unfocused field values, saves edits and flushes pending work on unmount", async () => {

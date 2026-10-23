@@ -2,7 +2,14 @@
 
 import { teamJoinQr } from "@/components/team-qr"
 import { requireTeam } from "@/lib/auth/guards"
-import { loadGame, revealHint as revealTeamHint, submitAnswer as submitTeamAnswer } from "@/lib/game/game"
+import type { Spot } from "@/lib/domain/schemas"
+import {
+	dropPuzzlePiece as dropTeamPuzzlePiece,
+	getSolvedPuzzle as getTeamSolvedPuzzle,
+	loadGame,
+	revealHint as revealTeamHint,
+	submitAnswer as submitTeamAnswer,
+} from "@/lib/game/game"
 
 export async function getGame() {
 	return loadGame(await requireTeam())
@@ -18,4 +25,12 @@ export async function revealHint(hintId: string) {
 
 export async function getJoinQr() {
 	return teamJoinQr(await requireTeam())
+}
+
+export async function dropPuzzlePiece(questId: string, pieceId: string, target: Spot) {
+	return dropTeamPuzzlePiece(await requireTeam(), questId, pieceId, target)
+}
+
+export async function getSolvedPuzzle(questId: string) {
+	return getTeamSolvedPuzzle(await requireTeam(), questId)
 }

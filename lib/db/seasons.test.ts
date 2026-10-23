@@ -30,6 +30,7 @@ function quest(id: string): Quest {
 		internalTitle: id,
 		content: "",
 		assetPath: null,
+		puzzle: null,
 		answers: [],
 		points: null,
 		adminNotes: "",

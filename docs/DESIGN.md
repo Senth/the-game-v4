@@ -126,6 +126,48 @@ The quest asset sits where the image sits and follows final mock F
 - Any other file shows a full-width bordered `↓ Download <EXT>` button, or "Download file" for `.bin`.
 - The team preview keeps all of these inert.
 
+### Puzzle board
+
+Final mocks:
+
+- Frame and tray, G: [phone](https://artifacts.senth.org/g-frame-tray-phone-f7a7f5.png),
+  [desktop](https://artifacts.senth.org/g-frame-tray-desktop-1b227a.png).
+- Full-picture thumbnail, B: [phone](https://artifacts.senth.org/b-thumbnail-phone-b3b4af.png).
+  Keep only its thumbnail row.
+- Completion, E: [phone](https://artifacts.senth.org/e-solved-phone-15ec47.png). Apply to G's frame; the tray stays empty.
+
+Surface brief: job is rebuilding the picture with teammates on a phone;
+primary action is dragging a piece into the frame.
+Read first the frame and placed pieces, second loose tray pieces, third quest text and Intel.
+Must not look like swap buttons, a dashboard, or a game with scores, timers or move counters.
+Follow [PROJECT.md's puzzle rules](PROJECT.md#puzzle-quests) for answer-dock visibility and drop behavior.
+Quiet the tray and cell lines; sharpen the lifted piece and dashed target cell.
+
+- Replace the File slot above quest text with one play area: frame above tray, separated by `gap-2`.
+- Frame uses `border-4 border-z2 bg-field rounded-md`, an inset shadow, faint `border-z1` cell lines
+  and the image aspect ratio.
+- Tray uses `bg-z1/50 rounded-md` and matches the frame's height.
+  Pieces are cell-sized and axis-aligned, with a small drop shadow.
+- Below, use `font-cond text-xs text-muted`: "Drag pieces into the frame. They snap to the nearest spot."
+- When the full picture is available, show a 96 px thumbnail above the board with `text-link` "Full picture ›".
+- Tapping opens a native `<dialog>` containing the full image, title "Full picture" and quiet "Close".
+- On desktop, scale the play area to fit frame and tray within the viewport height below the header.
+- Keep the answer dock reachable when present.
+
+Use pointer events with `touch-action: none` on the play area only. Outside it, the page still scrolls. Support mouse too.
+Lifting adds an accent ring, slight scale and large shadow.
+Inside the frame, show the target cell with a dashed accent outline and `bg-accent/15`.
+Apply drops locally immediately, then call `dropPuzzlePiece`. Live refetches reconcile; failed writes snap back.
+There is no keyboard path for moving pieces.
+
+On solve, close gaps and add `ring-2 ring-pace-ok`, with `pace-ok` copy `Puzzle complete · +<N>p`.
+Hold for 1.5 seconds, then show the next quest.
+Phones learning of a solve through refetch call `getSolvedPuzzle` and show the same completion state.
+With `prefers-reduced-motion`, omit scale and slide animations.
+Quest and team previews render the real board, inert.
+Quest previews use a deterministic spread; team previews show the team's live board.
+`components/game/puzzle-board.tsx` owns this board, composed by the shared quest content and preview components.
+
 ### Team menu and invite
 
 Final mocks: [phone](https://artifacts.senth.org/final-kebab-team-heading-phone-01c18b.png),
@@ -382,6 +424,35 @@ H1/H2 supersede M2's always-open hint rows, not its field order or Revealed by c
   - `Not saved, retry` (existing generic failure)
 - On desktop, titles share a row, and so do Answers and Points, as D1.
 
+### Puzzle section
+
+Final mock F: [phone](https://artifacts.senth.org/f-editor-phone-6e0687.png),
+[desktop](https://artifacts.senth.org/f-editor-desktop-ea3fff.png).
+
+Surface brief: job is turning an uploaded image into a puzzle in seconds, mostly on a phone.
+Primary action is the "Puzzle mode" switch. Read first the switch, second Rows and Columns, third "Show full picture".
+Must not look like another upload section or settings page. Remove nothing from the File row.
+Quiet the section when unused; sharpen only the locked line when applicable.
+Use [PROJECT.md's puzzle rules](PROJECT.md#puzzle-quests) for eligibility, locks and answer requirements.
+
+Place a "Puzzle" field after Points and before Admin notes, using M2's field style.
+Without an image, show only `font-cond text-xs text-muted` "Upload an image to enable puzzle mode."
+With an image, use a `bg-z1 rounded-md p-3 space-y-3` block:
+
+- "Puzzle mode" switch, with helper "Players get shuffled pieces, never the picture."
+- While on, show Rows and Columns number inputs, using Length's width and PROJECT.md's dimension bounds.
+- Out-of-range input shows `warn` "Use 2 to 7."
+- "Show full picture" switch, with helper "Players see the picture above the pieces."
+
+Disable and mute locked controls, including Replace and Remove; keep Show full picture editable.
+Show a muted line: `Locked: <N> teams have reached this puzzle.` or "Locked: 1 team has reached this puzzle."
+With puzzle mode on, Answers helper reads "optional, finishing the puzzle solves it".
+Use ordinary field autosave and the header's Saved state.
+Missing-field warnings follow [PROJECT.md's completeness rule](PROJECT.md#nested-types).
+Puzzle quests do not show "Needs an answer".
+`components/admin/puzzle-settings.tsx` owns the section, composed by `components/admin/quest-editor.tsx`
+with the shared autosave controls.
+
 ### Live draft and quest dialogs
 
 Use the [final structural-edit mocks](#live-structural-edits), panels 2 through 4, on phone and desktop.
@@ -585,7 +656,7 @@ List quests in authored arc and quest order, including hidden drafts.
 Each row shows the [tree quest label](#missing-field-warnings) and its missing fields in `warn`.
 Display title never counts as missing. Content counts as missing only without content or an asset.
 Missing-field text may wrap. Show at most five quest rows, then muted `and <K> more` for the remainder.
-Body: "Teams get them as they are. A quest without answers can't be solved."
+Body: "Teams get them as they are. A quest without answers or a puzzle can't be solved."
 Buttons: "Cancel" and accent "Start anyway". Cancel leaves the season unstarted; Start anyway starts it.
 Complete seasons start in one click without this dialog. Scheduling a future start shows no warning.
 

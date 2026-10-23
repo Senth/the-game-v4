@@ -2,10 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, expect, it, vi } from "vitest"
 import { useDraftHints, useDraftValue } from "./autosave-provider"
 import { QuestPreview } from "./quest-preview"
+import { usePuzzlePreviewAssets } from "./use-puzzle-preview-assets"
 import { useSeasonClock } from "./use-season-clock"
 
 vi.mock("./autosave-provider", () => ({ useDraftValue: vi.fn(), useDraftHints: vi.fn() }))
 vi.mock("./use-season-clock", () => ({ useSeasonClock: vi.fn() }))
+vi.mock("./use-puzzle-preview-assets", () => ({ usePuzzlePreviewAssets: vi.fn() }))
 
 const now = Date.parse("2026-10-15T18:00:00Z")
 const quest = {
@@ -32,6 +34,26 @@ beforeEach(() => {
 	vi.mocked(useDraftValue).mockImplementation((_target, value) => value)
 	vi.mocked(useDraftHints).mockImplementation((_target, value) => value)
 	vi.mocked(useSeasonClock).mockReturnValue(now)
+	vi.mocked(usePuzzlePreviewAssets).mockReturnValue(undefined)
+})
+
+it("uses unsaved puzzle dimensions and a deterministic inert spread without an answer dock", () => {
+	vi.mocked(useDraftValue).mockImplementation((target, value) =>
+		target.field === "puzzle" ? { rows: 2, cols: 2, showFull: false } : target.field === "answers" ? [] : value,
+	)
+	vi.mocked(usePuzzlePreviewAssets).mockReturnValue({
+		ids: ["d", "c", "b", "a"],
+		aspect: 2,
+		fullUrl: "/api/puzzle/quest/full",
+	})
+	const view = () =>
+		renderToStaticMarkup(<QuestPreview {...props} quest={{ ...quest, assetPath: "/assets/chart.png" }} />)
+	const html = view()
+	expect(html).toBe(view())
+	expect(html).toContain('aria-label="Puzzle board" inert=""')
+	expect(html).toContain("/api/puzzle/quest/a")
+	expect(html).not.toContain("/assets/chart.png")
+	expect(html).not.toContain('aria-label="Your answer"')
 })
 
 it("renders live drafts through the real player components without leaking admin fields or hidden hints", () => {

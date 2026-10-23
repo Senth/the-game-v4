@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, useSelectedLayoutSegments } from "next/navigation"
 import { createContext, type ReactNode, useContext, useEffect, useEffectEvent, useState } from "react"
 import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
 import { seasonStatus } from "@/lib/domain/admin-seasons"
@@ -49,6 +49,8 @@ export function AutosaveProvider({
 	children: ReactNode
 }) {
 	const router = useRouter()
+	const [segment, selectedId] = useSelectedLayoutSegments()
+	const teamId = segment === "teams" ? selectedId : undefined
 	const refresh = useEffectEvent(() => router.refresh())
 	const currentNow = useSeasonClock(now, start, end)
 	const initialStatus = seasonStatus({ start, end }, new Date(now))
@@ -131,6 +133,7 @@ export function AutosaveProvider({
 
 	useEffect(() => {
 		const query = new URLSearchParams({ channel: `season:${seasonId}` })
+		if (teamId) query.append("channel", `team:${teamId}`)
 		const connection = createLiveConnection({
 			url: `/api/events?${query}`,
 			fetcher: async () => null,
@@ -145,7 +148,7 @@ export function AutosaveProvider({
 			document.removeEventListener("visibilitychange", onVisibilityChange)
 			connection.stop()
 		}
-	}, [seasonId])
+	}, [seasonId, teamId])
 
 	return <AutosaveContext value={{ seasonId, status, ...registry }}>{children}</AutosaveContext>
 }

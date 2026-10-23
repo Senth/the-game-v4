@@ -4,6 +4,7 @@ import {
 	CopyTargetStartedError,
 	FinisherBonusClaimedError,
 	MoveConflictError,
+	PuzzleEditError,
 	QuestNotReadyError,
 	RegistrationConflictError,
 	SeasonEndedError,
@@ -43,6 +44,7 @@ export function actionFailure(error: unknown, now: Date): Extract<ActionResult, 
 	if (error instanceof z.ZodError) return { ok: false, error: "Invalid value." }
 	if (
 		error instanceof NotFoundError ||
+		error instanceof PuzzleEditError ||
 		error instanceof FinisherBonusClaimedError ||
 		error instanceof CopyTargetStartedError ||
 		error instanceof RegistrationConflictError ||

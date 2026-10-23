@@ -14,6 +14,30 @@ export const Hint = z.object({
 })
 export type Hint = z.infer<typeof Hint>
 
+export const Puzzle = z.object({
+	rows: z.number().int().min(2).max(7).default(4),
+	cols: z.number().int().min(2).max(7).default(4),
+	showFull: z.boolean().default(false),
+})
+export type Puzzle = z.infer<typeof Puzzle>
+
+export const Spot = z.union([
+	z.strictObject({ cell: z.number().int().min(0).max(48) }),
+	z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
+])
+export type Spot = z.infer<typeof Spot>
+
+export const PuzzleState = z
+	.object({
+		version: z.number().int().min(0),
+		spots: z.array(Spot).min(4).max(49),
+	})
+	.refine(({ spots }) => {
+		const cells = spots.flatMap((spot) => ("cell" in spot ? [spot.cell] : []))
+		return cells.every((cell) => cell < spots.length) && new Set(cells).size === cells.length
+	}, "Puzzle cells must be unique and within the board")
+export type PuzzleState = z.infer<typeof PuzzleState>
+
 export const Quest = z.object({
 	id,
 	hidden: z.boolean().optional(),
@@ -21,6 +45,7 @@ export const Quest = z.object({
 	internalTitle: z.string(),
 	content: z.string(),
 	assetPath: z.string().nullable(),
+	puzzle: Puzzle.nullable().default(null).optional(),
 	answers: z.array(z.string()),
 	points: z.number().int().min(0).max(10000).nullable(),
 	adminNotes: z.string(),
@@ -84,6 +109,7 @@ export const TeamQuestProgress = z.object({
 	solvedAt: z.date().optional(),
 	hintsRevealed: z.array(RevealedHint),
 	pointsEarned: z.number(),
+	puzzle: PuzzleState.optional(),
 })
 export type TeamQuestProgress = z.infer<typeof TeamQuestProgress>
 

@@ -3,9 +3,11 @@ import { beforeEach, expect, it, vi } from "vitest"
 import { playerGame } from "@/lib/domain/player-game"
 import { buildFixture } from "@/scripts/fixture"
 import { TeamPreview } from "./team-preview"
+import { usePuzzlePreviewAssets } from "./use-puzzle-preview-assets"
 import { useSeasonClock } from "./use-season-clock"
 
 vi.mock("./use-season-clock", () => ({ useSeasonClock: vi.fn() }))
+vi.mock("./use-puzzle-preview-assets", () => ({ usePuzzlePreviewAssets: vi.fn() }))
 vi.mock("@/app/actions", () => {
 	throw new Error("TeamPreview must not import server actions")
 })
@@ -16,7 +18,26 @@ const team = teams.find((team) => team.name === "Ninjas")
 if (!team) throw new Error("Missing Ninjas fixture")
 const props = { season, team, teams, now }
 
-beforeEach(() => vi.mocked(useSeasonClock).mockReturnValue(now))
+beforeEach(() => {
+	vi.mocked(useSeasonClock).mockReturnValue(now)
+	vi.mocked(usePuzzlePreviewAssets).mockReturnValue(undefined)
+})
+
+it("renders the team's stored puzzle cells and loose pieces through the inert real board", () => {
+	const puzzleTeam = teams.find((team) => team.name === "Rävarna")
+	if (!puzzleTeam) throw new Error("Missing Rävarna fixture")
+	vi.mocked(usePuzzlePreviewAssets).mockReturnValue({
+		ids: Array.from({ length: 16 }, (_, index) => `opaque-${index}`),
+		aspect: 2,
+		fullUrl: "/api/puzzle/gather-pieces/full",
+	})
+	const html = renderToStaticMarkup(<TeamPreview {...props} team={puzzleTeam} />)
+	expect(html).toContain('aria-label="Puzzle board" inert=""')
+	expect(html.match(/data-piece=/g)).toHaveLength(16)
+	expect(html).toContain("left:0%;top:0%;width:25%;height:25%")
+	expect(html).not.toContain('aria-label="Your answer"')
+	expect(html).not.toContain("Full picture ›")
+})
 
 it("renders the team's real running screen with revealed hints, pace and inert standings", () => {
 	const before = JSON.stringify(props)

@@ -31,6 +31,8 @@ vi.mock("@/lib/auth/guards", async () => {
 	return { requireTeam: async () => getTeam(session.teamId) }
 })
 
+vi.mock("@/lib/assets/puzzle-tiles", () => ({ getPuzzleTiles: vi.fn(async () => ({ aspect: 1.5 })) }))
+
 vi.mock("@/lib/db/teams", async (importOriginal) => {
 	const original = await importOriginal<typeof import("@/lib/db/teams")>()
 	return {

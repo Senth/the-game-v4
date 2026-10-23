@@ -40,6 +40,36 @@ describe("Quest hidden flag", () => {
 describe("missingForGame", () => {
 	const complete = { displayTitle: "Title", content: "Content", assetPath: null, answers: ["answer"], points: 10 }
 
+	it.each(["jpg", "png", "webp", "gif", "svg"])("accepts an image puzzle with optional answers: %s", (extension) => {
+		for (const answers of [[], ["answer"]]) {
+			expect(
+				missingForGame({
+					...complete,
+					content: "",
+					assetPath: `/assets/clue.${extension}`,
+					answers,
+					puzzle: { rows: 4, cols: 4, showFull: false },
+					points: 0,
+				}),
+			).toEqual([])
+		}
+	})
+
+	it.each([null, "", " ", "/assets/clue.pdf", "/assets/clue.file.png"])(
+		"requires an image for a puzzle: %j",
+		(assetPath) => {
+			expect(
+				missingForGame({
+					...complete,
+					assetPath,
+					answers: [],
+					points: null,
+					puzzle: { rows: 4, cols: 4, showFull: false },
+				}),
+			).toEqual(["an image", "points"])
+		},
+	)
+
 	it("lists missing fields in display order without changing inputs", () => {
 		const quest = newQuest()
 		const original = structuredClone(quest)

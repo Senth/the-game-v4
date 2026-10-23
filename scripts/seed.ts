@@ -8,7 +8,7 @@ import { closeDb, getDb } from "@/lib/db/client"
 import { collectionsOf } from "@/lib/db/collections"
 import { ensureIndexes } from "@/lib/db/indexes"
 import { allocPorts, type DevStack, readStack, releasePorts } from "./dev-ports"
-import { backwardsLogAsset, buildFixture } from "./fixture"
+import { backwardsLogAsset, buildFixture, gatherThePiecesAsset } from "./fixture"
 import { mongoUri, startDevMongo } from "./mongo-dev"
 
 const localHosts = ["localhost", "127.0.0.1"]
@@ -45,6 +45,7 @@ export async function seed(db: Db, now: Date): Promise<string> {
 	const directory = assetsDir()
 	await mkdir(directory, { recursive: true })
 	await copyFile("scripts/fixture/backwards-log.png", path.join(directory, path.basename(backwardsLogAsset)))
+	await copyFile("scripts/fixture/keepers-chart.png", path.join(directory, path.basename(gatherThePiecesAsset)))
 
 	return `Seeded "${fixture.season.title}" into ${db.databaseName}: 1 season, ${teams.length} teams, ${admins.length} admin`
 }

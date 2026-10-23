@@ -15,6 +15,7 @@ import { AutosaveTextField } from "./autosave-text-field"
 import { AutosaveTextarea } from "./autosave-textarea"
 import { ConfirmDialog, primaryClass } from "./confirm-dialog"
 import { CopyDialog } from "./copy-dialog"
+import { PuzzleSettings } from "./puzzle-settings"
 import { QuestAsset, type QuestAssetHandle } from "./quest-asset"
 import { RemovalImpact } from "./removal-impact"
 import { useSeasonClock } from "./use-season-clock"
@@ -26,6 +27,7 @@ export function QuestEditor({
 	arcTitle,
 	hintCount,
 	quest,
+	reachedTeams = 0,
 	start,
 	end,
 	now,
@@ -37,6 +39,7 @@ export function QuestEditor({
 	arcTitle: string
 	hintCount: number
 	quest: Omit<Quest, "hints">
+	reachedTeams?: number
 	start: Date | null
 	end: Date | null
 	now: number
@@ -63,6 +66,7 @@ export function QuestEditor({
 		{ arcId, questId: quest.id, field: "assetPath" },
 		quest.assetPath,
 	)
+	const lockedPuzzle = !!quest.puzzle && reachedTeams > 0
 	const asset = useRef<QuestAssetHandle>(null)
 	const dragDepth = useRef(0)
 	const impactRequest = useRef(0)
@@ -193,6 +197,7 @@ export function QuestEditor({
 			onDragEnter={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return
 				event.preventDefault()
+				if (lockedPuzzle) return
 				dragDepth.current++
 				setDragging(true)
 			}}
@@ -202,13 +207,14 @@ export function QuestEditor({
 			onDragOver={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return
 				event.preventDefault()
-				event.dataTransfer.dropEffect = "copy"
+				event.dataTransfer.dropEffect = lockedPuzzle ? "none" : "copy"
 			}}
 			onDrop={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return
 				event.preventDefault()
 				dragDepth.current = 0
 				setDragging(false)
+				if (lockedPuzzle) return
 				const files = event.dataTransfer.files
 				if (files.length > 1) asset.current?.setError("Drop one file at a time.")
 				else if (files[0]) void asset.current?.upload(files[0])
@@ -275,12 +281,26 @@ export function QuestEditor({
 					arcId={arcId}
 					questId={quest.id}
 					assetPath={assetPath}
+					locked={lockedPuzzle}
 					onChange={setAssetPath}
 				/>
 				<div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
-					<AnswerChips arcId={arcId} questId={quest.id} answers={quest.answers} missing="Needs an answer" />
+					<AnswerChips
+						arcId={arcId}
+						questId={quest.id}
+						answers={quest.answers}
+						missing={quest.puzzle ? undefined : "Needs an answer"}
+						helper={quest.puzzle ? "optional, finishing the puzzle solves it" : undefined}
+					/>
 					<AutosavePointsField arcId={arcId} questId={quest.id} serverValue={quest.points} missing="Needs points" />
 				</div>
+				<PuzzleSettings
+					arcId={arcId}
+					questId={quest.id}
+					assetPath={assetPath}
+					puzzle={quest.puzzle}
+					reachedTeams={reachedTeams}
+				/>
 				<AutosaveTextarea
 					label={
 						<>

@@ -4,6 +4,7 @@ import { GameView } from "@/components/game/game-view"
 import { previewGame } from "@/lib/domain/preview"
 import type { Quest, Season } from "@/lib/domain/schemas"
 import { useDraftHints, useDraftValue } from "./autosave-provider"
+import { usePuzzlePreviewAssets } from "./use-puzzle-preview-assets"
 import { useSeasonClock } from "./use-season-clock"
 
 export function QuestPreview({
@@ -25,8 +26,16 @@ export function QuestPreview({
 	const points = useDraftValue({ ...target, field: "points" }, quest.points)
 	const assetPath = useDraftValue({ ...target, field: "assetPath" }, quest.assetPath)
 	const hints = useDraftHints({ ...target, field: "hints" }, quest.hints)
+	const puzzle = useDraftValue({ ...target, field: "puzzle" }, quest.puzzle)
+	const answers = useDraftValue({ ...target, field: "answers" }, quest.answers)
+	const assets = usePuzzlePreviewAssets({ ...quest, assetPath, puzzle })
 	const clock = useSeasonClock(now, season.start, season.end)
-	const game = previewGame(season, { ...quest, displayTitle, content, points, assetPath, hints }, new Date(clock))
+	const game = previewGame(
+		season,
+		{ ...quest, displayTitle, content, points, assetPath, hints, puzzle, answers },
+		new Date(clock),
+		assets,
+	)
 	const view = <GameView {...game} />
 	if (!frame) return view
 	return (

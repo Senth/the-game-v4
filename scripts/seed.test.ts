@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it, vi } from "vitest"
 import { hashPassword, verifyPassword } from "@/lib/auth/password"
 import { getDb } from "@/lib/db/client"
 import { useTestDb } from "@/test/db"
-import { backwardsLogAsset } from "./fixture"
+import { backwardsLogAsset, gatherThePiecesAsset } from "./fixture"
 import { assertSeedTarget, isEmpty, seed, seedUri } from "./seed"
 
 vi.mock("@/lib/auth/password", async (importOriginal) => {
@@ -37,6 +37,7 @@ describe("seed", () => {
 		const ninjas = await db.collection("teams").findOne({ name: "Ninjas" })
 		expect(await verifyPassword("ninjas", ninjas?.passwordHash)).toBe(true)
 		await expect(access(path.join(assetsDir, path.basename(backwardsLogAsset)))).resolves.toBeUndefined()
+		await expect(access(path.join(assetsDir, path.basename(gatherThePiecesAsset)))).resolves.toBeUndefined()
 	}, 15_000)
 })
 

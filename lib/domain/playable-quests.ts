@@ -1,13 +1,20 @@
+import { assetKind } from "./assets"
 import type { Quest, Season } from "./schemas"
 
 export function playableArcs<T extends { quests: { id: string; hidden?: boolean }[] }>(season: { arcs: T[] }): T[] {
 	return season.arcs.map((arc) => ({ ...arc, quests: arc.quests.filter((quest) => !quest.hidden) }))
 }
 
-export function missingForGame(quest: Pick<Quest, "content" | "assetPath" | "answers" | "points">): string[] {
+export function missingForGame(
+	quest: Pick<Quest, "content" | "assetPath" | "answers" | "points" | "puzzle">,
+): string[] {
 	const missing: string[] = []
-	if (!quest.content.trim() && !quest.assetPath?.trim()) missing.push("content")
-	if (quest.answers.length === 0) missing.push("answers")
+	if (quest.puzzle) {
+		if (!quest.assetPath || assetKind(quest.assetPath) !== "image") missing.push("an image")
+	} else {
+		if (!quest.content.trim() && !quest.assetPath?.trim()) missing.push("content")
+		if (quest.answers.length === 0) missing.push("answers")
+	}
 	if (quest.points === null) missing.push("points")
 	return missing
 }
