@@ -401,6 +401,8 @@ then switch back to SSE when connected. UI updates from teammates and live contr
 | `season:<id>` | Content, settings, timing, structure or teams change; solve, finish and reveal update admin stats and standings |
 | `board` | Running-season changes, timing changes, solves, finishes, reveals and team changes; public TV standings |
 
+A session whose team or admin no longer exists reads only `board`.
+
 `getGame`, `submitAnswer`, `revealHint` and puzzle operations use authorized data.
 Successful game mutations publish to all three channels after writes, except unsolved puzzle drops, which publish only `team:<id>`.
 Puzzle solves publish all three channels. Wrong answers and repeated hint reveals are no-ops.

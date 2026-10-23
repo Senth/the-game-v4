@@ -2,6 +2,7 @@ export type LiveSource = Pick<EventSource, "readyState" | "close" | "onopen" | "
 
 const CLOSED = 2
 const retryMs = 5000
+const fetchTimeoutMs = 10_000
 
 export function createLiveConnection<T>({
 	url,
@@ -17,6 +18,7 @@ export function createLiveConnection<T>({
 	let source: LiveSource | null = null
 	let pollTimer: ReturnType<typeof setInterval> | undefined
 	let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+	let fetchTimer: ReturnType<typeof setTimeout> | undefined
 	let disconnected = false
 	let hidden = false
 	let stopped = false
@@ -29,14 +31,27 @@ export function createLiveConnection<T>({
 			return
 		}
 		inFlight = true
+		let timedOut = false
 		try {
-			const data = await fetcher()
-			if (!stopped) onData(data)
-		} catch {}
-		inFlight = false
-		if (queued && !stopped) {
-			queued = false
-			void refetch()
+			const data = await Promise.race([
+				fetcher(),
+				new Promise<never>((_, reject) => {
+					fetchTimer = setTimeout(() => {
+						timedOut = true
+						reject()
+					}, fetchTimeoutMs)
+				}),
+			])
+			if (!stopped && !timedOut) onData(data)
+		} catch {
+		} finally {
+			clearTimeout(fetchTimer)
+			fetchTimer = undefined
+			inFlight = false
+			if (queued && !stopped) {
+				queued = false
+				void refetch()
+			}
 		}
 	}
 
@@ -74,6 +89,8 @@ export function createLiveConnection<T>({
 			source = null
 			stopPolling()
 			clearTimeout(reconnectTimer)
+			clearTimeout(fetchTimer)
+			fetchTimer = undefined
 		},
 		setHidden(value: boolean) {
 			hidden = value

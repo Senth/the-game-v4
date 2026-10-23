@@ -111,11 +111,51 @@ describe("createLiveConnection", () => {
 		expect(onData.mock.calls).toEqual([[1], [2]])
 	})
 
+	it("runs a queued refetch after a fetch timeout", async () => {
+		const slow = deferred<number>()
+		const fetcher = vi.fn().mockReturnValueOnce(slow.promise).mockResolvedValueOnce(2)
+		const { source, onData } = setup(fetcher)
+		source().open()
+		source().onmessage?.()
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect(fetcher).toHaveBeenCalledTimes(2)
+		expect(onData.mock.calls).toEqual([[2]])
+	})
+
+	it("drops a response that arrives after a fetch timeout", async () => {
+		const slow = deferred<number>()
+		const { source, onData } = setup(vi.fn(() => slow.promise))
+		source().open()
+		await vi.advanceTimersByTimeAsync(10_000)
+		slow.resolve(1)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(onData).not.toHaveBeenCalled()
+	})
+
+	it("clears the fetch timeout when fetch settles", async () => {
+		const { source } = setup()
+		source().open()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
 	it("drops a response that arrives after stop", async () => {
 		const slow = deferred<number>()
 		const { source, onData, connection } = setup(vi.fn().mockReturnValueOnce(slow.promise))
 		source().open()
 		connection.stop()
+		slow.resolve(1)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(onData).not.toHaveBeenCalled()
+	})
+
+	it("clears a pending fetch timeout on stop", async () => {
+		const slow = deferred<number>()
+		const { source, onData, connection } = setup(vi.fn().mockReturnValueOnce(slow.promise))
+		source().open()
+		expect(vi.getTimerCount()).toBe(1)
+		connection.stop()
+		expect(vi.getTimerCount()).toBe(0)
 		slow.resolve(1)
 		await vi.advanceTimersByTimeAsync(0)
 		expect(onData).not.toHaveBeenCalled()

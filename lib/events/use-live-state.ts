@@ -13,6 +13,7 @@ export function useLiveState<T>(
 	const key = [...channels].sort().join(",")
 
 	useEffect(() => {
+		if (!key) return
 		const query = new URLSearchParams(key.split(",").map((channel) => ["channel", channel]))
 		const connection = createLiveConnection({
 			url: `/api/events?${query}`,
