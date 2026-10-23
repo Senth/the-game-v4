@@ -126,6 +126,48 @@ The quest asset sits where the image sits and follows final mock F
 - Any other file shows a full-width bordered `↓ Download <EXT>` button, or "Download file" for `.bin`.
 - The team preview keeps all of these inert.
 
+### Location dock
+
+Final mocks:
+
+- Location only, variant A: [phone](https://artifacts.senth.org/final-a-dock-bar-phone-d77ed5.png),
+  [desktop](https://artifacts.senth.org/final-a-dock-bar-desktop-d32594.png).
+- With backup codes, variant F: [phone](https://artifacts.senth.org/final-f-dock-with-code-phone-87f684.png),
+  [desktop](https://artifacts.senth.org/final-f-dock-with-code-desktop-944c92.png).
+
+Surface brief for both variants: job is reaching the place and knowing the phone is doing its part.
+Primary action is walking there, or "Share location" on first use.
+Read first the status line, second the helper, third accuracy.
+Must not look like a map, radar, compass or tracking app, or hide quest content.
+Remove the answer input without backup codes. Quiet "Location on" and accuracy; sharpen "Location blocked" and "Found it".
+
+Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for reporting and solving.
+Use the fixed `bg-z1` answer dock, with `px-4` gutters and `font-cond` text.
+Variant A contains only location status, helper and any permission action.
+Variant F puts the code input and Send below the status in that same dock.
+Its placeholder reads "Code from the sign". Never add a second fixed bar.
+
+Status copy and emphasis:
+
+- Off: muted dot, "Location off".
+  Helper: "Arriving at the place solves this quest. Share your location so the game can tell.
+  Keep this screen open and unlocked." Show accent "Share location".
+- On: pulsing `pace-ok` dot, "Location on", with muted `±<N> m` once a fix arrives.
+  Helper: "Walk to the place. Arriving solves the quest. Keep this screen open and unlocked."
+- Rough: pulsing `warn` dot, "GPS too rough", with `±<N> m` in `warn`.
+  Helper: "Step out into the open and wait a few seconds. The game keeps trying."
+- Blocked: `warn` dot and "Location blocked". Show accent "Reload".
+  Helper: "Chrome on Android: tap the icon left of the address, then Permissions › Location › Allow.
+  iPhone: Settings › Apps › Safari › Location › Allow. Then reload this page."
+- Unavailable: `warn` dot and "Location unavailable". Helper: "This browser can't share location."
+- Found: `pace-ok` dot and `Found it · +<N>p`. Preserve the minus sign for negative earnings.
+  Helper: "Next quest in a moment." Hold for 1.5 seconds, then show the next quest.
+
+Use `role="status"` for status updates. Honor reduced motion by leaving dots still.
+Quest and team previews show the off state, with Share location and any backup controls disabled.
+Never request permission or report positions from previews.
+`components/game/location-dock.tsx` owns this dock; `components/game/use-location-reporter.ts` owns browser reporting.
+
 ### Puzzle board
 
 Final mocks:
@@ -453,6 +495,36 @@ Puzzle quests do not show "Needs an answer".
 `components/admin/puzzle-settings.tsx` owns the section, composed by `components/admin/quest-editor.tsx`
 with the shared autosave controls.
 
+### Place field
+
+Final variant I: [phone](https://artifacts.senth.org/final-i-editor-one-line-phone-1c6d41.png),
+[desktop](https://artifacts.senth.org/final-i-editor-one-line-desktop-3fd1bd.png).
+
+Surface brief: job is pinning where a team must stand, often from a phone at the spot.
+Primary action is pasting coordinates. Read first coordinates, second radius, third "Check on map ›".
+Must not look like a map editor, a settings page or another upload row.
+Remove the guidance picker. Quiet the empty state and helper; sharpen bad-paste and locked lines.
+
+Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for parsing, radius defaults, locks and map URLs.
+Place "Place" with muted "optional" after Points and before Puzzle.
+Keep coordinates, the compact radius number input and suffix `m` on one line, including on phone.
+Use ordinary field styles and header autosave. Do not add a Save button.
+
+- Empty placeholder: "Paste latitude, longitude".
+  Helper: "Empty means players type an answer." Disable the radius until a place exists.
+- With a place: "Getting within the radius solves it. Players never see the coordinates."
+  Show the quiet "Check on map ›" link below, opening a new tab.
+- Bad paste: "Paste latitude, longitude, like 55.5079, 13.2353." Use a `warn` field border and helper line.
+  The label stays "Place", not "Coordinates".
+- Locked: disable and mute both coordinates and radius.
+  Copy: `Locked: <N> teams have found this place.` Use "Locked: 1 team has found this place." for one team.
+- With puzzle mode on: "Turn off puzzle mode to add a place." Show no coordinate controls.
+
+With a place set, Answers helper reads "optional backup codes, arriving solves it". Omit "Needs an answer".
+While a place is set, Puzzle shows "Puzzle mode is off while this quest has a place." instead of its switch.
+`components/admin/place-field.tsx` owns this field, composed by `components/admin/quest-editor.tsx`
+with shared autosave controls.
+
 ### Live draft and quest dialogs
 
 Use the [final structural-edit mocks](#live-structural-edits), panels 2 through 4, on phone and desktop.
@@ -646,6 +718,23 @@ With a value, show `New quests start with <N>p. Existing quests never change.`
 When empty, show "Empty means new quests start without points. Existing quests never change."
 The helper follows the typed value before the save lands.
 Use [PROJECT.md's default quest points rule](PROJECT.md#nested-types) for behavior.
+
+#### New place radius
+
+Final variant K: [phone](https://artifacts.senth.org/final-k-season-radius-phone-9d4bfd.png),
+[desktop](https://artifacts.senth.org/final-k-season-radius-desktop-c01c19.png).
+
+Surface brief: job is setting how close teams must get for the season.
+Primary action is editing the number. Read first the value, second the helper.
+Must not look like a preferences dashboard. Follow New quest points variant G.
+
+Place "New place radius" under New quest points, before Shuffle arcs.
+Use Length's input width, suffix `m` and ordinary header autosave. Keep it editable in every season state.
+Helper: `New places start with <N> m. Existing places never change.` Follow the typed value before saving.
+Range error: "Use 5 to 500."
+Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for bounds, legacy defaults
+and copying the value into new places.
+`components/admin/season-settings.tsx` owns this field.
 
 #### Start now confirmation
 

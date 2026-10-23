@@ -33,6 +33,42 @@ Assert unbuilt orders are skipped and not counted, and arc removal counts each t
 Put reproducible rule and interaction cases in unit or component tests rather than adding browser flows.
 Write a red regression test first for a reproducible bug. On failure, rerun only affected tests while fixing.
 
+### Location quests
+
+Use [PROJECT.md's location rules](PROJECT.md#location-quests) for expected behavior and exact boundaries.
+Pure tests cover coordinate parsing, rounding, invalid pastes, geographic ranges, haversine distance and map URLs.
+Test accuracy, age, future-time and radius boundaries on both sides, including equality.
+Cover completeness without answers, missing places, legacy defaults and unchanged inputs.
+
+Test reports against isolated MongoDB, including malformed fixes and wrong, hidden, removed or non-location quests.
+Reject reports outside running play, after completion and from another team.
+Test concurrent phones, retries and races with hint reveals and place edits.
+Assert exactly one solve, score award and finisher claim, using stored hint penalties.
+Assert only successful solves publish live events; rejected and outside reports leave team state unchanged.
+Test backup answers and authorized solved-location earnings for teammate completion feedback.
+
+Test latest-fix replacement, team/phone isolation and expiry on reads and writes, including future-dated fixes.
+Test separate UUID phone cookies across shared-login phones, stable reuse, malformed-cookie replacement
+and required cookie attributes.
+Assert the phone id never enters the session payload.
+Test report authorization and admin guards before reads or writes.
+Cover place locks, editable backup answers, puzzle exclusion and concurrent edits.
+Assert radius changes leave existing places unchanged.
+Test guarded copies retaining place configuration without team progress.
+Whitelist player, preview, live and report responses against
+[PROJECT.md's player data boundary](PROJECT.md#player-data-boundary).
+Reject coordinates, radius and place ids alongside existing secrets.
+
+Component tests cover every dock status, helper copy, accuracy, permission actions, backup-code visibility and inert previews.
+Test completion hold and teammate refetch feedback.
+Mock geolocation, permissions, visibility, fetch and wake locks. Never request real positions.
+Cover granted, prompt, denied and missing APIs, reporting cadence, hidden-tab pauses, resume and cleanup on quest changes.
+Assert stale callbacks and responses cannot restart reporting; release late wake locks and tolerate wake-lock failures.
+Test the Place field's empty state, valid and invalid paste, radius edits, map link, lock copy and disabled controls.
+Cover puzzle exclusion, optional answers, draft previews, header autosave and retry.
+Test New place radius helpers and range errors.
+Keep these cases in unit and component tests. Add no browser flows.
+
 ## End-to-end budget
 
 Playwright global setup boots `mongodb-memory-server`, supplies `MONGODB_URI`, starts the app,
