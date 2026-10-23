@@ -311,7 +311,7 @@ export function QuestEditor({
 				<PlaceField
 					arcId={arcId}
 					questId={quest.id}
-					location={location}
+					location={quest.location ?? null}
 					puzzle={puzzle}
 					seasonRadius={placeRadius}
 					solvedTeams={solvedTeams}
@@ -320,7 +320,7 @@ export function QuestEditor({
 					arcId={arcId}
 					questId={quest.id}
 					assetPath={assetPath}
-					puzzle={puzzle}
+					puzzle={quest.puzzle ?? null}
 					location={location}
 					reachedTeams={reachedTeams}
 				/>
