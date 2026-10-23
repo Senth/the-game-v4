@@ -2,6 +2,7 @@ export type LiveSource = Pick<EventSource, "readyState" | "close" | "onopen" | "
 
 const CLOSED = 2
 const retryMs = 5000
+const fetchTimeoutMs = 10_000
 
 export function createLiveConnection<T>({
 	url,
@@ -29,14 +30,27 @@ export function createLiveConnection<T>({
 			return
 		}
 		inFlight = true
+		let timedOut = false
+		let timeout: ReturnType<typeof setTimeout> | undefined
 		try {
-			const data = await fetcher()
-			if (!stopped) onData(data)
-		} catch {}
-		inFlight = false
-		if (queued && !stopped) {
-			queued = false
-			void refetch()
+			const data = await Promise.race([
+				fetcher(),
+				new Promise<never>((_, reject) => {
+					timeout = setTimeout(() => {
+						timedOut = true
+						reject()
+					}, fetchTimeoutMs)
+				}),
+			])
+			if (!stopped && !timedOut) onData(data)
+		} catch {
+		} finally {
+			clearTimeout(timeout)
+			inFlight = false
+			if (queued && !stopped) {
+				queued = false
+				void refetch()
+			}
 		}
 	}
 
