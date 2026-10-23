@@ -19,6 +19,7 @@ Use pnpm, Biome, `tsc --noEmit`, Vitest and Playwright. MongoDB 8 uses the offic
 | Arc | Authored group of quests, called a theme in v3 |
 | Quest | Puzzle with player content, accepted answers, points and hints |
 | Puzzle quest | Image quest solved by assembling rectangular pieces; see [puzzle quests](#puzzle-quests) |
+| Location quest | Quest solved when a teammate reaches its place; typed answers are optional backup codes |
 | Hint | Revealable help for one quest, with a points penalty |
 | Team | Shared player identity belonging to a season, with its own quest order and progress |
 | Admin | Game-master account allowed to author and control seasons |
@@ -38,6 +39,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `title` | `string` | Season name |
 | `lengthMinutes` | `number` | Configured game length |
 | `defaultQuestPoints` | `number \| null` | Points copied into quests created with "+ Quest"; null means none |
+| `placeRadius` | `number` | Whole-number radius from 5 to 500 metres copied into new places; absent reads as 40 |
 | `start` | `Date \| null` | Scheduled or actual start; null before scheduling |
 | `end` | `Date \| null` | Scheduled or actual end; adjusted by live controls |
 | `shuffleArcs` | `boolean` | Shuffle arc order when building each team's order |
@@ -55,6 +57,8 @@ New seasons have no default quest points. A missing `defaultQuestPoints` reads a
 | --- | --- |
 | `Arc` | `id: string`, `title: string`, `shuffleQuests: boolean`, `quests: Quest[]` |
 | `Quest` | `id: string`, `displayTitle: string`, `internalTitle: string`, `content: string`, `assetPath: string \| null`, `answers: string[]`, `points: number \| null`, `adminNotes: string`, `hints: Hint[]` |
+| `Quest.location` | `{guidance: "none", places: Place[]} \| null`; absent reads as null; exactly one place until #85 |
+| `Place` | `id: string`, `lat: number`, `lng: number`, `radius: number` in metres |
 | `Hint` | `id: string`, `text: string`, `points: number` |
 
 A quest and each hint must have a stable id. Assign ids to hints that lack them.
@@ -63,7 +67,9 @@ A quest and each hint must have a stable id. Assign ids to hints that lack them.
 Rows and columns are whole numbers from 2 to 7, defaulting to 4 each. `showFull` defaults to false.
 Draft quests may have empty content, empty answers or missing points.
 A regular quest is complete with content or an asset, at least one answer and points.
-A puzzle quest is complete with an image and points; answers are optional. Display title is optional for either kind.
+A puzzle quest is complete with an image and points; answers are optional.
+A location quest is complete with content or a file, points and a place; answers are optional backup codes.
+Display title is optional for every kind.
 Whitespace-only text is empty; 0 points is set. `missingForGame` defines this shared rule.
 Quest points are a whole number from 0 to 10000, or null on a draft.
 "+ Quest" copies the season's default into the new quest's points. Without a default, points stay null and show "Needs points".
@@ -121,6 +127,9 @@ Admins may delete a team at any time. Deletion publishes `team:<id>`, `season:<i
 
 Use `bcryptjs` and iron-session 8. The cookie holds only `{kind: "admin" | "team", id: string}`.
 Sessions last 30 days. Production requires `SESSION_SECRET`.
+Each phone has a separate random UUID cookie, `the-game-phone`, lasting 400 days.
+It is httpOnly, sameSite lax, secure in production and scoped to path `/`.
+The phone id never enters the iron-session payload.
 `proxy.ts` denies by default.
 Public paths are `/login`, `/logout`, `/register`, `/board`, `/api/events`, `/assets/`, `/_next/`, `/join/` and the icons.
 `/api/events` authorizes its requested channels against the session itself.
@@ -254,6 +263,34 @@ Reject replacement with a non-image while puzzle mode is on.
 Quest copies include `puzzle` and share the image path, following the [copy rules](#authoring-and-live-edits).
 Team puzzle state never copies.
 
+### Location quests
+
+`Quest.location` is `{guidance: "none", places: Place[]} | null`; absent reads as null.
+Each place is `{id: string, lat: number, lng: number, radius: number}`.
+Exactly one place is supported until #85. Puzzle and location exclude each other.
+The server rejects setting either while the other is set.
+
+`Season.placeRadius` is a whole number from 5 to 500 metres, default 40.
+Absent reads as 40; no migration is needed. A new place copies the season's value.
+Changing the season value never edits existing places.
+Place coordinates and radius lock once any team has `solvedAt` on the quest.
+Answers remain editable.
+
+While a location quest is current and the game screen is open, each phone reports fixes as
+`{lat, lng, accuracy, at}`, with `at` a Unix timestamp in milliseconds.
+Accept accuracy of at most 50 metres. Reject fixes older than 30 seconds or more than 30 seconds in the future.
+An accepted fix is inside when its haversine distance to the place is at most the place radius.
+Exact accuracy, time and distance boundaries count as accepted and inside.
+The server keeps each phone's latest accepted fix in memory for 30 seconds, keyed by team and phone id.
+Nothing is persisted. Any teammate arriving inside solves through `solveCurrentQuest`, with the normal
+hint penalties, finisher claim and live events. Reports never write team state except through that solve path.
+Reports publish live events only on a solve.
+
+Coordinate paste accepts two decimal numbers separated by a comma and/or spaces, optionally with `°`.
+Latitude ranges from −90 to 90 and longitude from −180 to 180; store both rounded to 6 decimals.
+Invalid paste returns "Paste latitude, longitude, like 55.5079, 13.2353."
+"Check on map ›" opens `https://www.openstreetmap.org/?mlat=<lat>&mlon=<lng>#map=18/<lat>/<lng>` in a new tab.
+
 ### Pace
 
 This is the sole definition used by the header, standings and admin views.
@@ -369,6 +406,8 @@ Players never receive internal titles, admin notes, answers or unrevealed hint t
 and live responses. Hidden hints may expose their id, position and penalty, not their text.
 Players reveal hints by id, not by index, so edits and deletions cannot shift a reveal onto another hint.
 Construct a player view without deleting fields from the shared season object.
+A location quest adds only `location: {guidance: "none"}` and `hasAnswers`, keeping `assetPath`.
+Player JSON never includes place coordinates, radius or place ids, including in previews and live responses.
 The player finisher list exposes only team id, name, place and points, never claim times or other season fields.
 
 A puzzle quest's player view omits `assetPath` and exposes this shape:
@@ -406,6 +445,7 @@ A session whose team or admin no longer exists reads only `board`.
 `getGame`, `submitAnswer`, `revealHint` and puzzle operations use authorized data.
 Successful game mutations publish to all three channels after writes, except unsolved puzzle drops, which publish only `team:<id>`.
 Puzzle solves publish all three channels. Wrong answers and repeated hint reveals are no-ops.
+Location reports publish all three channels only on a solve; other reports publish nothing.
 Channel access must not expose another team's private data or admin-only content.
 
 ## Assets, migration and deployment

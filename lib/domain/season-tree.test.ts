@@ -29,6 +29,7 @@ describe("newQuest", () => {
 			content: "",
 			assetPath: null,
 			puzzle: null,
+			location: null,
 			answers: [],
 			points: null,
 			adminNotes: "",

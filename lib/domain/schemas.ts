@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { defaultPlaceRadius } from "./location"
 
 const id = z.string().min(1)
 
@@ -20,6 +21,20 @@ export const Puzzle = z.object({
 	showFull: z.boolean().default(false),
 })
 export type Puzzle = z.infer<typeof Puzzle>
+
+export const Place = z.object({
+	id,
+	lat: z.number().min(-90).max(90),
+	lng: z.number().min(-180).max(180),
+	radius: z.number().int().min(5).max(500),
+})
+export type Place = z.infer<typeof Place>
+
+export const Location = z.object({
+	guidance: z.literal("none"),
+	places: z.array(Place).length(1),
+})
+export type Location = z.infer<typeof Location>
 
 export const Spot = z.union([
 	z.strictObject({ cell: z.number().int().min(0).max(48) }),
@@ -46,6 +61,7 @@ export const Quest = z.object({
 	content: z.string(),
 	assetPath: z.string().nullable(),
 	puzzle: Puzzle.nullable().default(null).optional(),
+	location: Location.nullable().default(null).optional(),
 	answers: z.array(z.string()),
 	points: z.number().int().min(0).max(10000).nullable(),
 	adminNotes: z.string(),
@@ -74,6 +90,7 @@ export const Season = z.object({
 	title: z.string(),
 	lengthMinutes: z.number().int().min(1).max(1440),
 	defaultQuestPoints: z.number().int().min(0).max(10000).nullable().default(null),
+	placeRadius: z.number().int().min(5).max(500).default(defaultPlaceRadius).optional(),
 	start: z.date().nullable(),
 	end: z.date().nullable(),
 	shuffleArcs: z.boolean(),

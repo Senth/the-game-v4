@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { Hint, Quest, Season, type SeasonInput, Team, withHintIds } from "./schemas"
+import { Hint, Location, Place, Quest, Season, type SeasonInput, Team, withHintIds } from "./schemas"
 
 const draftQuest = {
 	id: "q1",
@@ -14,6 +14,13 @@ const draftQuest = {
 }
 
 describe("Quest", () => {
+	it("reads a legacy quest location as null without changing input", () => {
+		const original = structuredClone(draftQuest)
+		expect(Quest.parse(draftQuest).location).toBeNull()
+		expect(Quest.parse({ ...draftQuest, location: null }).location).toBeNull()
+		expect(draftQuest).toEqual(original)
+	})
+
 	it.each([null, 0, 10000])("accepts points %j", (points) => {
 		expect(Quest.parse({ ...draftQuest, points }).points).toBe(points)
 	})
@@ -87,6 +94,21 @@ describe("withHintIds", () => {
 })
 
 describe("Season", () => {
+	it("reads legacy place radius as 40 without changing input", () => {
+		const stored = { _id: "s1", title: "Old", lengthMinutes: 60, start: null, end: null, shuffleArcs: false, arcs: [] }
+		const original = structuredClone(stored)
+		expect(Season.parse(stored).placeRadius).toBe(40)
+		expect(stored).toEqual(original)
+	})
+
+	it.each([5, 40, 500])("accepts place radius %i", (radius) => {
+		expect(Season.shape.placeRadius.parse(radius)).toBe(radius)
+	})
+
+	it.each([4, 501, 40.5, null, "40", Number.NaN, Number.POSITIVE_INFINITY])("rejects place radius %j", (radius) => {
+		expect(Season.shape.placeRadius.safeParse(radius).success).toBe(false)
+	})
+
 	it.each([0, -1, 1.5, 1441, Number.NaN, Number.POSITIVE_INFINITY, "60", null])(
 		"rejects invalid lengthMinutes %j",
 		(lengthMinutes) => {
@@ -145,6 +167,43 @@ describe("Season", () => {
 
 	it("accepts whole-number finisher bonuses including zero", () => {
 		expect(Season.shape.finisherBonuses.parse([0, 50, 10000])).toEqual([0, 50, 10000])
+	})
+})
+
+describe("Location", () => {
+	const place = { id: "p1", lat: 55.5079, lng: 13.2353, radius: 40 }
+
+	it("accepts exactly one place with guidance none", () => {
+		expect(Location.parse({ guidance: "none", places: [place] })).toEqual({ guidance: "none", places: [place] })
+		expect(Location.safeParse({ guidance: "none", places: [] }).success).toBe(false)
+		expect(Location.safeParse({ guidance: "none", places: [place, { ...place, id: "p2" }] }).success).toBe(false)
+		expect(Location.safeParse({ guidance: "distance", places: [place] }).success).toBe(false)
+		expect(Quest.parse({ ...draftQuest, location: { guidance: "none", places: [place] } }).location).toEqual({
+			guidance: "none",
+			places: [place],
+		})
+	})
+
+	it.each([
+		{ id: "" },
+		{ lat: -90.01 },
+		{ lat: 90.01 },
+		{ lng: -180.01 },
+		{ lng: 180.01 },
+		{ lat: Number.NaN },
+		{ lng: Number.POSITIVE_INFINITY },
+		{ radius: 4 },
+		{ radius: 501 },
+		{ radius: 40.5 },
+	])("rejects invalid place %j", (invalid) => {
+		expect(Place.safeParse({ ...place, ...invalid }).success).toBe(false)
+	})
+
+	it.each([
+		{ lat: -90, lng: -180, radius: 5 },
+		{ lat: 90, lng: 180, radius: 500 },
+	])("accepts place boundaries %j", (bounds) => {
+		expect(Place.parse({ ...place, ...bounds })).toEqual({ ...place, ...bounds })
 	})
 })
 

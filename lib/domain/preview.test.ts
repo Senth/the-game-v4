@@ -57,4 +57,21 @@ describe("previewGame", () => {
 		const quest = { ...authoredQuest, points: null }
 		expect(previewGame(baseSeason, quest, now).quest).toMatchObject({ points: null, worth: 0 })
 	})
+
+	it("passes only location guidance and backup-code presence through the player projection", () => {
+		const quest = {
+			...authoredQuest,
+			answers: [],
+			location: { guidance: "none" as const, places: [{ id: "secret-place", lat: 55.5, lng: 13.2, radius: 40 }] },
+		}
+		const before = structuredClone({ season: baseSeason, quest })
+		const result = previewGame(baseSeason, quest, now)
+		expect(result.quest).toMatchObject({
+			location: { guidance: "none" },
+			hasAnswers: false,
+			assetPath: quest.assetPath,
+		})
+		expect(result.quest.location).toEqual({ guidance: "none" })
+		expect({ season: baseSeason, quest }).toEqual(before)
+	})
 })
