@@ -1,13 +1,17 @@
+import { getPuzzleTiles } from "@/lib/assets/puzzle-tiles"
+import { sessionOptions } from "@/lib/auth/session"
 import { claimFinish } from "@/lib/db/finishers"
 import { getSeason, listSeasons } from "@/lib/db/seasons"
 import { finishSeasonStructure, withSeasonStructure } from "@/lib/db/structural-writes"
 import {
 	editSeasonTeamOrders,
+	ensurePuzzleState,
 	fillQuestOrders,
 	getTeam,
 	listTeams,
 	revealHint as revealTeamHint,
 	solveCurrentQuest,
+	writePuzzleDrop,
 } from "@/lib/db/teams"
 import {
 	boardSeasons,
@@ -27,7 +31,8 @@ import {
 	playerStandings,
 	publicBoard,
 } from "@/lib/domain/player-game"
-import type { Season, Team } from "@/lib/domain/schemas"
+import { dropPiece, isSolved, pieceIds, randomSpread } from "@/lib/domain/puzzle"
+import { type Season, Spot, type Team } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
 
 export type SubmitResult =
@@ -100,7 +105,91 @@ export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame
 		publishTeamChange(current._id, season._id)
 		freshSeason = await getSeason(season._id)
 	}
+	const found =
+		freshSeason && lifecycleState(freshSeason, current, now) === "running" ? currentQuest(freshSeason, current) : null
+	if (found?.quest.puzzle && found.quest.assetPath) {
+		const { quest } = found
+		const { rows, cols } = found.quest.puzzle
+		if (!found.progress?.puzzle) {
+			await ensurePuzzleState(
+				current._id,
+				{ questId: quest.id, questIndex: current.questIndex },
+				{ version: 0, spots: randomSpread(rows * cols) },
+			)
+			current = (await getTeam(current._id)) ?? current
+			if (current.questOrder[current.questIndex] !== quest.id) return loadGame(current, now)
+		}
+		const { aspect } = await getPuzzleTiles(found.quest.assetPath, rows, cols)
+		const ids = await pieceIds(quest.id, found.quest.assetPath, rows, cols, sessionOptions().password)
+		return playerGame(freshSeason, current, teams, now, { ids, aspect, fullUrl: `/api/puzzle/${quest.id}/full` })
+	}
 	return playerGame(freshSeason, current, teams, now)
+}
+
+export type PuzzleDropResult = { status: "moved" | "stale" } | { status: "solved"; pointsEarned: number }
+
+export async function dropPuzzlePiece(
+	team: Team,
+	questId: string,
+	pieceId: string,
+	target: Spot,
+	now = new Date(),
+): Promise<PuzzleDropResult> {
+	const parsed = Spot.safeParse(target)
+	if (!parsed.success) return { status: "stale" }
+	const season = await getSeason(team.seasonId)
+	for (let attempt = 0; attempt <= solveRetries; attempt++) {
+		const current = await getTeam(team._id)
+		if (!current || current.seasonId !== team.seasonId || !season || lifecycleState(season, current, now) !== "running")
+			return { status: "stale" }
+		const found = currentQuest(season, current)
+		if (found?.quest.id !== questId || !found.quest.puzzle || !found.quest.assetPath || !found.progress?.puzzle)
+			return { status: "stale" }
+		const { rows, cols } = found.quest.puzzle
+		const ids = await pieceIds(questId, found.quest.assetPath, rows, cols, sessionOptions().password)
+		const index = ids.indexOf(pieceId)
+		if (index < 0 || ("cell" in parsed.data && parsed.data.cell >= rows * cols)) return { status: "stale" }
+		const state = dropPiece(found.progress.puzzle, index, parsed.data)
+		if (!(await writePuzzleDrop(current._id, { questId, questIndex: current.questIndex }, state))) continue
+		if (isSolved(state)) {
+			for (let retry = 0; retry <= solveRetries; retry++) {
+				const fresh = await getTeam(team._id)
+				const progress = fresh?.progress.find((entry) => entry.questId === questId)
+				if (!fresh || fresh.questOrder[fresh.questIndex] !== questId || !progress?.puzzle || !isSolved(progress.puzzle))
+					break
+				const pointsEarned = scoreForSolve(found.quest, progress)
+				const expected = {
+					questId,
+					questIndex: fresh.questIndex,
+					orderLength: fresh.questOrder.length,
+					hintCount: progress.hintsRevealed.length,
+					puzzleVersion: progress.puzzle.version,
+				}
+				if (await solveCurrentQuest(fresh._id, expected, now, pointsEarned)) {
+					if (fresh.questIndex + 1 === fresh.questOrder.length) await claimFinish(season._id, fresh._id, now)
+					publishTeamChange(fresh._id, season._id)
+					return { status: "solved", pointsEarned }
+				}
+			}
+		}
+		publish(teamChannel(current._id))
+		return { status: "moved" }
+	}
+	return { status: "stale" }
+}
+
+export async function getSolvedPuzzle(team: Team, questId: string): Promise<string[] | null> {
+	const current = await getTeam(team._id)
+	if (
+		!current ||
+		current.seasonId !== team.seasonId ||
+		!current.progress.some((entry) => entry.questId === questId && entry.solvedAt)
+	)
+		return null
+	const season = await getSeason(current.seasonId)
+	const quest = season && findQuest(season, questId)
+	if (!quest?.puzzle || !quest.assetPath) return null
+	return pieceIds(questId, quest.assetPath, quest.puzzle.rows, quest.puzzle.cols, sessionOptions().password)
 }
 
 export async function loadStandings(team: Team, now = new Date()): Promise<PlayerStandings> {

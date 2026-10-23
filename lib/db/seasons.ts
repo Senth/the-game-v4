@@ -1,8 +1,10 @@
 import type { Document, Filter, UpdateFilter } from "mongodb"
 import { z } from "zod"
 import { overlappingSeason, scheduleWindow, seasonStatus } from "@/lib/domain/admin-seasons"
+import { assetKind } from "@/lib/domain/assets"
 import { hasEnded, normalizeAnswer, registrationConflict } from "@/lib/domain/game"
 import { missingForGame } from "@/lib/domain/playable-quests"
+import { puzzleLocked } from "@/lib/domain/puzzle"
 import {
 	AnswerAddValue,
 	Arc,
@@ -17,6 +19,7 @@ import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
 import { collections, NotFoundError } from "./collections"
 import { finishSeasonStructure, type PendingStructure, withSeasonStructure } from "./structural-writes"
+import { listSeasonTeams } from "./teams"
 
 type Field<T> = Exclude<keyof T, "_id" | "id">
 
@@ -53,6 +56,14 @@ export async function listSeasons(): Promise<Season[]> {
 export class FinisherBonusClaimedError extends Error {
 	constructor() {
 		super("Already won, can't change")
+	}
+}
+
+export class PuzzleEditError extends Error {}
+
+async function checkPuzzleLock(season: Season, questId: string): Promise<void> {
+	if (puzzleLocked(season, await listSeasonTeams(season._id), questId)) {
+		throw new PuzzleEditError("Locked: a team has reached this puzzle.")
 	}
 }
 
@@ -580,9 +591,15 @@ export async function setQuestAsset(
 	const target = { arcId, questId, field: "assetPath" } as const
 	const { path, schema, filter, arrayFilters } = locate(target)
 	const parsed = schema.parse(assetPath)
+	const season = await getSeason(seasonId)
+	const quest = season?.arcs.find((arc) => arc.id === arcId)?.quests.find((quest) => quest.id === questId)
+	if (season && quest?.puzzle) {
+		await checkPuzzleLock(season, questId)
+		if (assetPath && assetKind(assetPath) !== "image") throw new PuzzleEditError("Puzzle mode requires an image.")
+	}
 	const before = await (await collections()).seasons.findOneAndUpdate(
 		{ ...filter, _id: seasonId },
-		{ $set: { [path]: parsed } },
+		{ $set: { [path]: parsed, ...(assetPath === null ? { [path.replace(/assetPath$/, "puzzle")]: null } : {}) } },
 		{ arrayFilters, returnDocument: "before" },
 	)
 	if (!before) throw new NotFoundError(`Season ${seasonId} has no ${JSON.stringify(target)}`)
@@ -609,6 +626,20 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 	}
 	const { path, schema, filter, arrayFilters } = locate(target)
 	const parsed = schema.parse(value)
+	if ("questId" in target && !("hintId" in target) && target.field === "puzzle") {
+		const season = await getSeason(seasonId)
+		const quest = season?.arcs
+			.find((arc) => arc.id === target.arcId)
+			?.quests.find((quest) => quest.id === target.questId)
+		if (season && quest) {
+			const next = parsed as Quest["puzzle"]
+			if (!!quest.puzzle !== !!next || quest.puzzle?.rows !== next?.rows || quest.puzzle?.cols !== next?.cols) {
+				await checkPuzzleLock(season, quest.id)
+			}
+			if (next && (!quest.assetPath || assetKind(quest.assetPath) !== "image"))
+				throw new PuzzleEditError("Puzzle mode requires an image.")
+		}
+	}
 	if (target.field === "end") {
 		const seasons = await listSeasons()
 		const season = seasons.find((s) => s._id === seasonId)

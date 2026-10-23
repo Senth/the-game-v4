@@ -12,6 +12,7 @@ import * as assets from "@/lib/assets/release"
 import { requireAdmin } from "@/lib/auth/guards"
 import { collections } from "@/lib/db/collections"
 import * as seasons from "@/lib/db/seasons"
+import { createTeam } from "@/lib/db/teams"
 import { assetExtension, assetKind, maxAssetBytes } from "@/lib/domain/assets"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { boardChannel, publish, seasonChannel } from "@/lib/events/bus"
@@ -37,6 +38,7 @@ beforeEach(async () => {
 	directory = await mkdtemp(path.resolve(".tmp", "asset-actions-"))
 	vi.stubEnv("ASSETS_DIR", directory)
 	await (await collections()).seasons.deleteMany({})
+	await (await collections()).teams.deleteMany({})
 	await seasons.createSeason({
 		_id: ids[0],
 		title: "Cipher Night",
@@ -70,6 +72,50 @@ async function attach() {
 }
 
 describe("quest asset actions", () => {
+	it.each(["upload", "remove"])("rejects locked puzzle %s and preserves its file", async (action) => {
+		const previous = await attach()
+		await seasons.setSeasonField(
+			ids[0],
+			{ arcId: ids[1], questId: ids[2], field: "puzzle" },
+			{ rows: 2, cols: 2, showFull: false },
+		)
+		await createTeam({
+			name: "Reached",
+			passwordHash: "x",
+			seasonId: ids[0],
+			questOrder: [ids[2]],
+			questIndex: 0,
+			score: 0,
+			completed: false,
+			progress: [],
+		})
+		expect(await (action === "upload" ? uploadQuestAsset(...ids, form()) : removeQuestAsset(...ids))).toEqual({
+			ok: false,
+			error: "Locked: a team has reached this puzzle.",
+		})
+		expect(await currentPath()).toBe(previous)
+		expect(await readdir(directory)).toEqual([path.basename(previous)])
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it("rejects non-image replacement while puzzle mode is on and clears mode on remove", async () => {
+		const previous = await attach()
+		await seasons.setSeasonField(
+			ids[0],
+			{ arcId: ids[1], questId: ids[2], field: "puzzle" },
+			{ rows: 2, cols: 2, showFull: false },
+		)
+		expect(await uploadQuestAsset(...ids, form(new File(["not an image"], "fake.png")))).toEqual({
+			ok: false,
+			error: "Puzzle mode requires an image.",
+		})
+		expect(await currentPath()).toBe(previous)
+		expect(await readdir(directory)).toEqual([path.basename(previous)])
+		expect(await removeQuestAsset(...ids)).toEqual({ ok: true })
+		expect((await seasons.getSeason(ids[0]))?.arcs[0]?.quests[0]).toMatchObject({ assetPath: null, puzzle: null })
+		expect(await readdir(directory)).toEqual([])
+	})
+
 	it.each(["upload", "remove"])("rejects non-admin before any %s validation or write", async (action) => {
 		vi.mocked(requireAdmin).mockImplementationOnce(async () => redirect("/login"))
 		const data = form()
