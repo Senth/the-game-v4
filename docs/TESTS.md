@@ -6,6 +6,13 @@ Vitest tests `lib/domain/` as pure functions without a database. Cover every rul
 [PROJECT.md](PROJECT.md), especially shuffle flags, answer matching, scoring, player-data stripping,
 pace boundaries, standings selection and live structural edits. Test shuffle distribution over 10,000 runs.
 Assert input objects stay unchanged and player JSON contains neither answers nor hidden hint text.
+Cover [puzzle rules](PROJECT.md#puzzle-quests): dimensions, defaults, completeness, snapping,
+occupied-cell swaps, loose drops and solved detection.
+Check deterministic preview spreads and stable piece ids.
+Assert player pieces expose no correct-index order or original asset path.
+Test optimistic drops and rollback, snap targets, the full-picture dialog, completion hold,
+answer-dock visibility and inert previews in component tests.
+Test the editor's no-image helper, mode toggle, range errors, locked controls and optional-answers helper.
 
 Vitest tests `lib/db/` against MongoDB 8 through `mongodb-memory-server`, never a live database or Docker.
 Give each test file a fresh database. Cover create/get/list, per-path `$set`, the per-season name index,
@@ -14,6 +21,9 @@ Test concurrent finisher place claims for unique places and exactly-once score a
 Test that later bonus-row edits never change claimed points or awarded scores.
 Test that one quest removal completing several teams claims places in arrival order.
 Use [PROJECT.md's finisher rules](PROJECT.md#finisher-bonus) for ordering and scoring expectations.
+Cover concurrent puzzle initialization, version conflicts, retries, same-piece drops, lock counting
+and exactly-once puzzle solves with finisher claims.
+Test puzzle copying without team state, guarded tile access, private caching and asset release cleanup.
 
 Cover hidden-draft exclusion from player data, rails, standings, board, order builds and live stats.
 Cover removal-dialog impact outcomes: current teams skip with zero points, unreached quests leave orders,
@@ -55,6 +65,13 @@ Seed accounts are `admin / admin` and `Ninjas / ninjas`. Other teams use their l
 Never deploy those passwords. The seed copies the Backwards log image to `ASSETS_DIR`, default `.tmp/assets`.
 Start and end follow seed time, so the season is running with registration open and Ninjas is mid-game.
 Cipher Night has `finisherBonuses: [50, 20]` and no finishers.
+"Gather the pieces" uses a 4 × 4 puzzle, no answers and `showFull: false`, keeping its points and hints.
+Commit a landscape PNG under 300 KB in `scripts/fixture/`, such as a drawn keeper's chart.
+Seed copies it to `ASSETS_DIR`.
+Mock photos are placeholders, not fixture content.
+Rävarna is already on it, with eight pieces in cells, including two in wrong cells; the remaining pieces are loose.
+Standings, counts and every other team stay unchanged.
+Fixture tests validate puzzle configuration and progress against the zod schemas.
 
 | Arc | Quests | Authored order |
 | --- | --- | --- |
