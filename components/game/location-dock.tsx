@@ -93,17 +93,11 @@ export function LocationDock(props: LocationDockProps) {
 	}, [rotationState])
 	const rotation = rotationState?.rotation ?? 0
 	const helperOffset = arrow ? "ml-11" : "ml-5"
-	const pulseLead = !guidance && compassState !== "needsTap" && compassState !== "refused"
 	const status = (
 		<div className={`px-4 pt-3 ${codes ? "pb-1" : "pb-[calc(var(--spacing)*6+env(safe-area-inset-bottom))]"}`}>
 			{guided ? (
 				<>
 					<div className="flex items-center gap-2.5 font-cond">
-						<span role="status" className={`text-sm ${statusColor}`}>
-							{statusWord}
-						</span>
-					</div>
-					<div className="mt-3 flex items-center gap-3">
 						{arrow ? (
 							<svg
 								aria-hidden="true"
@@ -111,42 +105,38 @@ export function LocationDock(props: LocationDockProps) {
 								className="size-8 shrink-0 text-head transition-transform motion-reduce:transition-none"
 								style={{ transform: `rotate(${rotation}deg)` }}
 							>
-								<path
-									d="M12 3v18m0-18 7 7m-7-7-7 7"
-									fill="none"
-									stroke="currentColor"
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth="2.5"
-								/>
+								<path d="M12 2 L20 21 L12 16.5 L4 21 Z" fill="currentColor" />
 							</svg>
 						) : (
 							<span
 								aria-hidden="true"
-								className={`size-2.5 shrink-0 rounded-full bg-pace-ok ${pulseLead ? "motion-safe:animate-pulse" : ""}`}
+								className="size-2.5 shrink-0 rounded-full bg-pace-ok motion-safe:animate-pulse"
 							/>
 						)}
-						<div className="grid min-w-0 flex-1 grid-cols-3 gap-2">
-							{bandLabels.map((label, index) => (
-								<div key={label}>
-									<div
-										aria-hidden="true"
-										className={`h-1 rounded-full ${index <= distanceBand ? "bg-head" : "bg-z2/60"}`}
-									/>
-									<p
-										aria-current={index === distanceBand ? "step" : undefined}
-										className={`mt-1 font-cond text-xs ${index === distanceBand ? "text-head" : "text-muted"}`}
-									>
-										{label}
-									</p>
-								</div>
-							))}
-						</div>
+						<span role="status" className={`text-sm ${statusColor}`}>
+							{statusWord}
+						</span>
+						{props.accuracy !== undefined && (
+							<span className="ml-auto text-xs text-muted">±{Math.round(props.accuracy)} m</span>
+						)}
+					</div>
+					<div className="mt-2.5 grid min-w-0 grid-cols-3 gap-2">
+						{bandLabels.map((label, index) => (
+							<div key={label}>
+								<div
+									aria-hidden="true"
+									className={`h-1 rounded-full ${index <= distanceBand ? "bg-head" : "bg-z2/60"}`}
+								/>
+								<p
+									aria-current={index === distanceBand ? "step" : undefined}
+									className={`mt-1 font-cond text-xs ${index === distanceBand ? "text-head" : "text-muted"}`}
+								>
+									{label}
+								</p>
+							</div>
+						))}
 					</div>
 					<p className={`mt-2 ${helperOffset} font-cond text-xs leading-relaxed text-muted`}>{helper}</p>
-					{props.accuracy !== undefined && (
-						<p className={`mt-1 ${helperOffset} font-cond text-xs text-muted`}>±{Math.round(props.accuracy)} m</p>
-					)}
 					{compassState === "needsTap" && (
 						<button
 							type="button"

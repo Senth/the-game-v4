@@ -73,6 +73,7 @@ describe("LocationDock", () => {
 				guidanceEnabled
 				guidance={{ band, bearing: 10, trend: trend === "Warmer" ? "warmer" : "colder" }}
 				compass={{ state: "on", heading: 350, request: vi.fn() }}
+				accuracy={14}
 				hasAnswers={false}
 			/>,
 		)
@@ -82,6 +83,14 @@ describe("LocationDock", () => {
 		expect(html).toContain('aria-hidden="true"')
 		expect(html).toContain('class="size-8')
 		expect(html).toContain('style="transform:rotate(20deg)"')
+		expect(html).toContain('d="M12 2 L20 21 L12 16.5 L4 21 Z" fill="currentColor"')
+		expect(html).toContain('<div class="flex items-center gap-2.5 font-cond"><svg')
+		expect(html).toContain('<span class="ml-auto text-xs text-muted">±14 m</span>')
+		expect(html.indexOf("<svg")).toBeLessThan(html.indexOf(`>${trend}</span>`))
+		expect(html.indexOf(`>${trend}</span>`)).toBeLessThan(html.indexOf("±14 m"))
+		expect(html.indexOf("±14 m")).toBeLessThan(html.indexOf(">Far</p>"))
+		expect(html.match(/±14 m/g)).toHaveLength(1)
+		expect(html.indexOf(">Very close</p>")).toBeLessThan(html.indexOf(helper))
 		expect(html).toContain("Far")
 		expect(html).toContain("Close")
 		expect(html).toContain("Very close")
@@ -134,6 +143,7 @@ describe("LocationDock", () => {
 		expect(html).toContain(helper.replaceAll("'", "&#x27;"))
 		expect(html).not.toContain('class="size-8')
 		expect(html).toContain('class="size-2.5 shrink-0 rounded-full bg-pace-ok')
+		expect(html).toContain("motion-safe:animate-pulse")
 		expect(html).toContain(">Warmer</span>")
 	})
 

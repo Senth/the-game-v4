@@ -100,6 +100,8 @@ it("shows saved coordinates, radius guidance and map link", () => {
 		'href="https://www.openstreetmap.org/?mlat=55.50682&amp;mlon=13.23289#map=18/55.50682/13.23289"',
 	)
 	expect(html).toContain("Check on map ›")
+	expect(html.indexOf("Getting within the radius solves it.")).toBeLessThan(html.indexOf("Check on map ›"))
+	expect(html.indexOf("Check on map ›")).toBeLessThan(html.indexOf("Warmer/colder"))
 })
 
 it("toggles warmer-colder guidance and autosaves the whole location", () => {

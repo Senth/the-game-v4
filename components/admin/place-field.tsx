@@ -123,8 +123,27 @@ export function PlaceField({
 				/>
 				<span className="font-cond text-sm text-muted">m</span>
 			</div>
+			{error ? (
+				<p id={`${id}-error`} role="alert" className="mt-1.5 font-cond text-xs text-warn">
+					{error}
+				</p>
+			) : (
+				<p id={`${id}-helper`} className={`mt-1.5 font-cond text-xs ${locked ? "text-head" : "text-muted"}`}>
+					{helper}
+				</p>
+			)}
 			{place && (
-				<div className="mt-2 flex min-h-11 items-start justify-between gap-3">
+				<a
+					className="inline-flex min-h-11 items-center font-cond text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+					href={osmUrl(place.lat, place.lng)}
+					target="_blank"
+					rel="noreferrer"
+				>
+					Check on map ›
+				</a>
+			)}
+			{place && (
+				<div className="mt-3 flex min-h-11 items-start justify-between gap-3">
 					<div className="min-w-0">
 						<p id={`${id}-guidance-label`} className={`font-cond text-sm ${locked ? "text-muted" : "text-ink"}`}>
 							Warmer/colder
@@ -157,25 +176,6 @@ export function PlaceField({
 						</span>
 					</button>
 				</div>
-			)}
-			{error ? (
-				<p id={`${id}-error`} role="alert" className="mt-1.5 font-cond text-xs text-warn">
-					{error}
-				</p>
-			) : (
-				<p id={`${id}-helper`} className={`mt-1.5 font-cond text-xs ${locked ? "text-head" : "text-muted"}`}>
-					{helper}
-				</p>
-			)}
-			{place && (
-				<a
-					className="inline-flex min-h-11 items-center font-cond text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-					href={osmUrl(place.lat, place.lng)}
-					target="_blank"
-					rel="noreferrer"
-				>
-					Check on map ›
-				</a>
 			)}
 		</div>
 	)
