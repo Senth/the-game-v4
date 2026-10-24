@@ -29,7 +29,10 @@ function mount(questId: string | null = "place-quest") {
 	cleanup = hooks.effects.map((effect) => effect()).filter((value): value is () => void => !!value)
 }
 
-function reading(values: { alpha?: number | null; webkitCompassHeading?: number }, type = "deviceorientationabsolute") {
+function reading(
+	values: { alpha?: number | null; absolute?: boolean; webkitCompassHeading?: number },
+	type = "deviceorientationabsolute",
+) {
 	browser.dispatchEvent(Object.assign(new Event(type), values))
 }
 
@@ -46,6 +49,7 @@ beforeEach(() => {
 	vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: false }))
 	vi.stubGlobal("screen", { orientation: { angle: 0 } })
 	vi.stubGlobal("DeviceOrientationEvent", class {})
+	vi.stubGlobal("navigator", {})
 	permission.mockResolvedValue("granted")
 })
 
@@ -97,6 +101,104 @@ describe("useCompass", () => {
 		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", heading: 45 })
 	})
 
+	it.each([false, true])("reads Chromium absolute alpha with requestPermission, tapped: %s", async (tapped) => {
+		vi.stubGlobal("DeviceOrientationEvent", { requestPermission: permission })
+		mount()
+		if (tapped) {
+			compass.request()
+			await vi.advanceTimersByTimeAsync(0)
+		}
+		reading({ alpha: 90 })
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", heading: 270 })
+		await vi.advanceTimersByTimeAsync(2000)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", heading: 270 })
+		if (!tapped) expect(permission).not.toHaveBeenCalled()
+	})
+
+	it("does not need a tap when Chromium sensor permissions are already granted, even without readings", async () => {
+		vi.stubGlobal("DeviceOrientationEvent", { requestPermission: permission })
+		const query = vi.fn().mockResolvedValue({ state: "granted" })
+		vi.stubGlobal("navigator", { permissions: { query } })
+		mount()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(query.mock.calls).toEqual([[{ name: "accelerometer" }], [{ name: "gyroscope" }], [{ name: "magnetometer" }]])
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "none" })
+		await vi.advanceTimersByTimeAsync(2000)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "none" })
+		expect(permission).not.toHaveBeenCalled()
+	})
+
+	it.each(["prompt", "denied"])("handles queried sensor permission %s", async (state) => {
+		vi.stubGlobal("DeviceOrientationEvent", { requestPermission: permission })
+		vi.stubGlobal("navigator", {
+			permissions: {
+				query: vi
+					.fn()
+					.mockImplementation(({ name }) => Promise.resolve({ state: name === "magnetometer" ? state : "granted" })),
+			},
+		})
+		mount()
+		await vi.advanceTimersByTimeAsync(2000)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: state === "prompt" ? "needsTap" : "refused" })
+		expect(permission).not.toHaveBeenCalled()
+		if (state === "denied") {
+			reading({ alpha: 90 })
+			expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "refused" })
+		}
+	})
+
+	it.each(["reading", "hidden", "cleanup"])("ignores late sensor permission queries after %s", async (action) => {
+		let finish!: (value: { state: string }) => void
+		const pending = new Promise((resolve) => {
+			finish = resolve
+		})
+		vi.stubGlobal("DeviceOrientationEvent", { requestPermission: permission })
+		vi.stubGlobal("navigator", { permissions: { query: vi.fn().mockReturnValue(pending) } })
+		mount()
+		if (action === "reading") reading({ alpha: 90 })
+		else if (action === "hidden") visible(true)
+		else {
+			for (const stop of cleanup) stop()
+			cleanup = []
+		}
+		hooks.setStatus.mockClear()
+		finish({ state: "granted" })
+		await vi.advanceTimersByTimeAsync(2000)
+		expect(hooks.setStatus).not.toHaveBeenCalled()
+	})
+
+	it("keeps tap-only permission available when sensor permission queries are unsupported", async () => {
+		vi.stubGlobal("DeviceOrientationEvent", { requestPermission: permission })
+		vi.stubGlobal("navigator", {
+			permissions: { query: vi.fn().mockRejectedValue(new TypeError("Unsupported permission")) },
+		})
+		mount()
+		await vi.advanceTimersByTimeAsync(2000)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "needsTap" })
+		expect(permission).not.toHaveBeenCalled()
+		compass.request()
+		await vi.advanceTimersByTimeAsync(2000)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "none" })
+	})
+
+	it.each([false, true])(
+		"accepts webkitCompassHeading independently of permission API presence: %s",
+		(hasPermission) => {
+			if (hasPermission) vi.stubGlobal("DeviceOrientationEvent", { requestPermission: permission })
+			mount()
+			reading({ webkitCompassHeading: 45, alpha: 180 }, "deviceorientation")
+			expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", heading: 45 })
+		},
+	)
+
+	it("ignores relative alpha but accepts explicitly absolute deviceorientation", () => {
+		mount()
+		reading({ alpha: 90, absolute: false }, "deviceorientation")
+		expect(hooks.setStatus).not.toHaveBeenCalledWith(expect.objectContaining({ state: "on" }))
+		reading({ alpha: 90, absolute: true }, "deviceorientation")
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", heading: 270 })
+	})
+
 	it.each(["denied", "error"])("handles iPhone permission %s without listening", async (result) => {
 		vi.stubGlobal("DeviceOrientationEvent", { requestPermission: permission })
 		if (result === "error") permission.mockRejectedValue(new Error("Motion unavailable"))
@@ -129,6 +231,7 @@ describe("useCompass", () => {
 		mount()
 		reading({ alpha: 90 })
 		visible(true)
+		expect(remove).toHaveBeenCalledWith("deviceorientation", expect.any(Function))
 		expect(remove).toHaveBeenCalledWith("deviceorientationabsolute", expect.any(Function))
 		hooks.setStatus.mockClear()
 		reading({ alpha: 180 })
@@ -144,6 +247,7 @@ describe("useCompass", () => {
 		cleanup = []
 		hooks.setStatus.mockClear()
 		reading({ alpha: 90 })
+		reading({ webkitCompassHeading: 45 }, "deviceorientation")
 		expect(hooks.setStatus).not.toHaveBeenCalled()
 	})
 

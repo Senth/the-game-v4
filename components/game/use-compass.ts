@@ -15,7 +15,6 @@ export function useCompass(questId: string | null) {
 		const motion = DeviceOrientationEvent as typeof DeviceOrientationEvent & {
 			requestPermission?: () => Promise<string>
 		}
-		const event = motion.requestPermission ? "deviceorientation" : "deviceorientationabsolute"
 		let disposed = false
 		let generation = 0
 		let heading: number | undefined
@@ -25,12 +24,13 @@ export function useCompass(questId: string | null) {
 		function reading(value: Event) {
 			if (disposed || document.hidden) return
 			const orientation = value as DeviceOrientationEvent & { webkitCompassHeading?: number }
-			const raw = motion.requestPermission
-				? orientation.webkitCompassHeading
-				: orientation.alpha === null || orientation.alpha === undefined
-					? undefined
-					: 360 - orientation.alpha
+			const raw =
+				orientation.webkitCompassHeading ??
+				((value.type === "deviceorientationabsolute" || orientation.absolute) && orientation.alpha != null
+					? 360 - orientation.alpha
+					: undefined)
 			if (raw === undefined || !Number.isFinite(raw) || raw < 0 || raw > 360) return
+			permission.current = "granted"
 			const next = (((raw - (screen.orientation?.angle ?? 0)) % 360) + 360) % 360
 			heading = heading === undefined ? next : (heading + (((next - heading + 540) % 360) - 180) * 0.2 + 360) % 360
 			clearTimeout(timer)
@@ -40,20 +40,49 @@ export function useCompass(questId: string | null) {
 			generation++
 			heading = undefined
 			clearTimeout(timer)
-			window.removeEventListener(event, reading)
+			window.removeEventListener("deviceorientation", reading)
+			window.removeEventListener("deviceorientationabsolute", reading)
 		}
 		function listen() {
 			if (disposed || document.hidden) return
 			stop()
-			setStatus({ state: "none" })
-			window.addEventListener(event, reading)
-			timer = setTimeout(() => setStatus({ state: "none" }), 2000)
+			const needsTap = !!motion.requestPermission && permission.current !== "granted"
+			setStatus({ state: needsTap ? "needsTap" : "none" })
+			window.addEventListener("deviceorientation", reading)
+			window.addEventListener("deviceorientationabsolute", reading)
+			timer = setTimeout(
+				() => setStatus({ state: needsTap && permission.current !== "granted" ? "needsTap" : "none" }),
+				2000,
+			)
 		}
 		function resume() {
 			if (document.hidden) return
-			if (motion.requestPermission && permission.current !== "granted")
-				setStatus({ state: permission.current === "denied" ? "refused" : "needsTap" })
-			else listen()
+			if (permission.current === "denied") {
+				setStatus({ state: "refused" })
+				return
+			}
+			listen()
+			if (!motion.requestPermission || permission.current === "granted" || !navigator.permissions) return
+			const current = generation
+			void Promise.all(
+				["accelerometer", "gyroscope", "magnetometer"].map((name) =>
+					navigator.permissions.query({ name: name as PermissionName }),
+				),
+			).then(
+				(states) => {
+					if (disposed || document.hidden || requesting || current !== generation || permission.current !== undefined)
+						return
+					if (states.every(({ state }) => state === "granted")) {
+						permission.current = "granted"
+						setStatus({ state: "none" })
+					} else if (states.some(({ state }) => state === "denied")) {
+						permission.current = "denied"
+						stop()
+						setStatus({ state: "refused" })
+					}
+				},
+				() => {},
+			)
 		}
 		start.current = () => {
 			if (disposed || document.hidden || requesting || !motion.requestPermission || permission.current === "granted")
@@ -68,7 +97,10 @@ export function useCompass(questId: string | null) {
 					if (disposed || document.hidden || current !== generation) return
 					permission.current = result === "granted" ? "granted" : "denied"
 					if (permission.current === "granted") listen()
-					else setStatus({ state: "refused" })
+					else {
+						stop()
+						setStatus({ state: "refused" })
+					}
 				})
 		}
 		function visibilityChanged() {
