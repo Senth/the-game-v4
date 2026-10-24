@@ -291,6 +291,17 @@ describe("location reports", () => {
 })
 
 describe("location authoring", () => {
+	it("allows guidance changes before solving and locks them after a solve", async () => {
+		const warmer: Location = { ...location, guidance: "warmer" }
+		expect(await saveSeasonField("season", target, warmer)).toEqual({ ok: true })
+		await reportPosition(team, "phone", quest.id, fix, now)
+		expect(await saveSeasonField("season", target, location)).toEqual({
+			ok: false,
+			error: "Locked: a team has found this place.",
+		})
+		expect((await getSeason("season"))?.arcs[0]?.quests[0]?.location).toEqual(warmer)
+	})
+
 	it("serializes place edits behind an in-flight solve so solved places stay locked", async () => {
 		const db = await collections()
 		vi.spyOn(database, "collections").mockResolvedValue(db)
