@@ -1,6 +1,6 @@
 "use client"
 
-import type { ComponentProps } from "react"
+import { type ComponentProps, useEffect, useRef } from "react"
 import { AnswerDock } from "./answer-dock"
 import type { useCompass } from "./use-compass"
 import type { LocationStatus } from "./use-location-reporter"
@@ -40,8 +40,16 @@ const helpers = {
 }
 const bands = ["far", "close", "veryClose"] as const
 const bandLabels = ["Far", "Close", "Very close"] as const
+type Rotation = { target: number; rotation: number }
+
+export function nextRotation(previous: Rotation | null, bearing: number, heading: number): Rotation {
+	const target = ((bearing - heading + 540) % 360) - 180
+	const delta = previous ? ((target - previous.target + 540) % 360) - 180 : 0
+	return { target, rotation: (previous?.rotation ?? target) + delta }
+}
 
 export function LocationDock(props: LocationDockProps) {
+	const previousRotation = useRef<Rotation | null>(null)
 	const state = props.preview ? "off" : (props.state ?? "off")
 	const found = !props.preview && props.pointsEarned !== undefined
 	const warning = state === "rough" || state === "blocked" || state === "unavailable"
@@ -76,10 +84,14 @@ export function LocationDock(props: LocationDockProps) {
 				? "text-muted font-bold"
 				: "text-head"
 	const distanceBand = guidance?.band ? bands.indexOf(guidance.band) : -1
-	const rotation =
-		guidance?.bearing !== undefined && props.compass?.heading !== undefined
-			? ((guidance.bearing - props.compass.heading + 540) % 360) - 180
-			: 0
+	const rotationState =
+		arrow && guidance?.bearing !== undefined && props.compass?.heading !== undefined
+			? nextRotation(previousRotation.current, guidance.bearing, props.compass.heading)
+			: null
+	useEffect(() => {
+		previousRotation.current = rotationState
+	}, [rotationState])
+	const rotation = rotationState?.rotation ?? 0
 	const helperOffset = arrow ? "ml-11" : "ml-5"
 	const pulseLead = !guidance && compassState !== "needsTap" && compassState !== "refused"
 	const status = (
@@ -121,7 +133,10 @@ export function LocationDock(props: LocationDockProps) {
 										aria-hidden="true"
 										className={`h-1 rounded-full ${index <= distanceBand ? "bg-head" : "bg-z2/60"}`}
 									/>
-									<p className={`mt-1 font-cond text-xs ${index === distanceBand ? "text-head" : "text-muted"}`}>
+									<p
+										aria-current={index === distanceBand ? "step" : undefined}
+										className={`mt-1 font-cond text-xs ${index === distanceBand ? "text-head" : "text-muted"}`}
+									>
 										{label}
 									</p>
 								</div>

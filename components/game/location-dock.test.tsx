@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
-import { LocationDock } from "./location-dock"
+import { LocationDock, nextRotation } from "./location-dock"
 
 const live = { answer: "", onAnswerChange: vi.fn(), onSubmit: vi.fn(), pending: false, feedback: null }
 
@@ -85,7 +85,16 @@ describe("LocationDock", () => {
 		expect(html).toContain("Far")
 		expect(html).toContain("Close")
 		expect(html).toContain("Very close")
+		expect(html).toMatch(new RegExp(`<p aria-current="step"[^>]*>${band === "far" ? "Far" : "Close"}</p>`))
 		expect(html).toContain("motion-reduce:transition-none")
+	})
+
+	it("accumulates shortest signed rotation changes across heading wrap", () => {
+		const first = nextRotation(null, 0, 179)
+		const next = nextRotation(first, 0, 181)
+
+		expect(first.rotation).toBe(-179)
+		expect(next.rotation).toBe(-181)
 	})
 
 	it("uses Location on when no trend exists and keeps the empty meter before guidance", () => {
