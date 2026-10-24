@@ -3,6 +3,7 @@ import { NotFoundError } from "@/lib/db/collections"
 import {
 	CopyTargetStartedError,
 	FinisherBonusClaimedError,
+	LocationEditError,
 	MoveConflictError,
 	PuzzleEditError,
 	QuestNotReadyError,
@@ -45,6 +46,7 @@ export function actionFailure(error: unknown, now: Date): Extract<ActionResult, 
 	if (
 		error instanceof NotFoundError ||
 		error instanceof PuzzleEditError ||
+		error instanceof LocationEditError ||
 		error instanceof FinisherBonusClaimedError ||
 		error instanceof CopyTargetStartedError ||
 		error instanceof RegistrationConflictError ||

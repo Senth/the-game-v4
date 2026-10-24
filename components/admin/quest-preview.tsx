@@ -27,12 +27,13 @@ export function QuestPreview({
 	const assetPath = useDraftValue({ ...target, field: "assetPath" }, quest.assetPath)
 	const hints = useDraftHints({ ...target, field: "hints" }, quest.hints)
 	const puzzle = useDraftValue({ ...target, field: "puzzle" }, quest.puzzle)
+	const location = useDraftValue({ ...target, field: "location" }, quest.location)
 	const answers = useDraftValue({ ...target, field: "answers" }, quest.answers)
 	const assets = usePuzzlePreviewAssets({ ...quest, assetPath, puzzle })
 	const clock = useSeasonClock(now, season.start, season.end)
 	const game = previewGame(
 		season,
-		{ ...quest, displayTitle, content, points, assetPath, hints, puzzle, answers },
+		{ ...quest, displayTitle, content, points, assetPath, hints, puzzle, location, answers },
 		new Date(clock),
 		assets,
 	)

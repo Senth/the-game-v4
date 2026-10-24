@@ -126,6 +126,9 @@ export async function saveSeasonField(
 		) {
 			return { ok: false, error: "Use a whole number from 0 to 10000." }
 		}
+		if (!("arcId" in parsed) && parsed.field === "placeRadius" && !Season.shape.placeRadius.safeParse(value).success) {
+			return { ok: false, error: "Use 5 to 500." }
+		}
 		if (!("arcId" in parsed) && parsed.field === "start") {
 			const start = Season.shape.start.parse(value)
 			const season = await getSeason(seasonId)

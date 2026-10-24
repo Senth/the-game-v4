@@ -1,4 +1,11 @@
-import { Children, type EffectCallback, isValidElement, type ReactElement, type ReactNode } from "react"
+import {
+	Children,
+	type ComponentProps,
+	type EffectCallback,
+	isValidElement,
+	type ReactElement,
+	type ReactNode,
+} from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { getPuzzlePreviewAssets } from "@/app/admin/actions"
@@ -21,6 +28,8 @@ import {
 	useDraftValue,
 } from "./autosave-provider"
 import { FinisherBonusRows } from "./finisher-bonus-rows"
+import { PlaceField } from "./place-field"
+import { PuzzleSettings } from "./puzzle-settings"
 import { QuestEditor } from "./quest-editor"
 import { QuestPreview } from "./quest-preview"
 import { AutosaveHeader, SaveStatus } from "./save-status"
@@ -133,6 +142,16 @@ function firstTreeArc(node: ReactNode): ReactElement<TreeArcProps> | undefined {
 	}
 }
 
+function editorControl(element: ReactElement<{ children?: ReactNode }>, component: ReactElement["type"]): ReactElement {
+	const form = Children.toArray(element.props.children)[0]
+	if (!isValidElement<{ children?: ReactNode }>(form)) throw new Error("Quest form missing")
+	const control = Children.toArray(form.props.children).find(
+		(child) => isValidElement(child) && child.type === component,
+	)
+	if (!isValidElement(control)) throw new Error("Quest field missing")
+	return control
+}
+
 function provider(
 	state = scope(),
 	timing = { start: null as Date | null, end: null as Date | null, now: Date.now() },
@@ -240,6 +259,87 @@ it("keeps divergent preview snapshots read-only while the editor owns server syn
 	expect(points(12).value).toBe(12)
 	expect(saveSeasonField).not.toHaveBeenCalled()
 	expect(patchSeasonList).not.toHaveBeenCalled()
+})
+
+it("refreshes idle place and puzzle fields from remote quest values", () => {
+	const owner = provider()
+	const oldLocation = { guidance: "none" as const, places: [{ id: "place", lat: 55.1, lng: 13.1, radius: 40 }] }
+	const newLocation = { guidance: "none" as const, places: [{ id: "place", lat: 55.3, lng: 13.3, radius: 85 }] }
+	const oldPuzzle = { rows: 4, cols: 4, showFull: false }
+	const newPuzzle = { rows: 5, cols: 6, showFull: true }
+	const props = {
+		seasonId: "season-1",
+		seasonTitle: "Season",
+		arcId: "arc",
+		arcTitle: "Arc",
+		hintCount: 0,
+		start: null,
+		end: null,
+		now: Date.now(),
+	}
+	const placeEditor = scope()
+	const puzzleEditor = scope()
+	const placeState = scope()
+	const puzzleState = scope()
+	const placeQuest = {
+		id: "place-quest",
+		displayTitle: "Place",
+		internalTitle: "",
+		content: "",
+		assetPath: null,
+		answers: [],
+		points: 10,
+		adminNotes: "",
+		location: oldLocation,
+		puzzle: null,
+	}
+	const puzzleQuest = {
+		id: "puzzle-quest",
+		displayTitle: "Puzzle",
+		internalTitle: "",
+		content: "",
+		assetPath: "/assets/chart.png",
+		answers: [],
+		points: 10,
+		adminNotes: "",
+		location: null,
+		puzzle: oldPuzzle,
+	}
+	const placeProps = (quest: typeof placeQuest) => {
+		const editor = render(placeEditor, () => QuestEditor({ ...props, quest }))
+		return editorControl(editor, PlaceField).props as ComponentProps<typeof PlaceField>
+	}
+	const puzzleProps = (quest: typeof puzzleQuest) => {
+		const editor = render(puzzleEditor, () => QuestEditor({ ...props, quest }))
+		return editorControl(editor, PuzzleSettings).props as ComponentProps<typeof PuzzleSettings>
+	}
+	const placeMarkup = (fieldProps: ComponentProps<typeof PlaceField>) =>
+		render(placeState, () => renderToStaticMarkup(PlaceField(fieldProps)))
+	const puzzleMarkup = (fieldProps: ComponentProps<typeof PuzzleSettings>) =>
+		render(puzzleState, () => renderToStaticMarkup(PuzzleSettings(fieldProps)))
+
+	const initialPlaceProps = placeProps(placeQuest)
+	expect(placeMarkup(initialPlaceProps)).toContain('value="55.1, 13.1"')
+	const remotePlaceProps = placeProps({ ...placeQuest, location: newLocation })
+	placeMarkup(remotePlaceProps)
+	placeMarkup(remotePlaceProps)
+	expect(placeMarkup(remotePlaceProps)).toContain('value="55.3, 13.3"')
+	expect(placeMarkup(remotePlaceProps)).toContain('value="85"')
+
+	const initialPuzzleProps = puzzleProps(puzzleQuest)
+	expect(puzzleMarkup(initialPuzzleProps)).toContain('value="4"')
+	const remotePuzzleProps = puzzleProps({ ...puzzleQuest, puzzle: newPuzzle })
+	puzzleMarkup(remotePuzzleProps)
+	const refreshedPuzzle = puzzleMarkup(remotePuzzleProps)
+	expect(refreshedPuzzle).toContain('value="5"')
+	expect(refreshedPuzzle).toContain('value="6"')
+	expect(refreshedPuzzle).toContain('aria-checked="true"')
+
+	unmount(placeEditor)
+	unmount(puzzleEditor)
+	unmount(placeState)
+	unmount(puzzleState)
+	unmount(owner.state)
 })
 
 it.each(["direct", "via placeholder"])(

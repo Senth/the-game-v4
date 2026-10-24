@@ -5,6 +5,7 @@ import { requireTeam } from "@/lib/auth/guards"
 import type { Spot } from "@/lib/domain/schemas"
 import {
 	dropPuzzlePiece as dropTeamPuzzlePiece,
+	getSolvedLocation as getTeamSolvedLocation,
 	getSolvedPuzzle as getTeamSolvedPuzzle,
 	loadGame,
 	revealHint as revealTeamHint,
@@ -33,4 +34,8 @@ export async function dropPuzzlePiece(questId: string, pieceId: string, target: 
 
 export async function getSolvedPuzzle(questId: string) {
 	return getTeamSolvedPuzzle(await requireTeam(), questId)
+}
+
+export async function getSolvedLocation(questId: string) {
+	return getTeamSolvedLocation(await requireTeam(), questId)
 }

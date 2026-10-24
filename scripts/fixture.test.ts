@@ -8,6 +8,7 @@ const now = new Date("2026-10-05T19:12:30Z")
 const { season, teams, admins } = buildFixture(now)
 const arcIds = season.arcs.map((arc) => arc.quests.map((quest) => quest.id))
 const authored = arcIds.flat()
+const finaleIds = arcIds[2] ?? []
 const quests = new Map(season.arcs.flatMap((arc) => arc.quests.map((quest) => [quest.id, quest] as const)))
 
 const standings: [string, number, number][] = [
@@ -35,14 +36,11 @@ describe("buildFixture", () => {
 		expect(admins).toEqual([{ _id: "admin", name: "admin", password: "admin" }])
 	})
 
-	it("orders every team through contiguous arcs with Finale last and no authored order", () => {
+	it("orders every team through all quests and keeps Finale order", () => {
 		for (const team of teams) {
 			expect([...team.questOrder].sort()).toEqual([...authored].sort())
 			expect(team.questOrder).not.toEqual(authored)
-			expect(team.questOrder.slice(-3)).toEqual(arcIds[2])
-			const arcOf = (questId: string) => arcIds.findIndex((ids) => ids.includes(questId))
-			const runs = team.questOrder.map(arcOf).filter((arc, index, all) => arc !== all[index - 1])
-			expect(runs).toHaveLength(3)
+			expect(team.questOrder.filter((questId) => finaleIds.includes(questId))).toEqual(finaleIds)
 		}
 	})
 
@@ -86,11 +84,13 @@ describe("buildFixture", () => {
 		expect(lagom.score).toBe(70)
 	})
 
-	it("keeps Ninjas mid-game on Backwards log, two behind pace", () => {
+	it("keeps Ninjas mid-game on Backwards log, three behind pace", () => {
 		const ninjas = teams.find((team) => team.name === "Ninjas")
 		if (!ninjas || !season.start || !season.end) throw new Error("fixture")
 		expect(ninjas.password).toBe("ninjas")
-		expect(new Set(ninjas.questOrder.slice(0, 5))).toEqual(new Set(arcIds[1]))
+		expect(new Set(ninjas.questOrder.slice(0, 5))).toEqual(
+			new Set(["church-bells", "cobblestones", "bakers-riddle", "clock-tower", "harbour-map"]),
+		)
 		expect(ninjas.questOrder[ninjas.questIndex]).toBe("backwards-log")
 		const current = ninjas.progress.find((entry) => entry.questId === "backwards-log")
 		expect(current?.solvedAt).toBeUndefined()
@@ -98,9 +98,8 @@ describe("buildFixture", () => {
 
 		const timeFraction = (now.getTime() - season.start.getTime()) / (season.end.getTime() - season.start.getTime())
 		const behindPercent = 100 * timeFraction - (100 * ninjas.questIndex) / authored.length
-		expect(Math.round(timeFraction * authored.length) - ninjas.questIndex).toBe(2)
-		expect(behindPercent).toBeGreaterThan(10)
-		expect(behindPercent).toBeLessThanOrEqual(20)
+		expect(Math.round(timeFraction * authored.length) - ninjas.questIndex).toBe(3)
+		expect(behindPercent).toBeGreaterThan(20)
 	})
 
 	it("seeds Gather the pieces as a puzzle and Rävarna halfway through it", () => {
@@ -122,6 +121,37 @@ describe("buildFixture", () => {
 		expect(state.spots.filter((spot) => "cell" in spot)).toHaveLength(8)
 		expect(state.spots.filter((spot, index) => "cell" in spot && spot.cell !== index)).toHaveLength(2)
 		expect(state.spots.filter((spot) => !("cell" in spot))).toHaveLength(8)
+	})
+
+	it("adds Next stop as an unsolved thirteenth quest without changing standings", () => {
+		const locationQuest = quests.get("svedala-station")
+		if (!locationQuest) throw new Error("fixture")
+		expect(season.placeRadius).toBe(40)
+		expect(locationQuest).toMatchObject({
+			internalTitle: "Svedala station",
+			displayTitle: "Next stop",
+			content: "Trains to Malmö stop here twice an hour. Stand where the tickets are sold and the quest is yours.",
+			assetPath: null,
+			answers: [],
+			points: 20,
+			hints: [{ text: "Look for the yellow ticket machine.", points: 5 }],
+			location: {
+				guidance: "none",
+				places: [{ id: "svedala-station-place", lat: 55.50682, lng: 13.23289, radius: 40 }],
+			},
+		})
+		expect(authored).toHaveLength(13)
+		for (const team of teams) {
+			expect(team.questOrder).toHaveLength(13)
+			expect(team.questOrder).toContain(locationQuest.id)
+			expect(team.progress.find((entry) => entry.questId === locationQuest.id)?.solvedAt).toBeUndefined()
+		}
+		expect(teams.map((team) => [team.name, team.questIndex, team.score])).toEqual(standings)
+
+		const ninjas = teams.find((team) => team.name === "Ninjas")
+		if (!ninjas) throw new Error("fixture")
+		expect(ninjas.questOrder[ninjas.questIndex]).toBe("backwards-log")
+		expect(ninjas.questOrder[ninjas.questIndex + 1]).toBe(locationQuest.id)
 	})
 
 	it("describes Backwards log as the G2 mock does", () => {

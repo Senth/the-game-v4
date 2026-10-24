@@ -60,6 +60,7 @@ describe("createSeasonAction", () => {
 			title: "Cipher Night 2026",
 			lengthMinutes: 60,
 			defaultQuestPoints: null,
+			placeRadius: 40,
 			start: null,
 			end: null,
 			shuffleArcs: false,

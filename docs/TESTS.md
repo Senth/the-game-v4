@@ -33,6 +33,42 @@ Assert unbuilt orders are skipped and not counted, and arc removal counts each t
 Put reproducible rule and interaction cases in unit or component tests rather than adding browser flows.
 Write a red regression test first for a reproducible bug. On failure, rerun only affected tests while fixing.
 
+### Location quests
+
+Use [PROJECT.md's location rules](PROJECT.md#location-quests) for expected behavior and exact boundaries.
+Pure tests cover coordinate parsing, rounding, invalid pastes, geographic ranges, haversine distance and map URLs.
+Test accuracy, age, future-time and radius boundaries on both sides, including equality.
+Cover completeness without answers, missing places, legacy defaults and unchanged inputs.
+
+Test reports against isolated MongoDB, including malformed fixes and wrong, hidden, removed or non-location quests.
+Reject reports outside running play, after completion and from another team.
+Test concurrent phones, retries and races with hint reveals and place edits.
+Assert exactly one solve, score award and finisher claim, using stored hint penalties.
+Assert only successful solves publish live events; rejected and outside reports leave team state unchanged.
+Test backup answers and authorized solved-location earnings for teammate completion feedback.
+
+Test latest-fix replacement, team/phone isolation and expiry on reads and writes, including future-dated fixes.
+Test separate UUID phone cookies across shared-login phones, stable reuse, malformed-cookie replacement
+and required cookie attributes.
+Assert the phone id never enters the session payload.
+Test report authorization and admin guards before reads or writes.
+Cover place locks, editable backup answers, puzzle exclusion and concurrent edits.
+Assert radius changes leave existing places unchanged.
+Test guarded copies retaining place configuration without team progress.
+Whitelist player, preview, live and report responses against
+[PROJECT.md's player data boundary](PROJECT.md#player-data-boundary).
+Reject coordinates, radius and place ids alongside existing secrets.
+
+Component tests cover every dock status, helper copy, accuracy, permission actions, backup-code visibility and inert previews.
+Test completion hold and teammate refetch feedback.
+Mock geolocation, permissions, visibility, fetch and wake locks. Never request real positions.
+Cover granted, prompt, denied and missing APIs, reporting cadence, hidden-tab pauses, resume and cleanup on quest changes.
+Assert stale callbacks and responses cannot restart reporting; release late wake locks and tolerate wake-lock failures.
+Test the Place field's empty state, valid and invalid paste, radius edits, map link, lock copy and disabled controls.
+Cover puzzle exclusion, optional answers, draft previews, header autosave and retry.
+Test New place radius helpers and range errors.
+Keep these cases in unit and component tests. Add no browser flows.
+
 ## End-to-end budget
 
 Playwright global setup boots `mongodb-memory-server`, supplies `MONGODB_URI`, starts the app,
@@ -70,19 +106,21 @@ Commit a landscape PNG under 300 KB in `scripts/fixture/`, such as a drawn keepe
 Seed copies it to `ASSETS_DIR`.
 Mock photos are placeholders, not fixture content.
 Rävarna is already on it, with eight pieces in cells, including two in wrong cells; the remaining pieces are loose.
-Standings, counts and every other team stay unchanged.
-Fixture tests validate puzzle configuration and progress against the zod schemas.
+Old Town ends with "Next stop", a 20-point location quest at Svedala station, with a 40 m radius, one
+5-point hint and no answer or file.
+Every team has it unsolved, so quest orders total 13; scores, ranks and solved counts stay unchanged.
+Fixture tests validate puzzle and location configuration plus progress against the zod schemas.
 
 | Arc | Quests | Authored order |
 | --- | --- | --- |
 | Lighthouse | 4 | Backwards log; Fog horn morse; Keeper's ledger; Lamp room |
-| Old Town | 5 | Church bells; Cobblestones; Baker's riddle; Clock tower; Harbour map |
+| Old Town | 6 | Church bells; Cobblestones; Baker's riddle; Clock tower; Harbour map; Next stop |
 | Finale | 3 | Gather the pieces; The vault; Last word |
 
 Lighthouse and Old Town shuffle quests; Finale is ordered. Team quest orders differ from authored order.
 The names and representative standings come from S1:
 
-| Rank | Team | Solved out of 12 | Score |
+| Rank | Team | Solved out of 13 | Score |
 | --- | --- | --- | --- |
 | 1 | Rävarna | 9 | 120 |
 | 2 | Team Kaos | 8 | 105 |
@@ -95,8 +133,9 @@ The names and representative standings come from S1:
 | 9 | Sista Laget | 4 | 41 |
 | 10 | Lösenord123 | 2 | 20 |
 
-Ninjas is currently on Backwards log, with display title "The keeper's last log" and answers
-`["lighthouse", "fyren"]`. Give it content, an asset and hints at 5, 10 and 20 points, with the first revealed.
+Ninjas is currently on Backwards log, with Next stop next and three behind pace. Backwards log
+has display title "The keeper's last log" and answers `["lighthouse", "fyren"]`. Give it content,
+an asset and hints at 5, 10 and 20 points, with the first revealed.
 Retain revealed hints on solved quests too, so M1 completion/revealer chips and M4 history have real records.
 Lagom has a removed, skipped quest with one 5-point hint snapshot and no earned points.
 Its solved Backwards log has a deleted-hint snapshot, already charged against that quest's 15 earned points.

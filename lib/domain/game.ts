@@ -162,6 +162,7 @@ export type PlayerPuzzle = {
 export type PlayerQuest = Pick<Quest, "id" | "displayTitle" | "content" | "points"> & {
 	assetPath?: string | null
 	puzzle?: PlayerPuzzle | null
+	location?: { guidance: "none" }
 	hasAnswers?: boolean
 	worth: number
 	hints: PlayerHint[]
@@ -200,6 +201,9 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress, assets?: 
 		displayTitle: quest.displayTitle,
 		content: quest.content,
 		...(quest.puzzle ? { puzzle, hasAnswers: quest.answers.length > 0 } : { assetPath: quest.assetPath }),
+		...(quest.location
+			? { location: { guidance: quest.location.guidance }, hasAnswers: quest.answers.length > 0 }
+			: {}),
 		points: quest.points,
 		worth: scoreForSolve(quest, { hintsRevealed: revealed }),
 		hints: shown.map((hint, index) =>

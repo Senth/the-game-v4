@@ -23,9 +23,9 @@ it.each([ninjas, lagom])("renders $name hint fragments without React key errors"
 it("renders Ninjas score, pace, authored arcs, current quest and snapshot hints without rank or controls", () => {
 	const html = renderToStaticMarkup(<TeamHistory season={season} team={ninjas} now={now.getTime()} />)
 	expect(html).toContain("64p")
-	expect(html).toContain("5 / 12")
+	expect(html).toContain("5 / 13")
 	expect(html).toContain("−11p from hints")
-	expect(html).toContain('text-pace-2">2 behind pace')
+	expect(html).toContain('text-pace-3">3 behind pace')
 	expect(html.indexOf("Lighthouse")).toBeLessThan(html.indexOf("Old Town"))
 	expect(html.indexOf("Old Town")).toBeLessThan(html.indexOf("Finale"))
 	const current = html.match(/<li[^>]*>.*?Backwards log.*?<\/li>/)?.[0]

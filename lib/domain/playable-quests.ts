@@ -6,14 +6,16 @@ export function playableArcs<T extends { quests: { id: string; hidden?: boolean 
 }
 
 export function missingForGame(
-	quest: Pick<Quest, "content" | "assetPath" | "answers" | "points" | "puzzle">,
+	quest: Pick<Quest, "content" | "assetPath" | "answers" | "points" | "puzzle" | "location">,
 ): string[] {
 	const missing: string[] = []
 	if (quest.puzzle) {
 		if (!quest.assetPath || assetKind(quest.assetPath) !== "image") missing.push("an image")
 	} else {
 		if (!quest.content.trim() && !quest.assetPath?.trim()) missing.push("content")
-		if (quest.answers.length === 0) missing.push("answers")
+		if (quest.location) {
+			if (quest.location.places.length === 0) missing.push("a place")
+		} else if (quest.answers.length === 0) missing.push("answers")
 	}
 	if (quest.points === null) missing.push("points")
 	return missing

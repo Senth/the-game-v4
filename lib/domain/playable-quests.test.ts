@@ -39,6 +39,23 @@ describe("Quest hidden flag", () => {
 
 describe("missingForGame", () => {
 	const complete = { displayTitle: "Title", content: "Content", assetPath: null, answers: ["answer"], points: 10 }
+	const location = { guidance: "none" as const, places: [{ id: "p1", lat: 55.5, lng: 13.2, radius: 40 }] }
+
+	it("accepts a location quest without answers, using content or any file", () => {
+		const quest = { ...complete, answers: [], location }
+		const before = structuredClone(quest)
+		expect(missingForGame(quest)).toEqual([])
+		expect(missingForGame({ ...quest, content: " ", assetPath: "/assets/clue.pdf", points: 0 })).toEqual([])
+		expect(quest).toEqual(before)
+	})
+
+	it("requires content or file, points and a place for location quests", () => {
+		expect(missingForGame({ ...complete, location: { ...location, places: [] } })).toEqual(["a place"])
+		expect(missingForGame({ ...complete, content: " ", answers: [], points: null, location })).toEqual([
+			"content",
+			"points",
+		])
+	})
 
 	it.each(["jpg", "png", "webp", "gif", "svg"])("accepts an image puzzle with optional answers: %s", (extension) => {
 		for (const answers of [[], ["answer"]]) {

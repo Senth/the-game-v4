@@ -516,8 +516,22 @@ describe("playerView", () => {
 	})
 
 	it("serializes no answer, internal title, admin note or hidden hint text", () => {
-		const json = JSON.stringify(playerView(secretQuest, progress))
+		const location = {
+			guidance: "none" as const,
+			places: [{ id: "secret-place-id", lat: 55.5079, lng: 13.2353, radius: 47 }],
+		}
+		const input = { ...secretQuest, location }
+		const before = structuredClone(input)
+		const json = JSON.stringify(playerView(input, progress))
 		for (const secret of [
+			"lat",
+			"lng",
+			"radius",
+			"places",
+			"secret-place-id",
+			"55.5079",
+			"13.2353",
+			"47",
 			"secret-answer-one",
 			"secret-answer-two",
 			"internal-backwards-log",
@@ -528,7 +542,20 @@ describe("playerView", () => {
 		]) {
 			expect(json).not.toContain(secret)
 		}
+		expect(input).toEqual(before)
 	})
+
+	it.each([{ answers: [] }, { answers: ["backup secret"] }])(
+		"exposes only guidance and backup-code presence for location answers $answers",
+		({ answers }) => {
+			const location = { guidance: "none" as const, places: [{ id: "p1", lat: 55.5, lng: 13.2, radius: 40 }] }
+			expect(playerView({ ...secretQuest, location, answers }, progress)).toEqual({
+				...playerView(secretQuest, progress),
+				location: { guidance: "none" },
+				hasAnswers: answers.length > 0,
+			})
+		},
+	)
 
 	it("leaves a shared deep-frozen season unchanged", () => {
 		const { frozen, original } = frozenCopy({ season: shared, progress })

@@ -5,7 +5,10 @@ import type { Quest } from "@/lib/domain/schemas"
 import { useAutosaveField } from "./autosave-provider"
 import { PuzzleSettings } from "./puzzle-settings"
 
-vi.mock("./autosave-provider", () => ({ useAutosaveField: vi.fn() }))
+vi.mock("./autosave-provider", () => ({
+	useAutosaveField: vi.fn(),
+	useDraftValue: (_target: unknown, value: unknown) => value,
+}))
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
 	useId: () => "puzzle",
@@ -101,4 +104,13 @@ it("locks puzzle mode and dimensions after teams reach it but leaves full-pictur
 	)
 	expect(lockedMode?.props.disabled).toBe(true)
 	expect(fullPicture?.props.disabled).not.toBe(true)
+})
+
+it("shows the location exclusivity helper instead of puzzle controls", () => {
+	const html = renderToStaticMarkup(
+		<PuzzleSettings {...props} location={{ guidance: "none", places: [{ id: "p1", lat: 55, lng: 13, radius: 40 }] }} />,
+	)
+	expect(html).toContain("Puzzle mode is off while this quest has a place.")
+	expect(html).not.toContain('role="switch"')
+	expect(html).not.toContain("Rows")
 })

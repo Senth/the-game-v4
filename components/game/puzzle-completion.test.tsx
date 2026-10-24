@@ -1,10 +1,11 @@
 import type { EffectCallback, ReactElement } from "react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { dropPuzzlePiece, getGame, getSolvedPuzzle } from "@/app/actions"
+import { dropPuzzlePiece, getGame, getSolvedLocation, getSolvedPuzzle } from "@/app/actions"
 import { type PlayerGame, playerGame } from "@/lib/domain/player-game"
 import { buildFixture } from "@/scripts/fixture"
 import { GameScreen } from "./game-screen"
 import type { GameView } from "./game-view"
+import { useLocationReporter } from "./use-location-reporter"
 
 const hooks = vi.hoisted(() => ({
 	states: [] as unknown[],
@@ -34,6 +35,7 @@ vi.mock("react", async (original) => ({
 }))
 vi.mock("@/app/actions", () => ({
 	getSolvedPuzzle: vi.fn(),
+	getSolvedLocation: vi.fn(),
 	getGame: vi.fn(),
 	dropPuzzlePiece: vi.fn(),
 	submitAnswer: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock("@/lib/events/use-live-state", () => ({
 }))
 vi.mock("@/lib/events/use-finisher-notices", () => ({ useFinisherNotices: () => ({ notice: null }) }))
 vi.mock("./use-game-clock", () => ({ useGameClock: () => new Date("2026-10-15T18:00:00Z") }))
+vi.mock("./use-location-reporter", () => ({ useLocationReporter: vi.fn(() => ({ state: "off", share: vi.fn() })) }))
 
 const now = new Date("2026-10-15T18:00:00Z")
 const fixture = buildFixture(now)
@@ -71,6 +74,10 @@ const initial: PlayerGame = {
 			pieces: ["d", "a", "c", "b"].map((id) => ({ id, spot: { x: 0, y: 0 } })),
 		},
 	},
+}
+const locationInitial: PlayerGame = {
+	...initial,
+	quest: { ...base.quest, puzzle: null, location: { guidance: "none" }, hasAnswers: false },
 }
 function render() {
 	let view: ReactElement<Parameters<typeof GameView>[0]>
@@ -110,6 +117,57 @@ it.each(["next", "completed"])("holds a teammate's solved picture for 1.5 second
 	const next = render()
 	if (destination === "next") expect(next.props.quest?.id).toBe("next")
 	else expect(next.props).toHaveProperty("game.lifecycleState", "completed")
+	if (cleanup) cleanup()
+})
+
+it.each(["next", "completed"])("holds a teammate's location arrival for 1.5 seconds before %s", async (destination) => {
+	hooks.game = locationInitial
+	render()
+	hooks.game =
+		destination === "completed"
+			? { lifecycleState: "completed", teamId: team._id, score: 140, rank: 1, teamCount: 10, finishers: [] }
+			: { ...base, quest: nextQuest }
+	vi.mocked(getSolvedLocation).mockResolvedValue({ pointsEarned: 12 })
+	expect(render().props.quest?.id).toBe(initial.quest?.id)
+	const cleanup = hooks.effect?.()
+	await Promise.resolve()
+	expect(getSolvedLocation).toHaveBeenCalledWith(initial.quest?.id)
+	expect(getSolvedPuzzle).not.toHaveBeenCalled()
+	expect(render().props.locationComplete).toBe(12)
+	expect(render().props.puzzleComplete).toBeUndefined()
+	vi.advanceTimersByTime(1499)
+	expect(render().props.locationComplete).toBe(12)
+	vi.advanceTimersByTime(1)
+	if (destination === "next") expect(render().props.quest?.id).toBe("next")
+	else expect(render().props).toHaveProperty("game.lifecycleState", "completed")
+	if (cleanup) cleanup()
+})
+
+it("does not celebrate a skipped location quest", async () => {
+	hooks.game = locationInitial
+	render()
+	hooks.game = { ...base, quest: null }
+	vi.mocked(getSolvedLocation).mockResolvedValueOnce(null)
+	render()
+	hooks.effect?.()
+	await Promise.resolve()
+	expect(render().props.quest).toBeNull()
+})
+
+it("refetches a reporting phone's solve and stops reporting during the arrival hold", async () => {
+	hooks.game = locationInitial
+	vi.mocked(getGame).mockResolvedValue({ ...base, quest: nextQuest })
+	vi.mocked(getSolvedLocation).mockResolvedValue({ pointsEarned: 12 })
+	render()
+	expect(useLocationReporter).toHaveBeenLastCalledWith(initial.quest?.id, expect.any(Function))
+	vi.mocked(useLocationReporter).mock.lastCall?.[1]()
+	await Promise.resolve()
+	render()
+	expect(useLocationReporter).toHaveBeenLastCalledWith(null, expect.any(Function))
+	const cleanup = hooks.effect?.()
+	await Promise.resolve()
+	expect(render().props.locationComplete).toBe(12)
+	expect(getGame).toHaveBeenCalledOnce()
 	if (cleanup) cleanup()
 })
 

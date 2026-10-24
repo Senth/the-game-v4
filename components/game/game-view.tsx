@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect, useRef } from "react"
 import type { PlayerFinisher } from "@/lib/domain/finishers"
 import type { PaceBand, PlayerQuest, RailArc, StripEntry } from "@/lib/domain/game"
 import type { Spot } from "@/lib/domain/schemas"
@@ -9,7 +9,9 @@ import { AnswerDock, type AnswerFeedback } from "./answer-dock"
 import { FinishRibbon } from "./finish-ribbon"
 import { GameHeader } from "./game-header"
 import { Intel } from "./intel"
+import { LocationDock } from "./location-dock"
 import { QuestContent } from "./quest-content"
+import type { LocationStatus } from "./use-location-reporter"
 
 type GameViewProps = {
 	timeLeftMs: number
@@ -19,6 +21,7 @@ type GameViewProps = {
 	finishers?: PlayerFinisher[]
 	quest: PlayerQuest | null
 	puzzleComplete?: number
+	locationComplete?: number
 } & (
 	| { preview: true | "team" }
 	| {
@@ -35,13 +38,32 @@ type GameViewProps = {
 			decrypting: ReadonlySet<string>
 			onDecryptComplete: (hintId: string) => void
 			onPuzzleDrop?: (pieceId: string, target: Spot) => Promise<void>
+			locationStatus?: LocationStatus
+			onShareLocation?: () => void
 	  }
 )
 
 export function GameView(props: GameViewProps) {
 	const live = props.preview ? null : props
 	const { timeLeftMs, pace, rail, strip, quest } = props
-	const showDock = quest && quest.hasAnswers !== false && props.puzzleComplete === undefined
+	const showDock = quest && (quest.location || quest.hasAnswers !== false) && props.puzzleComplete === undefined
+	const main = useRef<HTMLElement>(null)
+	const dock = useRef<HTMLDivElement>(null)
+	const location = !!quest?.location
+	useEffect(() => {
+		const content = main.current
+		const bar = dock.current?.firstElementChild
+		if (!location || !content || !bar || typeof ResizeObserver === "undefined") return
+		const observer = new ResizeObserver(([entry]) => {
+			if (entry)
+				content.style.paddingBottom = `calc(${entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height}px + var(--spacing) * 5)`
+		})
+		observer.observe(bar)
+		return () => {
+			observer.disconnect()
+			content.style.removeProperty("padding-bottom")
+		}
+	}, [location])
 
 	return (
 		<>
@@ -67,7 +89,8 @@ export function GameView(props: GameViewProps) {
 				)}
 			</div>
 			<main
-				className={`mx-auto max-w-2xl px-4 pt-5 ${showDock ? "pb-[calc(var(--spacing)*40+env(safe-area-inset-bottom))]" : "pb-16"}`}
+				ref={main}
+				className={`mx-auto max-w-2xl px-4 pt-5 ${location ? "pb-[calc(var(--spacing)*96+env(safe-area-inset-bottom))]" : showDock ? "pb-[calc(var(--spacing)*40+env(safe-area-inset-bottom))]" : "pb-16"}`}
 			>
 				{quest ? (
 					<>
@@ -92,18 +115,37 @@ export function GameView(props: GameViewProps) {
 					<p className="text-muted">Waiting for a quest.</p>
 				)}
 			</main>
-			{showDock &&
-				(live ? (
-					<AnswerDock
-						answer={live.answer}
-						onAnswerChange={live.onAnswerChange}
-						onSubmit={live.onSubmit}
-						pending={live.pending}
-						feedback={live.feedback}
-					/>
-				) : (
-					<AnswerDock preview />
-				))}
+			{showDock && (
+				<div ref={dock}>
+					{quest.location ? (
+						live ? (
+							<LocationDock
+								{...live.locationStatus}
+								onShare={live.onShareLocation}
+								pointsEarned={props.locationComplete}
+								hasAnswers={quest.hasAnswers === true}
+								answer={live.answer}
+								onAnswerChange={live.onAnswerChange}
+								onSubmit={live.onSubmit}
+								pending={live.pending}
+								feedback={live.feedback}
+							/>
+						) : (
+							<LocationDock preview hasAnswers={quest.hasAnswers === true} />
+						)
+					) : live ? (
+						<AnswerDock
+							answer={live.answer}
+							onAnswerChange={live.onAnswerChange}
+							onSubmit={live.onSubmit}
+							pending={live.pending}
+							feedback={live.feedback}
+						/>
+					) : (
+						<AnswerDock preview />
+					)}
+				</div>
+			)}
 		</>
 	)
 }

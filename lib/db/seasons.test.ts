@@ -88,6 +88,7 @@ describe("seasons", () => {
 		oldTown.title = "Harbor"
 		lighthouse.quests[1] = {
 			...quest("q2"),
+			location: null,
 			displayTitle: "Beacon",
 			hints: [{ id: "q2-h1", text: "Look up", points: 5 }],
 		}

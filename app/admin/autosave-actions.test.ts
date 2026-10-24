@@ -194,6 +194,16 @@ describe("autosave actions", () => {
 		expect(publish).not.toHaveBeenCalled()
 	})
 
+	it.each([4, 501, 2.5, Number.NaN, "40"])("rejects invalid place radius %j with shared copy", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { field: "placeRadius" }, value)).toEqual({
+			ok: false,
+			error: "Use 5 to 500.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
 	it("does not change existing quest points when the default changes", async () => {
 		const season = await setup()
 		await (await collections()).seasons.updateOne(

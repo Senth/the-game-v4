@@ -6,6 +6,7 @@ const publicPaths = [
 	"/register",
 	"/board",
 	"/api/events",
+	"/api/location",
 	"/api/health",
 	"/icon.svg",
 	"/favicon.ico",

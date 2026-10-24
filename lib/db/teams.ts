@@ -1,8 +1,9 @@
+import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 import { sortByArrival } from "@/lib/domain/finishers"
-import { applyStructuralEdit, buildQuestOrder, type StructuralEdit } from "@/lib/domain/game"
+import { applyStructuralEdit, buildQuestOrder, findQuest, type StructuralEdit } from "@/lib/domain/game"
 import { playableArcs } from "@/lib/domain/playable-quests"
-import { PuzzleState, RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
+import { Location, PuzzleState, RevealedHint, type Season, Team, TeamQuestProgress } from "@/lib/domain/schemas"
 import { publish, teamChannel } from "@/lib/events/bus"
 import { collections, NotFoundError } from "./collections"
 import { claimFinish } from "./finishers"
@@ -19,6 +20,7 @@ const CurrentSolve = CurrentQuest.extend({
 	orderLength: z.number().int().positive(),
 	hintCount: z.number().int().min(0),
 	puzzleVersion: z.number().int().nonnegative().optional(),
+	location: Location.optional(),
 })
 export type CurrentSolve = z.infer<typeof CurrentSolve>
 
@@ -216,6 +218,10 @@ export async function solveCurrentQuest(
 	if (!team) throw new NotFoundError(`Team ${teamId} not found`)
 	return withSeasonStructure(team.seasonId, async () => {
 		await finishSeasonStructure(team.seasonId)
+		if (current.location) {
+			const season = await (await collections()).seasons.findOne({ _id: team.seasonId })
+			if (!season || !isDeepStrictEqual(findQuest(season, current.questId)?.location, current.location)) return false
+		}
 		await ensureProgress(teamId, current)
 		const result = await (await collections()).teams.updateOne(
 			{

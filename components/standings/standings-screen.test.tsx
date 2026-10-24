@@ -139,7 +139,7 @@ describe("StandingsScreen", () => {
 			const html = render(standings)
 			expect(html).toContain("‹ Back</a>")
 			expect(html).toContain(state === "completed" ? "You solved every quest." : "Time&#x27;s up.")
-			expect(html).toContain("7th of 10 · 5 / 12 quests")
+			expect(html).toContain("7th of 10 · 5 / 13 quests")
 			expect(html).toContain('text-2xl font-bold text-head">64p')
 			expect(html).not.toContain("bg-time")
 			expect(html).not.toContain("aria-current")
@@ -187,10 +187,10 @@ describe("StandingsScreen", () => {
 		await vi.advanceTimersByTimeAsync(0)
 		expect(hooks.state).toEqual(next)
 		const html = render()
-		expect(html).toContain("6 / 12")
-		expect(html).toContain("6/12")
+		expect(html).toContain("6 / 13")
+		expect(html).toContain("6/13")
 		expect(html).toContain("74p")
-		expect(html).toContain('style="width:50%"')
+		expect(html).toContain('style="width:46.15384615384615%"')
 	})
 
 	it("refreshes at the end boundary and switches to final standings without an event", async () => {
