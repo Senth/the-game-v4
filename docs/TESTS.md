@@ -120,8 +120,8 @@ Commit a landscape PNG under 300 KB in `scripts/fixture/`, such as a drawn keepe
 Seed copies it to `ASSETS_DIR`.
 Mock photos are placeholders, not fixture content.
 Rävarna is already on it, with eight pieces in cells, including two in wrong cells; the remaining pieces are loose.
-Old Town ends with "Next stop", a 20-point location quest at Svedala station, with a 40 m radius, one
-5-point hint and no answer or file.
+Old Town ends with "Next stop", a 20-point warmer/colder location quest at Svedala station, with a 40 m
+radius, one 5-point hint and no answer or file.
 Every team has it unsolved, so quest orders total 13; scores, ranks and solved counts stay unchanged.
 Fixture tests validate puzzle and location configuration plus progress against the zod schemas.
 

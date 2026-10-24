@@ -152,7 +152,7 @@ const arcs: Arc[] = [
 				{
 					displayTitle: "Next stop",
 					location: {
-						guidance: "none",
+						guidance: "warmer",
 						places: [{ id: "svedala-station-place", lat: 55.50682, lng: 13.23289, radius: 40 }],
 					},
 				},

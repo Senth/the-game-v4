@@ -136,7 +136,7 @@ describe("buildFixture", () => {
 			points: 20,
 			hints: [{ text: "Look for the yellow ticket machine.", points: 5 }],
 			location: {
-				guidance: "none",
+				guidance: "warmer",
 				places: [{ id: "svedala-station-place", lat: 55.50682, lng: 13.23289, radius: 40 }],
 			},
 		})
