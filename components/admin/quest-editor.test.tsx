@@ -15,6 +15,7 @@ import { addQuestToGame, getAddQuestImpact, getRemoveQuestImpact, removeQuest } 
 import { useAutosaveField, useAutosaveList, useDraftValue } from "./autosave-provider"
 import { ConfirmDialog } from "./confirm-dialog"
 import { CopyDialog } from "./copy-dialog"
+import { PlaceField } from "./place-field"
 import { QuestEditor } from "./quest-editor"
 
 const hooks = vi.hoisted(() => ({
@@ -100,6 +101,17 @@ const defaults = {
 	end: null,
 	now,
 }
+
+it("passes season id, map area and default radius to the Place field", () => {
+	const mapArea = { lat: 55.5079, lng: 13.2353, zoom: 14 }
+	const editor = render({ mapArea, placeRadius: 125 }).root
+	const field = Children.toArray(editor.props.children[0].props.children).find(
+		(child) => isValidElement(child) && child.type === PlaceField,
+	) as ReactElement<Parameters<typeof PlaceField>[0]>
+	expect(field.props.mapArea).toEqual(mapArea)
+	expect(field.props.seasonId).toBe(defaults.seasonId)
+	expect(field.props.seasonRadius).toBe(125)
+})
 const live = { start: new Date(now - 60_000), end: new Date(now + 60_000) }
 type ButtonProps = { children?: ReactNode; disabled?: boolean; className: string; onClick: () => void }
 let cleanup: ReturnType<EffectCallback>

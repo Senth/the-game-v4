@@ -75,6 +75,7 @@ const fake = vi.hoisted(() => {
 			return this
 		})
 		getLngLat = vi.fn(() => this.position)
+		getElement = () => this.options.element
 		addTo = vi.fn(() => this)
 		setDraggable = vi.fn(() => this)
 		remove = vi.fn()
@@ -134,7 +135,9 @@ beforeEach(() => {
 	hooks.events = []
 	fake.Map.instances = []
 	fake.Marker.instances = []
-	vi.stubGlobal("document", { createElement: () => ({ className: "", setAttribute: vi.fn(), append: vi.fn() }) })
+	vi.stubGlobal("document", {
+		createElement: () => ({ className: "", dataset: {}, setAttribute: vi.fn(), append: vi.fn() }),
+	})
 	vi.stubGlobal("getComputedStyle", () => ({
 		getPropertyValue: (key: string) => (key === "--color-head" ? "#bbdefb" : "#1c7dc8"),
 	}))
@@ -216,7 +219,7 @@ describe("MapView", () => {
 	})
 
 	it("saves rounded pin moves and clamped handle resizes only on release", () => {
-		const edit = { onMove: vi.fn(), onResize: vi.fn(), onCreate: vi.fn() }
+		const edit = { onMove: vi.fn(), onResize: vi.fn(), onCreate: vi.fn(), onPreview: vi.fn() }
 		const { map } = mount({ circle, edit })
 		map.fire("load")
 		const [pin, edge] = fake.Marker.instances
@@ -225,10 +228,18 @@ describe("MapView", () => {
 		const edgePosition = edgePoint(circle, circle.radius)
 		expect(edge?.setLngLat).toHaveBeenLastCalledWith([edgePosition.lng, edgePosition.lat])
 		pin?.setLngLat([13.12345678, 55.12345678])
+		pin?.events.dragstart?.()
+		pin?.events.drag?.()
+		expect(edit.onPreview).toHaveBeenLastCalledWith({ lat: 55.123457, lng: 13.123457, radius: 40 })
 		expect(edit.onMove).not.toHaveBeenCalled()
 		pin?.events.dragend?.()
 		expect(edit.onMove).toHaveBeenCalledExactlyOnceWith({ lat: 55.123457, lng: 13.123457 })
 		edge?.setLngLat([circle.lng, circle.lat])
+		edge?.events.dragstart?.()
+		edge?.events.drag?.()
+		expect(edit.onPreview).toHaveBeenLastCalledWith({ ...circle, radius: 5 })
+		expect(edit.onResize).not.toHaveBeenCalled()
+		expect(edge?.options.element.dataset.radius).toBe("5 m")
 		edge?.events.dragend?.()
 		expect(edit.onResize).toHaveBeenLastCalledWith(5)
 		edge?.setLngLat([circle.lng + 1, circle.lat])
@@ -236,6 +247,25 @@ describe("MapView", () => {
 		expect(edit.onResize).toHaveBeenLastCalledWith(500)
 		map.fire("click", { lngLat: circle })
 		expect(edit.onCreate).not.toHaveBeenCalled()
+	})
+
+	it("keeps the dragged handle under the pointer while updating the ring and radius label", () => {
+		const edit = { onMove: vi.fn(), onResize: vi.fn(), onCreate: vi.fn(), onPreview: vi.fn() }
+		const { map } = mount({ circle, edit })
+		map.fire("load")
+		const edge = fake.Marker.instances[1]
+		edge?.events.dragstart?.()
+		edge?.setLngLat([13.2, 55.501])
+		const calls = edge?.setLngLat.mock.calls.length
+		render({ circle: { ...circle, radius: 111 }, edit })
+		for (const effect of hooks.effects.slice(1)) effect()
+		expect(edge?.setLngLat).toHaveBeenCalledTimes(calls ?? 0)
+		expect(edge?.options.element.dataset.radius).toBe("111 m")
+		expect(map.sources.place?.setData).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				features: [expect.objectContaining({ geometry: { type: "Polygon", coordinates: [circleRing(circle, 111)] } })],
+			}),
+		)
 	})
 
 	it("creates only in an empty editable map and keeps locked maps marker-free", () => {

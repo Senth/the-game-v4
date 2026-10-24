@@ -76,6 +76,7 @@ vi.mock("react", async (importOriginal) => ({
 	useId: () => "test-field",
 	useContext: () => hooks.context,
 	useEffectEvent: (callback: () => void) => callback,
+	useMemo: (create: () => unknown) => create(),
 	useEffect: (effect: EffectCallback, deps: unknown[]) => {
 		const scope = hooks.active
 		const index = scope.cursor++

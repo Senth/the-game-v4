@@ -27,6 +27,7 @@ export type MapViewProps = {
 		onMove: (point: Coordinates) => void
 		onResize: (radius: number) => void
 		onCreate: (point: Coordinates) => void
+		onPreview?: (circle: Circle) => void
 	} | null
 	framing?: Framing | null
 	interactive?: boolean
@@ -55,6 +56,19 @@ export default function MapView({
 	const instance = useRef<LibreMap | null>(null)
 	const markers = useRef<{ pin?: Marker; edge?: Marker; dot?: Marker }>({})
 	const ready = useRef(false)
+	const dragging = useRef<"pin" | "edge" | null>(null)
+
+	const preview = useEffectEvent((key: "pin" | "edge") => {
+		const marker = markers.current[key]
+		const point = marker?.getLngLat()
+		if (!marker || !point || !circle || !interactive || !edit) return
+		const next =
+			key === "pin"
+				? { lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng), radius: circle.radius }
+				: { ...circle, radius: radiusFromHandle(circle, point) }
+		if (key === "edge") marker.getElement().dataset.radius = `${next.radius} m`
+		edit.onPreview?.(next)
+	})
 
 	const movePin = useEffectEvent(() => {
 		const point = markers.current.pin?.getLngLat()
@@ -107,10 +121,22 @@ export default function MapView({
 				marker = new Marker({ element, draggable: key !== "dot" && enabled })
 					.setLngLat([position.lng, position.lat])
 					.addTo(map)
-				if (key !== "dot") marker.on("dragend", key === "pin" ? movePin : resize)
+				if (key !== "dot") {
+					marker.on("dragstart", () => {
+						dragging.current = key
+					})
+					marker.on("drag", () => preview(key))
+					marker.on("dragend", () => {
+						dragging.current = null
+						if (key === "pin") movePin()
+						else resize()
+					})
+				}
 				markers.current[key] = marker
 			}
-			marker.setDraggable(key !== "dot" && enabled).setLngLat([position.lng, position.lat])
+			marker.setDraggable(key !== "dot" && enabled)
+			if (dragging.current !== key) marker.setLngLat([position.lng, position.lat])
+			if (key === "edge") marker.getElement().dataset.radius = `${nextCircle?.radius} m`
 		}
 	})
 	const frame = useEffectEvent((view = framing) => {

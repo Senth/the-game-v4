@@ -291,16 +291,25 @@ describe("location reports", () => {
 })
 
 describe("location authoring", () => {
-	it("allows guidance changes before solving and locks them after a solve", async () => {
-		const warmer: Location = { ...location, guidance: "warmer" }
-		expect(await saveSeasonField("season", target, warmer)).toEqual({ ok: true })
-		await reportPosition(team, "phone", quest.id, fix, now)
-		expect(await saveSeasonField("season", target, location)).toEqual({
-			ok: false,
-			error: "Locked: a team has found this place.",
-		})
-		expect((await getSeason("season"))?.arcs[0]?.quests[0]?.location).toEqual(warmer)
-	})
+	it.each(["none", "warmer", "map"] as const)(
+		"allows %s guidance before solving and locks all guidance changes after a solve",
+		async (guidance) => {
+			const changed: Location = { ...location, guidance }
+			expect(await saveSeasonField("season", target, changed)).toEqual({ ok: true })
+			await reportPosition(team, "phone", quest.id, fix, now)
+			for (const next of ["none", "warmer", "map"] as const) {
+				expect(await saveSeasonField("season", target, { ...location, guidance: next })).toEqual(
+					next === guidance
+						? { ok: true }
+						: {
+								ok: false,
+								error: "Locked: a team has found this place.",
+							},
+				)
+			}
+			expect((await getSeason("season"))?.arcs[0]?.quests[0]?.location).toEqual(changed)
+		},
+	)
 
 	it("serializes place edits behind an in-flight solve so solved places stay locked", async () => {
 		const db = await collections()
@@ -338,39 +347,48 @@ describe("location authoring", () => {
 		await expect(edit).rejects.toThrow("Locked: a team has found this place.")
 	})
 
-	it("allows edits before solving, locks place changes after solving, keeps answers editable", async () => {
-		const changed: Location = { ...location, places: [{ ...place, radius: 60 }] }
-		expect(await saveSeasonField("season", target, changed)).toEqual({ ok: true })
-		await reportPosition(team, "phone", quest.id, fix, now)
-		for (const value of [null, location, { ...changed, places: [{ ...place, radius: 60, lat: 56 }] }]) {
-			expect(await saveSeasonField("season", target, value)).toEqual({
-				ok: false,
-				error: "Locked: a team has found this place.",
-			})
-		}
-		expect(await saveSeasonField("season", target, changed)).toEqual({ ok: true })
-		expect(await patchSeasonList("season", { ...target, field: "answers" }, { op: "add", value: "another" })).toEqual({
-			ok: true,
-		})
-		expect((await getSeason("season"))?.arcs[0]?.quests[0]?.answers).toContain("another")
-	})
+	it.each(["none", "map"] as const)(
+		"allows %s place edits before solving, locks changes after solving, keeps answers editable",
+		async (guidance) => {
+			const changed: Location = { guidance, places: [{ ...place, radius: 60 }] }
+			expect(await saveSeasonField("season", target, changed)).toEqual({ ok: true })
+			await reportPosition(team, "phone", quest.id, fix, now)
+			for (const value of [null, location, { ...changed, places: [{ ...place, radius: 60, lat: 56 }] }]) {
+				expect(await saveSeasonField("season", target, value)).toEqual({
+					ok: false,
+					error: "Locked: a team has found this place.",
+				})
+			}
+			expect(await saveSeasonField("season", target, changed)).toEqual({ ok: true })
+			expect(await patchSeasonList("season", { ...target, field: "answers" }, { op: "add", value: "another" })).toEqual(
+				{
+					ok: true,
+				},
+			)
+			expect((await getSeason("season"))?.arcs[0]?.quests[0]?.answers).toContain("another")
+		},
+	)
 
-	it("rejects puzzle and location together in either direction, including concurrent edits", async () => {
-		await teams.setTeamField(team._id, "questOrder", ["first", quest.id])
-		await setSeasonField("season", { ...target, field: "assetPath" }, "/assets/image.png")
-		const puzzleTarget = { ...target, field: "puzzle" } as const
-		const puzzle = { rows: 2, cols: 2, showFull: false }
-		expect((await saveSeasonField("season", puzzleTarget, puzzle)).ok).toBe(false)
-		await setSeasonField("season", target, null)
-		await setSeasonField("season", puzzleTarget, puzzle)
-		expect((await saveSeasonField("season", target, location)).ok).toBe(false)
-		await setSeasonField("season", puzzleTarget, null)
-		const results = await Promise.all([
-			saveSeasonField("season", target, location),
-			saveSeasonField("season", puzzleTarget, puzzle),
-		])
-		expect(results.filter(({ ok }) => ok)).toHaveLength(1)
-	})
+	it.each(["none", "map"] as const)(
+		"rejects puzzle and %s location together in either direction, including concurrent edits",
+		async (guidance) => {
+			const location: Location = { guidance, places: [place] }
+			await teams.setTeamField(team._id, "questOrder", ["first", quest.id])
+			await setSeasonField("season", { ...target, field: "assetPath" }, "/assets/image.png")
+			const puzzleTarget = { ...target, field: "puzzle" } as const
+			const puzzle = { rows: 2, cols: 2, showFull: false }
+			expect((await saveSeasonField("season", puzzleTarget, puzzle)).ok).toBe(false)
+			await setSeasonField("season", target, null)
+			await setSeasonField("season", puzzleTarget, puzzle)
+			expect((await saveSeasonField("season", target, location)).ok).toBe(false)
+			await setSeasonField("season", puzzleTarget, null)
+			const results = await Promise.all([
+				saveSeasonField("season", target, location),
+				saveSeasonField("season", puzzleTarget, puzzle),
+			])
+			expect(results.filter(({ ok }) => ok)).toHaveLength(1)
+		},
+	)
 
 	it("validates season radius bounds without changing existing places", async () => {
 		for (const value of [4, 501, 5.1, "40", null])
@@ -384,6 +402,7 @@ describe("location authoring", () => {
 	it("guards location and radius saves before writes", async () => {
 		vi.mocked(requireAdmin).mockRejectedValue(new Error("Unauthorized"))
 		await expect(saveSeasonField("season", target, null)).rejects.toThrow("Unauthorized")
+		await expect(saveSeasonField("season", target, { ...location, guidance: "map" })).rejects.toThrow("Unauthorized")
 		await expect(saveSeasonField("season", { field: "placeRadius" }, 10)).rejects.toThrow("Unauthorized")
 		expect((await getSeason("season"))?.arcs[0]?.quests[0]?.location).toEqual(location)
 	})

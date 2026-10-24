@@ -28,6 +28,19 @@
 	background: var(--color-z0);
 }
 
+.map-drag-target[data-radius]::after {
+	content: attr(data-radius);
+	position: absolute;
+	top: 100%;
+	padding: 0 var(--spacing);
+	border-radius: var(--radius-md);
+	background: var(--color-z0);
+	color: var(--color-head);
+	font-family: var(--font-cond);
+	font-size: var(--text-xs);
+	white-space: nowrap;
+}
+
 .map-own-dot {
 	width: 16px;
 	height: 16px;
