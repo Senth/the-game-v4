@@ -39,6 +39,12 @@ Use [PROJECT.md's location rules](PROJECT.md#location-quests) for expected behav
 Pure tests cover coordinate parsing, rounding, invalid pastes, geographic ranges, haversine distance and map URLs.
 Test accuracy, age, future-time and radius boundaries on both sides, including equality.
 Cover completeness without answers, missing places, legacy defaults and unchanged inputs.
+Test guidance bands on both sides of and at `r`, `3r` and `10r`; inside still solves without guidance.
+Cover initial great-circle cardinal bearings, north wraparound and date-line crossing.
+Verify WMM2025 declination at the fix (Svedala is about 5.5° east in October 2026), subtraction and integer wrapping.
+Test trend against the earlier-fix mean, empty history, both sides of and at ±25 metres, and unchanged inputs.
+Test the 60-second history window, pruning, quest/team/phone isolation and exclusion of the current fix from its mean.
+Keep the 30-second latest-fix lifetime separate from guidance history.
 
 Test reports against isolated MongoDB, including malformed fixes and wrong, hidden, removed or non-location quests.
 Reject reports outside running play, after completion and from another team.
@@ -57,11 +63,19 @@ Assert radius changes leave existing places unchanged.
 Test guarded copies retaining place configuration without team progress.
 Whitelist player, preview, live and report responses against
 [PROJECT.md's player data boundary](PROJECT.md#player-data-boundary).
-Reject coordinates, radius and place ids alongside existing secrets.
+Reject coordinates, radius, place ids and distance alongside existing secrets, including with warmer guidance enabled.
+Whitelist outside guidance to band, optional bearing and optional trend, only for the reporting phone.
+Assert unguided outside reports remain exactly `{status: "outside"}`; other statuses stay unchanged.
+Very close omits bearing. Rough and stale fixes clear band, arrow and trend.
+Assert guidance never enters `getGame`, previews or live events; player location exposes only its guidance setting.
 
 Component tests cover every dock status, helper copy, accuracy, permission actions, backup-code visibility and inert previews.
 Test completion hold and teammate refetch feedback.
 Mock geolocation, permissions, visibility, fetch and wake locks. Never request real positions.
+Mock `deviceorientationabsolute`, `webkitCompassHeading`, motion permission and screen orientation; never use live sensors.
+Cover magnetic heading conversion, screen-angle subtraction, north wrap and the 2-second no-reading timeout.
+Test iPhone's tap-only permission request, refusal, no-compass fallback and listener cleanup when hidden or inactive.
+Cover band, trend and arrow states, including Very close, before first guidance and inert previews.
 Cover granted, prompt, denied and missing APIs, reporting cadence, hidden-tab pauses, resume and cleanup on quest changes.
 Assert stale callbacks and responses cannot restart reporting; release late wake locks and tolerate wake-lock failures.
 Test the Place field's empty state, valid and invalid paste, radius edits, map link, lock copy and disabled controls.
@@ -106,8 +120,8 @@ Commit a landscape PNG under 300 KB in `scripts/fixture/`, such as a drawn keepe
 Seed copies it to `ASSETS_DIR`.
 Mock photos are placeholders, not fixture content.
 Rävarna is already on it, with eight pieces in cells, including two in wrong cells; the remaining pieces are loose.
-Old Town ends with "Next stop", a 20-point location quest at Svedala station, with a 40 m radius, one
-5-point hint and no answer or file.
+Old Town ends with "Next stop", a 20-point warmer/colder location quest at Svedala station, with a 40 m
+radius, one 5-point hint and no answer or file.
 Every team has it unsolved, so quest orders total 13; scores, ranks and solved counts stay unchanged.
 Fixture tests validate puzzle and location configuration plus progress against the zod schemas.
 

@@ -6,7 +6,7 @@ import { requireAdmin, requireTeam } from "@/lib/auth/guards"
 import type { Location, Team } from "@/lib/domain/schemas"
 import { newQuest } from "@/lib/domain/season-tree"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
-import { getSolvedLocation, reportPosition, submitAnswer } from "@/lib/game/game"
+import { getSolvedLocation, loadGame, reportPosition, submitAnswer } from "@/lib/game/game"
 import { latestFixes } from "@/lib/game/location-fixes"
 import { useTestDb } from "@/test/db"
 import { getDb } from "./client"
@@ -57,50 +57,150 @@ beforeEach(async () => {
 })
 
 describe("location reports", () => {
-	it("solves once across phones and retries with stored hint penalties, one bonus and all live channels", async () => {
-		await teams.revealHint(
-			team._id,
-			{ questId: quest.id, questIndex: 0 },
-			{
-				hintId: "deleted",
-				text: "Saved hint",
-				points: 7,
-				revealedAt: now,
-			},
-		)
-		expect(await getSolvedLocation(team, quest.id)).toBeNull()
-		const events: string[] = []
-		const channels = [teamChannel(team._id), seasonChannel("season"), boardChannel]
-		const unsubscribe = subscribe(channels, ({ channel }) => events.push(channel))
-		try {
-			const results = await Promise.all(
-				Array.from({ length: 8 }, (_, i) => reportPosition(team, `phone-${i % 2}`, quest.id, fix, now)),
+	it.each(["none", "warmer"] as const)(
+		"solves once across phones and retries with %s guidance, stored hint penalties, one bonus and all live channels",
+		async (guidance) => {
+			await setSeasonField("season", target, { ...location, guidance })
+			await teams.revealHint(
+				team._id,
+				{ questId: quest.id, questIndex: 0 },
+				{
+					hintId: "deleted",
+					text: "Saved hint",
+					points: 7,
+					revealedAt: now,
+				},
 			)
-			expect(results.filter(({ status }) => status === "solved")).toEqual([{ status: "solved", pointsEarned: 43 }])
-			expect(results.filter(({ status }) => status === "stop")).toHaveLength(7)
-			expect(await reportPosition(team, "phone-0", quest.id, fix, now)).toEqual({ status: "stop" })
-			expect(await teams.getTeam(team._id)).toMatchObject({
-				score: 63,
-				questIndex: 1,
-				completed: true,
-				progress: [{ questId: quest.id, solvedAt: now, pointsEarned: 43 }],
+			expect(await getSolvedLocation(team, quest.id)).toBeNull()
+			const events: string[] = []
+			const channels = [teamChannel(team._id), seasonChannel("season"), boardChannel]
+			const unsubscribe = subscribe(channels, ({ channel }) => events.push(channel))
+			try {
+				const results = await Promise.all(
+					Array.from({ length: 8 }, (_, i) => reportPosition(team, `phone-${i % 2}`, quest.id, fix, now)),
+				)
+				expect(results.filter(({ status }) => status === "solved")).toEqual([{ status: "solved", pointsEarned: 43 }])
+				expect(results.filter(({ status }) => status === "stop")).toHaveLength(7)
+				expect(await reportPosition(team, "phone-0", quest.id, fix, now)).toEqual({ status: "stop" })
+				expect(await teams.getTeam(team._id)).toMatchObject({
+					score: 63,
+					questIndex: 1,
+					completed: true,
+					progress: [{ questId: quest.id, solvedAt: now, pointsEarned: 43 }],
+				})
+				expect((await getSeason("season"))?.finishers).toEqual([{ teamId: team._id, place: 1, points: 20, at: now }])
+				expect(events).toEqual(channels)
+				expect(await actions.getSolvedLocation(quest.id)).toEqual({ pointsEarned: 43 })
+				await setSeasonField("season", { ...target, field: "points" }, 100)
+				expect(await getSolvedLocation(team, quest.id)).toEqual({ pointsEarned: 43 })
+				const stored = await (await collections()).teams.findOne({ _id: team._id })
+				for (const key of ["lat", "lng", "accuracy", "phone", "location"])
+					expect(JSON.stringify(stored)).not.toContain(`"${key}"`)
+				expect((await (await getDb()).listCollections().toArray()).map(({ name }) => name).sort()).toEqual([
+					"admins",
+					"seasons",
+					"teams",
+				])
+			} finally {
+				unsubscribe()
+			}
+		},
+	)
+
+	it("returns only phone-local guidance without writes, events or guidance in game data", async () => {
+		await setSeasonField("season", target, { ...location, guidance: "warmer" })
+		const before = await teams.getTeam(team._id)
+		const events: string[] = []
+		const unsubscribe = subscribe([teamChannel(team._id), seasonChannel("season"), boardChannel], ({ channel }) =>
+			events.push(channel),
+		)
+		try {
+			const outside = { ...fix, lat: place.lat + 0.01 }
+			expect(await reportPosition(team, "one", quest.id, outside, now)).toEqual({
+				status: "outside",
+				guidance: { band: "far", bearing: expect.any(Number) },
 			})
-			expect((await getSeason("season"))?.finishers).toEqual([{ teamId: team._id, place: 1, points: 20, at: now }])
-			expect(events).toEqual(channels)
-			expect(await actions.getSolvedLocation(quest.id)).toEqual({ pointsEarned: 43 })
-			await setSeasonField("season", { ...target, field: "points" }, 100)
-			expect(await getSolvedLocation(team, quest.id)).toEqual({ pointsEarned: 43 })
-			const stored = await (await collections()).teams.findOne({ _id: team._id })
-			for (const key of ["lat", "lng", "accuracy", "phone", "location"])
-				expect(JSON.stringify(stored)).not.toContain(`"${key}"`)
-			expect((await (await getDb()).listCollections().toArray()).map(({ name }) => name).sort()).toEqual([
-				"admins",
-				"seasons",
-				"teams",
-			])
+			expect(await reportPosition(team, "two", quest.id, { ...outside, lat: place.lat + 0.02 }, now)).toEqual({
+				status: "outside",
+				guidance: { band: "far", bearing: expect.any(Number) },
+			})
+			expect(await reportPosition(team, "one", quest.id, { ...outside, lat: place.lat + 0.008 }, now)).toEqual({
+				status: "outside",
+				guidance: { band: "far", bearing: expect.any(Number), trend: "warmer" },
+			})
+			expect(await reportPosition(team, "one", quest.id, { ...outside, lat: place.lat + 0.009 }, now)).toEqual({
+				status: "outside",
+				guidance: { band: "far", bearing: expect.any(Number) },
+			})
+			expect(await reportPosition(team, "one", quest.id, { ...outside, lat: place.lat + 0.0095 }, now)).toEqual({
+				status: "outside",
+				guidance: { band: "far", bearing: expect.any(Number), trend: "colder" },
+			})
+			expect(await reportPosition(team, "two", quest.id, { ...outside, lat: place.lat + 0.02 }, now)).toEqual({
+				status: "outside",
+				guidance: { band: "far", bearing: expect.any(Number) },
+			})
+			expect(await teams.getTeam(team._id)).toEqual(before)
+			expect(events).toEqual([])
+			const game = await loadGame(team, now)
+			if (game.lifecycleState !== "running") throw new Error("Expected running location quest")
+			expect(game.quest?.location).toEqual({ guidance: "warmer" })
+			expect(JSON.stringify(game)).not.toMatch(/"(?:bearing|trend|distance|lat|lng|radius|places)"/)
+			expect(game.quest).not.toHaveProperty("band")
 		} finally {
 			unsubscribe()
 		}
+	})
+
+	it("resets guidance when the phone reports on the next quest", async () => {
+		const warmer = { ...location, guidance: "warmer" } as const
+		await setSeasonField("season", target, warmer)
+		await (await collections()).seasons.updateOne(
+			{ _id: "season" },
+			{ $push: { "arcs.0.quests": { ...quest, id: "next", location: warmer } } },
+		)
+		await teams.setTeamField(team._id, "questOrder", [quest.id, "next"])
+		await reportPosition(team, "phone", quest.id, { ...fix, lat: place.lat + 0.01 }, now)
+		expect(await reportPosition(team, "phone", quest.id, fix, now)).toEqual({ status: "solved", pointsEarned: 50 })
+		expect(await reportPosition(team, "phone", "next", { ...fix, lat: place.lat + 0.008 }, now)).toEqual({
+			status: "outside",
+			guidance: { band: "far", bearing: expect.any(Number) },
+		})
+	})
+
+	it.each([
+		[60_000, "warmer"],
+		[60_001, undefined],
+	] as const)("expires guidance history after 60 seconds, at %s ms", async (elapsed, trend) => {
+		await setSeasonField("season", target, { ...location, guidance: "warmer" })
+		await reportPosition(team, "phone", quest.id, { ...fix, lat: place.lat + 0.01 }, now)
+		const later = new Date(now.getTime() + elapsed)
+		expect(latestFixes(team._id, later.getTime()).size).toBe(0)
+		expect(
+			await reportPosition(team, "phone", quest.id, { ...fix, lat: place.lat + 0.008, at: later.getTime() }, later),
+		).toEqual({
+			status: "outside",
+			guidance: { band: "far", bearing: expect.any(Number), ...(trend ? { trend } : {}) },
+		})
+	})
+
+	it("never adds rough or stale fixes to guidance history", async () => {
+		await setSeasonField("season", target, { ...location, guidance: "warmer" })
+		const outside = { ...fix, lat: place.lat + 0.01 }
+		await reportPosition(team, "phone", quest.id, outside, now)
+		for (const rejected of [
+			{ ...outside, lat: place.lat + 0.02, accuracy: 51 },
+			{ ...outside, lat: place.lat + 0.02, at: fix.at - 30_001 },
+			{ ...outside, lat: place.lat + 0.02, at: fix.at + 30_001 },
+		]) {
+			expect(await reportPosition(team, "phone", quest.id, rejected, now)).toEqual({
+				status: rejected.accuracy > 50 ? "rough" : "stale",
+			})
+		}
+		expect(await reportPosition(team, "phone", quest.id, outside, now)).toEqual({
+			status: "outside",
+			guidance: { band: "far", bearing: expect.any(Number) },
+		})
 	})
 
 	it.each([
@@ -191,6 +291,17 @@ describe("location reports", () => {
 })
 
 describe("location authoring", () => {
+	it("allows guidance changes before solving and locks them after a solve", async () => {
+		const warmer: Location = { ...location, guidance: "warmer" }
+		expect(await saveSeasonField("season", target, warmer)).toEqual({ ok: true })
+		await reportPosition(team, "phone", quest.id, fix, now)
+		expect(await saveSeasonField("season", target, location)).toEqual({
+			ok: false,
+			error: "Locked: a team has found this place.",
+		})
+		expect((await getSeason("season"))?.arcs[0]?.quests[0]?.location).toEqual(warmer)
+	})
+
 	it("serializes place edits behind an in-flight solve so solved places stay locked", async () => {
 		const db = await collections()
 		vi.spyOn(database, "collections").mockResolvedValue(db)

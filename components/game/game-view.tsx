@@ -11,6 +11,7 @@ import { GameHeader } from "./game-header"
 import { Intel } from "./intel"
 import { LocationDock } from "./location-dock"
 import { QuestContent } from "./quest-content"
+import type { useCompass } from "./use-compass"
 import type { LocationStatus } from "./use-location-reporter"
 
 type GameViewProps = {
@@ -39,6 +40,7 @@ type GameViewProps = {
 			onDecryptComplete: (hintId: string) => void
 			onPuzzleDrop?: (pieceId: string, target: Spot) => Promise<void>
 			locationStatus?: LocationStatus
+			compass?: ReturnType<typeof useCompass>
 			onShareLocation?: () => void
 	  }
 )
@@ -121,9 +123,11 @@ export function GameView(props: GameViewProps) {
 						live ? (
 							<LocationDock
 								{...live.locationStatus}
+								compass={live.compass}
 								onShare={live.onShareLocation}
 								pointsEarned={props.locationComplete}
 								hasAnswers={quest.hasAnswers === true}
+								guidanceEnabled={quest.location.guidance === "warmer"}
 								answer={live.answer}
 								onAnswerChange={live.onAnswerChange}
 								onSubmit={live.onSubmit}

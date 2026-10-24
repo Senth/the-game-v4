@@ -138,7 +138,7 @@ Final mocks:
 Surface brief for both variants: job is reaching the place and knowing the phone is doing its part.
 Primary action is walking there, or "Share location" on first use.
 Read first the status line, second the helper, third accuracy.
-Must not look like a map, radar, compass or tracking app, or hide quest content.
+Must not hide quest content.
 Remove the answer input without backup codes. Quiet "Location on" and accuracy; sharpen "Location blocked" and "Found it".
 
 Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for reporting and solving.
@@ -167,6 +167,11 @@ Use `role="status"` for status updates. Honor reduced motion by leaving dots sti
 Quest and team previews show the off state, with Share location and any backup controls disabled.
 Never request permission or report positions from previews.
 `components/game/location-dock.tsx` owns this dock; `components/game/use-location-reporter.ts` owns browser reporting.
+
+### Warmer/colder guidance
+
+Lead with the trend word, then a three-step meter and an arrow, using existing tokens.
+Never show distances or degrees.
 
 ### Puzzle board
 
@@ -503,7 +508,7 @@ Final variant I: [phone](https://artifacts.senth.org/final-i-editor-one-line-pho
 Surface brief: job is pinning where a team must stand, often from a phone at the spot.
 Primary action is pasting coordinates. Read first coordinates, second radius, third "Check on map ›".
 Must not look like a map editor, a settings page or another upload row.
-Remove the guidance picker. Quiet the empty state and helper; sharpen bad-paste and locked lines.
+Quiet the empty state and helper; sharpen bad-paste and locked lines.
 
 Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for parsing, radius defaults, locks and map URLs.
 Place "Place" with muted "optional" after Points and before Puzzle.
@@ -519,6 +524,8 @@ Use ordinary field styles and header autosave. Do not add a Save button.
 - Locked: disable and mute both coordinates and radius.
   Copy: `Locked: <N> teams have found this place.` Use "Locked: 1 team has found this place." for one team.
 - With puzzle mode on: "Turn off puzzle mode to add a place." Show no coordinate controls.
+
+Show a quiet "Warmer/colder" switch below the radius. It locks with the place.
 
 With a place set, Answers helper reads "optional backup codes, arriving solves it". Omit "Needs an answer".
 While a place is set, Puzzle shows "Puzzle mode is off while this quest has a place." instead of its switch.

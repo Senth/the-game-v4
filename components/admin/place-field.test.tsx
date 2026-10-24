@@ -35,11 +35,22 @@ const props = { arcId: "arc", questId: "quest", location: null, puzzle: null, se
 type InputProps = Pick<ComponentProps<"input">, "aria-label" | "disabled" | "onChange" | "value"> & {
 	children?: ReactNode
 }
+type SwitchProps = Pick<
+	ComponentProps<"button">,
+	"aria-checked" | "aria-describedby" | "aria-labelledby" | "className" | "disabled" | "onClick" | "role"
+> & { children?: ReactNode }
 
 function inputs(node: ReactNode): ReactElement<InputProps>[] {
 	return Children.toArray(node).flatMap((child) => {
 		if (!isValidElement<InputProps>(child)) return []
 		return child.type === "input" ? [child] : inputs(child.props.children)
+	})
+}
+
+function switches(node: ReactNode): ReactElement<SwitchProps>[] {
+	return Children.toArray(node).flatMap((child) => {
+		if (!isValidElement<SwitchProps>(child)) return []
+		return child.type === "button" && child.props.role === "switch" ? [child] : switches(child.props.children)
 	})
 }
 
@@ -89,6 +100,29 @@ it("shows saved coordinates, radius guidance and map link", () => {
 		'href="https://www.openstreetmap.org/?mlat=55.50682&amp;mlon=13.23289#map=18/55.50682/13.23289"',
 	)
 	expect(html).toContain("Check on map ›")
+	expect(html.indexOf("Getting within the radius solves it.")).toBeLessThan(html.indexOf("Check on map ›"))
+	expect(html.indexOf("Check on map ›")).toBeLessThan(html.indexOf("Warmer/colder"))
+})
+
+it("toggles warmer-colder guidance and autosaves the whole location", () => {
+	expect(render(props)).not.toContain("Warmer/colder")
+	field.value = { guidance: "none", places: [place] }
+	const off = switches(component({ ...props, location: field.value }))[0]
+	if (!off) throw new Error("Guidance switch missing")
+	expect(off.props["aria-checked"]).toBe(false)
+	expect(render({ ...props, location: field.value })).toContain("Players get no hint of where the place is.")
+	off.props.onClick?.({} as never)
+	expect(field.onChange).toHaveBeenCalledWith({ ...field.value, guidance: "warmer" })
+	field.onChange.mockClear()
+	field.value = { ...field.value, guidance: "warmer" }
+	const on = switches(component({ ...props, location: field.value }))[0]
+	if (!on) throw new Error("Guidance switch missing")
+	expect(on.props["aria-checked"]).toBe(true)
+	expect(render({ ...props, location: field.value })).toContain(
+		"Players see Far, Close or Very close, warmer or colder, and an arrow. Never the spot.",
+	)
+	on.props.onClick?.({} as never)
+	expect(field.onChange).toHaveBeenCalledWith({ ...field.value, guidance: "none" })
 })
 
 it("creates a new place from valid coordinates and copies the season radius", () => {
@@ -120,6 +154,10 @@ it("updates radius as a whole location and locks both inputs after a solve", () 
 	expect(field.onChange).toHaveBeenCalledWith({ guidance: "none", places: [{ ...place, radius: 90 }] })
 	const html = render({ ...props, location: field.value, solvedTeams: 2 })
 	expect(html).toContain("Locked: 2 teams have found this place.")
+	expect(html).toContain('class="mt-1.5 font-cond text-xs text-head"')
+	const guidanceSwitch = switches(component({ ...props, location: field.value, solvedTeams: 2 }))[0]
+	expect(guidanceSwitch?.props.disabled).toBe(true)
+	expect(guidanceSwitch?.props.className).toContain("disabled:opacity-60")
 	expect(
 		inputs(component({ ...props, location: field.value, solvedTeams: 2 })).every((input) => input.props.disabled),
 	).toBe(true)

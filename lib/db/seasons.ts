@@ -642,8 +642,11 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 					if (next && quest.puzzle) throw new LocationEditError("Turn off puzzle mode to add a place.")
 					const before = quest.location?.places[0]
 					const after = next?.places[0]
+					const beforeGuidance = quest.location?.guidance ?? "none"
+					const afterGuidance = next?.guidance ?? "none"
 					if (
 						!!quest.location !== !!next ||
+						beforeGuidance !== afterGuidance ||
 						before?.lat !== after?.lat ||
 						before?.lng !== after?.lng ||
 						before?.radius !== after?.radius

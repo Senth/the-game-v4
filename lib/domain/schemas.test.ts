@@ -173,8 +173,8 @@ describe("Season", () => {
 describe("Location", () => {
 	const place = { id: "p1", lat: 55.5079, lng: 13.2353, radius: 40 }
 
-	it("accepts exactly one place with guidance none", () => {
-		expect(Location.parse({ guidance: "none", places: [place] })).toEqual({ guidance: "none", places: [place] })
+	it.each(["none", "warmer"] as const)("accepts exactly one place with guidance %s", (guidance) => {
+		expect(Location.parse({ guidance, places: [place] })).toEqual({ guidance, places: [place] })
 		expect(Location.safeParse({ guidance: "none", places: [] }).success).toBe(false)
 		expect(Location.safeParse({ guidance: "none", places: [place, { ...place, id: "p2" }] }).success).toBe(false)
 		expect(Location.safeParse({ guidance: "distance", places: [place] }).success).toBe(false)
@@ -182,6 +182,12 @@ describe("Location", () => {
 			guidance: "none",
 			places: [place],
 		})
+	})
+
+	it("reads absent legacy guidance as none without changing stored input", () => {
+		const stored = { places: [place] }
+		expect(Location.parse(stored)).toEqual({ guidance: "none", places: [place] })
+		expect(stored).toEqual({ places: [place] })
 	})
 
 	it.each([

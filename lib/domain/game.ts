@@ -1,5 +1,5 @@
 import { playableArcs } from "./playable-quests"
-import type { Quest, Season, Spot, Team, TeamQuestProgress } from "./schemas"
+import type { Location, Quest, Season, Spot, Team, TeamQuestProgress } from "./schemas"
 import { hintPenalty } from "./scoring"
 
 export const maxAnswerLength = 200
@@ -162,7 +162,7 @@ export type PlayerPuzzle = {
 export type PlayerQuest = Pick<Quest, "id" | "displayTitle" | "content" | "points"> & {
 	assetPath?: string | null
 	puzzle?: PlayerPuzzle | null
-	location?: { guidance: "none" }
+	location?: { guidance: Location["guidance"] }
 	hasAnswers?: boolean
 	worth: number
 	hints: PlayerHint[]
@@ -202,7 +202,7 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress, assets?: 
 		content: quest.content,
 		...(quest.puzzle ? { puzzle, hasAnswers: quest.answers.length > 0 } : { assetPath: quest.assetPath }),
 		...(quest.location
-			? { location: { guidance: quest.location.guidance }, hasAnswers: quest.answers.length > 0 }
+			? { location: { guidance: quest.location.guidance ?? "none" }, hasAnswers: quest.answers.length > 0 }
 			: {}),
 		points: quest.points,
 		worth: scoreForSolve(quest, { hintsRevealed: revealed }),

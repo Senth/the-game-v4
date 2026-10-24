@@ -24,6 +24,7 @@ export function PlaceField({
 	const field = useAutosaveField<Quest["location"]>({ arcId, questId, field: "location" }, location ?? null)
 	const value = field.value ?? null
 	const place = value?.places[0]
+	const warmer = value?.guidance === "warmer"
 	const savedCoordinates = place ? `${place.lat}, ${place.lng}` : ""
 	const [coordinates, setCoordinates] = useState(() => (place ? `${place.lat}, ${place.lng}` : ""))
 	const [pasteError, setPasteError] = useState(false)
@@ -127,7 +128,7 @@ export function PlaceField({
 					{error}
 				</p>
 			) : (
-				<p id={`${id}-helper`} className="mt-1.5 font-cond text-xs text-muted">
+				<p id={`${id}-helper`} className={`mt-1.5 font-cond text-xs ${locked ? "text-head" : "text-muted"}`}>
 					{helper}
 				</p>
 			)}
@@ -140,6 +141,41 @@ export function PlaceField({
 				>
 					Check on map ›
 				</a>
+			)}
+			{place && (
+				<div className="mt-3 flex min-h-11 items-start justify-between gap-3">
+					<div className="min-w-0">
+						<p id={`${id}-guidance-label`} className={`font-cond text-sm ${locked ? "text-muted" : "text-ink"}`}>
+							Warmer/colder
+						</p>
+						<p id={`${id}-guidance-helper`} className="font-cond text-xs text-muted">
+							{warmer
+								? "Players see Far, Close or Very close, warmer or colder, and an arrow. Never the spot."
+								: "Players get no hint of where the place is."}
+						</p>
+					</div>
+					<button
+						type="button"
+						role="switch"
+						aria-checked={warmer}
+						aria-labelledby={`${id}-guidance-label`}
+						aria-describedby={`${id}-guidance-helper${error ? ` ${id}-error` : ""}`}
+						disabled={locked}
+						onClick={() => {
+							if (value) field.onChange({ ...value, guidance: warmer ? "none" : "warmer" })
+						}}
+						onFocus={field.onFocus}
+						onBlur={() => void field.onBlur()}
+						className="mt-1 flex h-11 w-12 shrink-0 items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+					>
+						<span
+							aria-hidden="true"
+							className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 ${warmer ? "bg-accent" : "bg-z2"}`}
+						>
+							<span className={`size-5 rounded-full bg-head${warmer ? " ml-auto" : ""}`} />
+						</span>
+					</button>
+				</div>
 			)}
 		</div>
 	)
