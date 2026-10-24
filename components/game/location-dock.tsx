@@ -92,26 +92,26 @@ export function LocationDock(props: LocationDockProps) {
 		previousRotation.current = rotationState
 	}, [rotationState])
 	const rotation = rotationState?.rotation ?? 0
-	const helperOffset = arrow ? "ml-11" : "ml-5"
 	const status = (
 		<div className={`px-4 pt-3 ${codes ? "pb-1" : "pb-[calc(var(--spacing)*6+env(safe-area-inset-bottom))]"}`}>
 			{guided ? (
 				<>
 					<div className="flex items-center gap-2.5 font-cond">
 						{arrow ? (
-							<svg
-								aria-hidden="true"
-								viewBox="0 0 24 24"
-								className="size-8 shrink-0 text-head transition-transform motion-reduce:transition-none"
-								style={{ transform: `rotate(${rotation}deg)` }}
-							>
-								<path d="M12 2 L20 21 L12 16.5 L4 21 Z" fill="currentColor" />
-							</svg>
+							<span aria-hidden="true" className="size-8 shrink-0 grid place-items-center">
+								<svg
+									aria-hidden="true"
+									viewBox="0 0 24 24"
+									className="size-8 shrink-0 text-head transition-transform motion-reduce:transition-none"
+									style={{ transform: `rotate(${rotation}deg)` }}
+								>
+									<path d="M12 2 L20 21 L12 16.5 L4 21 Z" fill="currentColor" />
+								</svg>
+							</span>
 						) : (
-							<span
-								aria-hidden="true"
-								className="size-2.5 shrink-0 rounded-full bg-pace-ok motion-safe:animate-pulse"
-							/>
+							<span aria-hidden="true" className="size-8 shrink-0 grid place-items-center">
+								<span className="size-2.5 shrink-0 rounded-full bg-pace-ok motion-safe:animate-pulse" />
+							</span>
 						)}
 						<span role="status" className={`text-sm ${statusColor}`}>
 							{statusWord}
@@ -136,7 +136,7 @@ export function LocationDock(props: LocationDockProps) {
 							</div>
 						))}
 					</div>
-					<p className={`mt-2 ${helperOffset} font-cond text-xs leading-relaxed text-muted`}>{helper}</p>
+					<p className="mt-2 font-cond text-xs leading-relaxed text-muted">{helper}</p>
 					{compassState === "needsTap" && (
 						<button
 							type="button"

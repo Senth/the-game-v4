@@ -84,7 +84,9 @@ describe("LocationDock", () => {
 		expect(html).toContain('class="size-8')
 		expect(html).toContain('style="transform:rotate(20deg)"')
 		expect(html).toContain('d="M12 2 L20 21 L12 16.5 L4 21 Z" fill="currentColor"')
-		expect(html).toContain('<div class="flex items-center gap-2.5 font-cond"><svg')
+		expect(html).toContain(
+			'<div class="flex items-center gap-2.5 font-cond"><span aria-hidden="true" class="size-8 shrink-0 grid place-items-center"><svg',
+		)
 		expect(html).toContain('<span class="ml-auto text-xs text-muted">±14 m</span>')
 		expect(html.indexOf("<svg")).toBeLessThan(html.indexOf(`>${trend}</span>`))
 		expect(html.indexOf(`>${trend}</span>`)).toBeLessThan(html.indexOf("±14 m"))
@@ -96,6 +98,37 @@ describe("LocationDock", () => {
 		expect(html).toContain("Very close")
 		expect(html).toMatch(new RegExp(`<p aria-current="step"[^>]*>${band === "far" ? "Far" : "Close"}</p>`))
 		expect(html).toContain("motion-reduce:transition-none")
+	})
+
+	it("keeps the helper flush and reserves the same lead slot with or without an arrow", () => {
+		const arrow = renderToStaticMarkup(
+			<LocationDock
+				{...live}
+				state="on"
+				guidanceEnabled
+				guidance={{ band: "far", bearing: 10 }}
+				compass={{ state: "on", heading: 350, request: vi.fn() }}
+				hasAnswers={false}
+			/>,
+		)
+		const dot = renderToStaticMarkup(
+			<LocationDock
+				{...live}
+				state="on"
+				guidanceEnabled
+				guidance={{ band: "veryClose" }}
+				compass={{ state: "on", heading: 0, request: vi.fn() }}
+				hasAnswers={false}
+			/>,
+		)
+
+		for (const html of [arrow, dot]) {
+			expect(html).toContain('<p class="mt-2 font-cond text-xs leading-relaxed text-muted">')
+		}
+		expect(arrow).toContain('<span aria-hidden="true" class="size-8 shrink-0 grid place-items-center"><svg')
+		expect(dot).toContain(
+			'<span aria-hidden="true" class="size-8 shrink-0 grid place-items-center"><span class="size-2.5 shrink-0 rounded-full bg-pace-ok motion-safe:animate-pulse"></span></span>',
+		)
 	})
 
 	it("accumulates shortest signed rotation changes across heading wrap", () => {
@@ -141,8 +174,9 @@ describe("LocationDock", () => {
 			/>,
 		)
 		expect(html).toContain(helper.replaceAll("'", "&#x27;"))
-		expect(html).not.toContain('class="size-8')
-		expect(html).toContain('class="size-2.5 shrink-0 rounded-full bg-pace-ok')
+		expect(html).toContain(
+			'<span aria-hidden="true" class="size-8 shrink-0 grid place-items-center"><span class="size-2.5 shrink-0 rounded-full bg-pace-ok',
+		)
 		expect(html).toContain("motion-safe:animate-pulse")
 		expect(html).toContain(">Warmer</span>")
 	})
