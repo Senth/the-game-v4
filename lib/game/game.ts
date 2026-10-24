@@ -23,7 +23,7 @@ import {
 	maxAnswerLength,
 	scoreForSolve,
 } from "@/lib/domain/game"
-import { evaluateFix, type Fix } from "@/lib/domain/location"
+import { distanceMeters, evaluateFix, type Fix, guidanceFor } from "@/lib/domain/location"
 import {
 	type PlayerGame,
 	type PlayerStandings,
@@ -35,7 +35,7 @@ import {
 import { dropPiece, isSolved, pieceIds, randomSpread } from "@/lib/domain/puzzle"
 import { type Season, Spot, type Team } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
-import { recordFix } from "./location-fixes"
+import { recordFix, recordGuidanceFix } from "./location-fixes"
 
 export type SubmitResult =
 	| { ok: false; reason: "invalid" | "not-running" | "stale" }
@@ -228,7 +228,8 @@ function publishTeamChange(teamId: string, seasonId: string) {
 }
 
 export type PositionResult =
-	| { status: "outside" | "rough" | "stale" | "stop" }
+	| { status: "outside"; guidance?: ReturnType<typeof guidanceFor> }
+	| { status: "rough" | "stale" | "stop" }
 	| { status: "solved"; pointsEarned: number }
 
 export async function reportPosition(
@@ -247,7 +248,16 @@ export async function reportPosition(
 		const status = evaluateFix(found.quest.location, fix, now.getTime())
 		if (status === "rough" || status === "stale") return { status }
 		recordFix(current._id, phoneId, fix, now.getTime())
-		if (status === "outside") return { status }
+		const previous = recordGuidanceFix(current._id, phoneId, questId, fix, now.getTime())
+		if (status === "outside") {
+			const place = found.quest.location.places[0]
+			const guidance = guidanceFor(
+				found.quest.location,
+				fix,
+				place ? previous.map((earlier) => distanceMeters(earlier, place)) : [],
+			)
+			return { status, ...(guidance ? { guidance } : {}) }
+		}
 		const { questIndex, questOrder } = current
 		const hintsRevealed = found.progress?.hintsRevealed ?? []
 		const pointsEarned = scoreForSolve(found.quest, { hintsRevealed })

@@ -75,6 +75,38 @@ function post(body: unknown = report()) {
 }
 
 describe("POST /api/location", () => {
+	it.each([
+		[0.01, "far"],
+		[0.002, "close"],
+		[0.0006, "veryClose"],
+	] as const)("passes through only permitted %s guidance fields for the reporting phone", async (offset, band) => {
+		await (await collections()).seasons.updateOne(
+			{ _id: "season" },
+			{ $set: { "arcs.0.quests.0.location.guidance": "warmer" } },
+		)
+		const body = { ...report(), lat: 55.5079 + offset }
+		const expected = {
+			status: "outside",
+			guidance: { band, ...(band === "veryClose" ? {} : { bearing: expect.any(Number) }) },
+		}
+		expect(await (await post(body)).json()).toEqual(expected)
+		const first = jar.values.get("the-game-phone") as string
+		jar.values.delete("the-game-phone")
+		await post({ ...body, lat: body.lat + 0.01 })
+		jar.values.set("the-game-phone", first)
+		expect(await (await post(body)).json()).toEqual(expected)
+		expect(await (await post({ ...body, lat: body.lat + 0.0003 })).json()).toEqual({
+			...expected,
+			guidance: { ...expected.guidance, trend: "colder" },
+		})
+		for (const rejected of [
+			{ ...body, accuracy: 51 },
+			{ ...body, at: Date.now() - 30_001 },
+		]) {
+			expect(await (await post(rejected)).json()).toEqual({ status: rejected.accuracy > 50 ? "rough" : "stale" })
+		}
+	})
+
 	it("gives two phones distinct UUID cookies without changing their shared session", async () => {
 		vi.stubEnv("NODE_ENV", "production")
 		vi.stubEnv("SESSION_SECRET", "location-test-secret-at-least-32-characters")
