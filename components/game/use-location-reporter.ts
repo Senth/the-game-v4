@@ -1,8 +1,13 @@
 "use client"
 
 import { useEffect, useEffectEvent, useRef, useState } from "react"
+import { fixTtlMs, type guidanceFor, maxFixAccuracy } from "@/lib/domain/location"
 
-export type LocationStatus = { state: "off" | "on" | "rough" | "blocked" | "unavailable"; accuracy?: number }
+export type LocationStatus = {
+	state: "off" | "on" | "rough" | "blocked" | "unavailable"
+	accuracy?: number
+	guidance?: ReturnType<typeof guidanceFor>
+}
 
 export function useLocationReporter(questId: string | null, onChange: () => void) {
 	const [status, setStatus] = useState<LocationStatus>({ state: "off" })
@@ -10,6 +15,7 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 	const changed = useEffectEvent(onChange)
 
 	useEffect(() => {
+		setStatus({ state: navigator.geolocation ? "off" : "unavailable" })
 		if (!questId) return
 		let disposed = false
 		let stopped = false
@@ -22,18 +28,23 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 		let watchGeneration = 0
 		let lastSent = -Infinity
 		let request: AbortController | undefined
-		setStatus({ state: navigator.geolocation ? "off" : "unavailable" })
+		let guidance: LocationStatus["guidance"]
 
+		function clearGuidance() {
+			guidance = undefined
+			request?.abort()
+			request = undefined
+		}
 		function stopWatching() {
 			watchGeneration++
 			if (watch !== undefined) navigator.geolocation.clearWatch(watch)
 			watch = undefined
-			request?.abort()
-			request = undefined
+			clearGuidance()
 		}
 		function pause() {
 			generation++
 			stopWatching()
+			if (!disposed) setStatus({ state: "off" })
 			void wake?.release().catch(() => {})
 			wake = undefined
 			wakeRequested = false
@@ -46,7 +57,14 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 				async (position) => {
 					if (disposed || stopped || document.hidden || currentGeneration !== watchGeneration || !allowed) return
 					const { latitude: lat, longitude: lng, accuracy } = position.coords
-					setStatus({ state: accuracy > 50 ? "rough" : "on", accuracy })
+					const rough =
+						!Number.isFinite(accuracy) ||
+						accuracy < 0 ||
+						accuracy > maxFixAccuracy ||
+						!Number.isFinite(position.timestamp) ||
+						Math.abs(Date.now() - position.timestamp) > fixTtlMs
+					if (rough) clearGuidance()
+					setStatus({ state: rough ? "rough" : "on", accuracy, ...(guidance && { guidance }) })
 					if (request || Date.now() - lastSent < 5000) return
 					lastSent = Date.now()
 					const controller = new AbortController()
@@ -61,7 +79,13 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 						if (!response.ok) return
 						const result = await response.json()
 						if (controller.signal.aborted) return
-						if (result.status === "stop" || result.status === "solved") {
+						if (result.status === "rough" || result.status === "stale") {
+							guidance = undefined
+							setStatus({ state: "rough", accuracy })
+						} else if (result.status === "outside" && !rough) {
+							guidance = result.guidance
+							setStatus({ state: "on", accuracy, ...(guidance && { guidance }) })
+						} else if (result.status === "stop" || result.status === "solved") {
 							stopped = true
 							pause()
 							changed()
@@ -73,6 +97,7 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 				},
 				(error) => {
 					if (disposed || stopped || document.hidden || currentGeneration !== watchGeneration) return
+					clearGuidance()
 					if (error.code === 1) {
 						allowed = false
 						stopWatching()

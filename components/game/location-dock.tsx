@@ -2,12 +2,15 @@
 
 import type { ComponentProps } from "react"
 import { AnswerDock } from "./answer-dock"
+import type { useCompass } from "./use-compass"
 import type { LocationStatus } from "./use-location-reporter"
 
 type LocationDockProps = ComponentProps<typeof AnswerDock> & {
 	hasAnswers: boolean
 	state?: LocationStatus["state"]
 	accuracy?: number
+	guidance?: LocationStatus["guidance"]
+	compass?: ReturnType<typeof useCompass>
 	pointsEarned?: number
 	onShare?: () => void
 }

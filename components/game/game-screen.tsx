@@ -13,6 +13,7 @@ import { gameTransitions } from "./game-transitions"
 import { GameView } from "./game-view"
 import { LifecycleScreen } from "./lifecycle-screen"
 import { TeamMenu } from "./team-menu"
+import { useCompass } from "./use-compass"
 import { useGameClock } from "./use-game-clock"
 import { useLocationReporter } from "./use-location-reporter"
 
@@ -57,6 +58,11 @@ export function GameScreen({
 		() => {
 			void getGame().then(setGame, () => {})
 		},
+	)
+	const compass = useCompass(
+		!completion && game.lifecycleState === "running" && game.quest?.location?.guidance === "warmer"
+			? game.quest.id
+			: null,
 	)
 
 	if (previous !== game) {
@@ -199,7 +205,11 @@ export function GameScreen({
 			puzzleComplete={quest?.puzzle ? completion?.solved?.pointsEarned : undefined}
 			locationComplete={quest?.location ? completion?.solved?.pointsEarned : undefined}
 			locationStatus={location}
-			onShareLocation={location.share}
+			compass={compass}
+			onShareLocation={() => {
+				compass.request()
+				location.share()
+			}}
 			onPuzzleDrop={completion ? undefined : drop}
 			answer={answer}
 			onAnswerChange={setAnswer}

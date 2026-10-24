@@ -39,8 +39,8 @@ async function mount(questId: string | null = "place-quest") {
 	await vi.advanceTimersByTimeAsync(0)
 }
 
-function fix(accuracy = 12) {
-	position({ coords: { latitude: 55.5, longitude: 13.2, accuracy }, timestamp: Date.now() } as GeolocationPosition)
+function fix(accuracy = 12, timestamp = Date.now()) {
+	position({ coords: { latitude: 55.5, longitude: 13.2, accuracy }, timestamp } as GeolocationPosition)
 }
 
 function visible(hidden: boolean) {
@@ -79,6 +79,56 @@ afterEach(() => {
 })
 
 describe("useLocationReporter", () => {
+	it("keeps outside guidance between accepted fixes and clears it on pause and quest change", async () => {
+		const guidance = { band: "close", bearing: 42, trend: "warmer" }
+		send.mockResolvedValue({ ok: true, json: async () => ({ status: "outside", guidance }) })
+		await mount()
+		fix()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", accuracy: 12, guidance })
+		fix(20)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", accuracy: 20, guidance })
+		visible(true)
+		expect(hooks.setStatus.mock.lastCall?.[0].guidance).toBeUndefined()
+		visible(false)
+		for (const stop of cleanup) stop()
+		await mount("next-place")
+		expect(hooks.setStatus.mock.lastCall?.[0].guidance).toBeUndefined()
+		for (const stop of cleanup) stop()
+		await mount(null)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "off" })
+	})
+
+	it.each(["rough", "stale"])("clears guidance on server %s", async (status) => {
+		send.mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ status: "outside", guidance: { band: "far", bearing: 90 } }),
+		})
+		await mount()
+		fix()
+		await vi.advanceTimersByTimeAsync(5000)
+		send.mockResolvedValue({ ok: true, json: async () => ({ status }) })
+		fix()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "rough", accuracy: 12 })
+	})
+
+	it.each(["rough", "stale"])("local %s clears guidance and prevents older responses restoring it", async (kind) => {
+		let finish!: (value: unknown) => void
+		send.mockReturnValue(
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+		)
+		await mount()
+		fix()
+		fix(kind === "rough" ? 70 : 12, Date.now() - (kind === "stale" ? 30_001 : 0))
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "rough", accuracy: kind === "rough" ? 70 : 12 })
+		finish({ ok: true, json: async () => ({ status: "outside", guidance: { band: "far", bearing: 90 } }) })
+		await vi.advanceTimersByTimeAsync(0)
+		expect(hooks.setStatus.mock.lastCall?.[0].guidance).toBeUndefined()
+	})
+
 	it("starts granted permission at once, sends bounded fixes and throttles to five seconds", async () => {
 		await mount()
 		expect(query).toHaveBeenCalledWith({ name: "geolocation" })

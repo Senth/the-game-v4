@@ -5,6 +5,7 @@ import { type PlayerGame, playerGame } from "@/lib/domain/player-game"
 import { buildFixture } from "@/scripts/fixture"
 import { GameScreen } from "./game-screen"
 import type { GameView } from "./game-view"
+import { useCompass } from "./use-compass"
 import { useLocationReporter } from "./use-location-reporter"
 
 const hooks = vi.hoisted(() => ({
@@ -53,6 +54,7 @@ vi.mock("@/lib/events/use-live-state", () => ({
 vi.mock("@/lib/events/use-finisher-notices", () => ({ useFinisherNotices: () => ({ notice: null }) }))
 vi.mock("./use-game-clock", () => ({ useGameClock: () => new Date("2026-10-15T18:00:00Z") }))
 vi.mock("./use-location-reporter", () => ({ useLocationReporter: vi.fn(() => ({ state: "off", share: vi.fn() })) }))
+vi.mock("./use-compass", () => ({ useCompass: vi.fn(() => ({ state: "needsTap", request: vi.fn() })) }))
 
 const now = new Date("2026-10-15T18:00:00Z")
 const fixture = buildFixture(now)
@@ -91,6 +93,7 @@ function render() {
 beforeEach(() => {
 	vi.useFakeTimers()
 	vi.clearAllMocks()
+	vi.mocked(useLocationReporter).mockImplementation(() => ({ state: "off", share: vi.fn() }))
 	hooks.states = []
 	hooks.game = initial
 	vi.mocked(getSolvedPuzzle).mockResolvedValue({ ids: ["a", "b", "c", "d"], pointsEarned: 7 })
@@ -164,11 +167,30 @@ it("refetches a reporting phone's solve and stops reporting during the arrival h
 	await Promise.resolve()
 	render()
 	expect(useLocationReporter).toHaveBeenLastCalledWith(null, expect.any(Function))
+	expect(useCompass).toHaveBeenLastCalledWith(null)
 	const cleanup = hooks.effect?.()
 	await Promise.resolve()
 	expect(render().props.locationComplete).toBe(12)
 	expect(getGame).toHaveBeenCalledOnce()
 	if (cleanup) cleanup()
+})
+
+it("passes guidance and compass to the dock and requests both permissions from Share location", () => {
+	if (!locationInitial.quest) throw new Error("Expected location fixture")
+	hooks.game = { ...locationInitial, quest: { ...locationInitial.quest, location: { guidance: "warmer" } } }
+	const guidance = { band: "close" as const, bearing: 42, trend: "warmer" as const }
+	vi.mocked(useLocationReporter).mockReturnValue({ state: "on", guidance, share: vi.fn() })
+	const props = render().props
+	if (props.preview) throw new Error("Expected live location")
+	expect(useCompass).toHaveBeenLastCalledWith(initial.quest?.id)
+	expect(props.locationStatus?.guidance).toEqual(guidance)
+	expect(props.compass).toBe(vi.mocked(useCompass).mock.results.at(-1)?.value)
+	props.onShareLocation?.()
+	expect(props.compass?.request).toHaveBeenCalledOnce()
+	expect(vi.mocked(useLocationReporter).mock.results.at(-1)?.value.share).toHaveBeenCalledOnce()
+	hooks.game = locationInitial
+	render()
+	expect(useCompass).toHaveBeenLastCalledWith(null)
 })
 
 it("does not celebrate a skipped puzzle and cancels a late solved response", async () => {
