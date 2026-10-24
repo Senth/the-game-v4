@@ -58,6 +58,38 @@ describe("previewGame", () => {
 		expect(previewGame(baseSeason, quest, now).quest).toMatchObject({ points: null, worth: 0 })
 	})
 
+	it("whitelists map circles in previews without exposing place ids, distance or quest secrets", () => {
+		const quest = {
+			...authoredQuest,
+			internalTitle: "internal title secret",
+			adminNotes: "admin note secret",
+			answers: ["answer secret"],
+			hints: [{ ...authoredHint, text: "hint text secret" }],
+			location: {
+				guidance: "map" as const,
+				places: [{ id: "secret-place", lat: 55.5, lng: 13.2, radius: 40, distance: 100 }],
+			},
+		}
+		const before = structuredClone({ season: baseSeason, quest })
+		const result = previewGame(baseSeason, quest, now)
+		expect(result.quest).toEqual({
+			...previewGame(baseSeason, { ...quest, location: null }, now).quest,
+			location: { guidance: "map", places: [{ lat: 55.5, lng: 13.2, radius: 40 }] },
+			hasAnswers: true,
+		})
+		for (const secret of [
+			"internal title secret",
+			"admin note secret",
+			"answer secret",
+			"hint text secret",
+			"secret-place",
+			"distance",
+		]) {
+			expect(JSON.stringify(result)).not.toContain(secret)
+		}
+		expect({ season: baseSeason, quest }).toEqual(before)
+	})
+
 	it.each(["none", "warmer"] as const)(
 		"passes only %s guidance and backup-code presence through preview",
 		(guidance) => {

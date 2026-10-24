@@ -94,6 +94,43 @@ describe("withHintIds", () => {
 })
 
 describe("Season", () => {
+	it("reads legacy map area as null without changing input", () => {
+		const stored = { _id: "s1", title: "Old", lengthMinutes: 60, start: null, end: null, shuffleArcs: false, arcs: [] }
+		const original = structuredClone(stored)
+		expect(Season.parse(stored).mapArea).toBeNull()
+		expect(stored).toEqual(original)
+	})
+
+	it("accepts null map area and rounds coordinates and zoom", () => {
+		expect(Season.shape.mapArea.parse(null)).toBeNull()
+		expect(Season.shape.mapArea.parse({ lat: 55.5079126, lng: -13.2353126, zoom: 12.345 })).toEqual({
+			lat: 55.507913,
+			lng: -13.235313,
+			zoom: 12.35,
+		})
+		for (const area of [
+			{ lat: -90, lng: -180, zoom: 2 },
+			{ lat: 90, lng: 180, zoom: 19 },
+		]) {
+			expect(Season.shape.mapArea.parse(area)).toEqual(area)
+		}
+	})
+
+	it.each([
+		{ lat: -90.000001 },
+		{ lat: 90.000001 },
+		{ lng: -180.000001 },
+		{ lng: 180.000001 },
+		{ zoom: 1.999 },
+		{ zoom: 19.001 },
+		{ lat: Number.NaN },
+		{ lng: Number.POSITIVE_INFINITY },
+		{ zoom: Number.POSITIVE_INFINITY },
+		{ zoom: "12" },
+	])("rejects invalid map area %j before rounding", (invalid) => {
+		expect(Season.shape.mapArea.safeParse({ lat: 55.5, lng: 13.2, zoom: 12, ...invalid }).success).toBe(false)
+	})
+
 	it("reads legacy place radius as 40 without changing input", () => {
 		const stored = { _id: "s1", title: "Old", lengthMinutes: 60, start: null, end: null, shuffleArcs: false, arcs: [] }
 		const original = structuredClone(stored)
@@ -173,7 +210,7 @@ describe("Season", () => {
 describe("Location", () => {
 	const place = { id: "p1", lat: 55.5079, lng: 13.2353, radius: 40 }
 
-	it.each(["none", "warmer"] as const)("accepts exactly one place with guidance %s", (guidance) => {
+	it.each(["none", "warmer", "map"] as const)("accepts exactly one place with guidance %s", (guidance) => {
 		expect(Location.parse({ guidance, places: [place] })).toEqual({ guidance, places: [place] })
 		expect(Location.safeParse({ guidance: "none", places: [] }).success).toBe(false)
 		expect(Location.safeParse({ guidance: "none", places: [place, { ...place, id: "p2" }] }).success).toBe(false)

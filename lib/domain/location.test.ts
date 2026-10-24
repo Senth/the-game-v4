@@ -230,6 +230,8 @@ describe("location guidance", () => {
 		const before = structuredClone({ location, fix, previous })
 		expect(guidanceFor(location, fix, previous)).toEqual({ band: "far", bearing: 355, trend: "warmer" })
 		expect(guidanceFor({ ...location, guidance: "none" }, fix, previous)).toBeUndefined()
+		expect(guidanceFor({ ...location, guidance: "map" }, fix, previous)).toBeUndefined()
+		expect(evaluateFix({ ...location, guidance: "map" }, fix, at)).toBe("outside")
 		expect(guidanceFor({ ...location, places: [] }, fix, previous)).toBeUndefined()
 		expect({ location, fix, previous }).toEqual(before)
 	})

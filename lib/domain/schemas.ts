@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { defaultPlaceRadius } from "./location"
+import { roundCoordinate } from "./map"
 
 const id = z.string().min(1)
 
@@ -31,7 +32,7 @@ export const Place = z.object({
 export type Place = z.infer<typeof Place>
 
 export const Location = z.object({
-	guidance: z.enum(["none", "warmer"]).default("none"),
+	guidance: z.enum(["none", "warmer", "map"]).default("none"),
 	places: z.array(Place).length(1),
 })
 export type Location = z.infer<typeof Location>
@@ -91,6 +92,19 @@ export const Season = z.object({
 	lengthMinutes: z.number().int().min(1).max(1440),
 	defaultQuestPoints: z.number().int().min(0).max(10000).nullable().default(null),
 	placeRadius: z.number().int().min(5).max(500).default(defaultPlaceRadius).optional(),
+	mapArea: z
+		.object({
+			lat: z.number().min(-90).max(90).transform(roundCoordinate),
+			lng: z.number().min(-180).max(180).transform(roundCoordinate),
+			zoom: z
+				.number()
+				.min(2)
+				.max(19)
+				.transform((value) => Number(value.toFixed(2))),
+		})
+		.nullable()
+		.default(null)
+		.optional(),
 	start: z.date().nullable(),
 	end: z.date().nullable(),
 	shuffleArcs: z.boolean(),
