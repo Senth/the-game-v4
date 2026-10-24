@@ -44,6 +44,7 @@ it("passes only settings values and server time across the client boundary", asy
 		lengthMinutes: season.lengthMinutes,
 		defaultQuestPoints: season.defaultQuestPoints ?? null,
 		placeRadius: season.placeRadius ?? 40,
+		mapArea: season.mapArea ?? null,
 		shuffleArcs: season.shuffleArcs,
 		registrationOpen: season.registrationOpen,
 		finisherBonuses: season.finisherBonuses,

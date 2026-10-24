@@ -23,6 +23,8 @@ export type MapViewProps = {
 	aspectRatio?: "16/10" | "4/3"
 	circle?: Circle | null
 	dot?: (Coordinates & { accuracy: number }) | null
+	maxZoom?: number
+	minZoom?: number
 	edit?: {
 		onMove: (point: Coordinates) => void
 		onResize: (radius: number) => void
@@ -50,6 +52,8 @@ export default function MapView({
 	edit,
 	framing,
 	interactive = true,
+	maxZoom,
+	minZoom,
 	onMoveEnd,
 }: MapViewProps) {
 	const container = useRef<HTMLDivElement>(null)
@@ -168,6 +172,8 @@ export default function MapView({
 		const map = new LibreMap({
 			container: container.current,
 			style: navy as StyleSpecification,
+			...(minZoom === undefined ? {} : { minZoom }),
+			...(maxZoom === undefined ? {} : { maxZoom }),
 			cooperativeGestures: true,
 			attributionControl: { compact: false },
 			dragRotate: false,
@@ -213,7 +219,7 @@ export default function MapView({
 			map.remove()
 			instance.current = null
 		}
-	}, [])
+	}, [maxZoom, minZoom])
 
 	useEffect(() => {
 		updateSources(circle, dot, edit, interactive)

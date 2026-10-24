@@ -129,6 +129,9 @@ export async function saveSeasonField(
 		if (!("arcId" in parsed) && parsed.field === "placeRadius" && !Season.shape.placeRadius.safeParse(value).success) {
 			return { ok: false, error: "Use 5 to 500." }
 		}
+		if (!("arcId" in parsed) && parsed.field === "mapArea" && !Season.shape.mapArea.safeParse(value).success) {
+			return { ok: false, error: "Use latitude −90 to 90, longitude −180 to 180 and zoom 2 to 19." }
+		}
 		if (!("arcId" in parsed) && parsed.field === "start") {
 			const start = Season.shape.start.parse(value)
 			const season = await getSeason(seasonId)

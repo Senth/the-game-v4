@@ -43,14 +43,22 @@ export async function createSeason(
 
 export async function getSeason(id: string): Promise<Season | null> {
 	const season = await (await collections()).seasons.findOne({ _id: id })
-	return season ? { ...season, defaultQuestPoints: season.defaultQuestPoints ?? null } : null
+	return season
+		? { ...season, defaultQuestPoints: season.defaultQuestPoints ?? null, mapArea: season.mapArea ?? null }
+		: null
 }
 
 export async function listSeasons(): Promise<Season[]> {
 	return (await collections()).seasons
 		.find()
 		.toArray()
-		.then((seasons) => seasons.map((season) => ({ ...season, defaultQuestPoints: season.defaultQuestPoints ?? null })))
+		.then((seasons) =>
+			seasons.map((season) => ({
+				...season,
+				defaultQuestPoints: season.defaultQuestPoints ?? null,
+				mapArea: season.mapArea ?? null,
+			})),
+		)
 }
 
 export class FinisherBonusClaimedError extends Error {

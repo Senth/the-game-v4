@@ -204,6 +204,27 @@ describe("autosave actions", () => {
 		expect(publish).not.toHaveBeenCalled()
 	})
 
+	it("saves map area and rejects out-of-range latitude, longitude and zoom", async () => {
+		const season = await setup()
+		const mapArea = { lat: 55.507913, lng: 13.235313, zoom: 12.35 }
+		expect(await saveSeasonField(season._id, { field: "mapArea" }, mapArea)).toEqual({ ok: true })
+		expect((await seasons.getSeason(season._id))?.mapArea).toEqual(mapArea)
+		expect(vi.mocked(publish).mock.calls).toEqual([[seasonChannel(season._id)], [boardChannel]])
+		vi.mocked(publish).mockClear()
+		for (const value of [
+			{ ...mapArea, lat: 90.000001 },
+			{ ...mapArea, lng: -180.000001 },
+			{ ...mapArea, zoom: 19.001 },
+		]) {
+			expect(await saveSeasonField(season._id, { field: "mapArea" }, value)).toEqual({
+				ok: false,
+				error: "Use latitude −90 to 90, longitude −180 to 180 and zoom 2 to 19.",
+			})
+		}
+		expect((await seasons.getSeason(season._id))?.mapArea).toEqual(mapArea)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
 	it("does not change existing quest points when the default changes", async () => {
 		const season = await setup()
 		await (await collections()).seasons.updateOne(

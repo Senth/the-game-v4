@@ -159,11 +159,13 @@ describe("MapView", () => {
 		expect(await lazy.loader?.()).toEqual(expect.objectContaining({ default: MapView }))
 	})
 	it("sizes the map itself, enables cooperative gestures, keeps north up and expands one attribution control", () => {
-		const { map, html } = mount()
+		const { map, html } = mount({ minZoom: 2, maxZoom: 19 })
 		expect(html).toContain("aspect-[16/10] w-full")
 		expect(map.options).toEqual(
 			expect.objectContaining({
 				style: navy,
+				minZoom: 2,
+				maxZoom: 19,
 				cooperativeGestures: true,
 				attributionControl: { compact: false },
 				dragRotate: false,
