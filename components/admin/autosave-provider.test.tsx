@@ -13,8 +13,12 @@ import { patchSeasonList, removeLastFinisherBonus, saveSeasonField } from "@/app
 import TeamPage from "@/app/admin/seasons/[seasonId]/teams/[teamId]/page"
 import TeamsPage from "@/app/admin/seasons/[seasonId]/teams/page"
 import { addQuest, moveQuest, removeArc, removeQuest } from "@/app/admin/tree-actions"
+import type { GameView } from "@/components/game/game-view"
+import { PlaceMap } from "@/components/game/place-map"
+import type { MapViewProps } from "@/components/map/map-view"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
+import { boundsFor, circleRing } from "@/lib/domain/map"
 import type { Season } from "@/lib/domain/schemas"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { buildFixture } from "@/scripts/fixture"
@@ -341,6 +345,85 @@ it("refreshes idle place and puzzle fields from remote quest values", () => {
 	unmount(placeState)
 	unmount(puzzleState)
 	unmount(owner.state)
+})
+
+it("keeps mounted editor and preview geometry valid while clearing and retyping radius and coordinates", async () => {
+	const owner = provider()
+	const fixture = buildFixture(new Date())
+	const arc = fixture.season.arcs[0]
+	const source = arc?.quests[0]
+	if (!arc || !source) throw new Error("Missing fixture quest")
+	const place = { id: "place", lat: 55.1, lng: 13.1, radius: 40 }
+	const quest = { ...source, location: { guidance: "map" as const, places: [place] } }
+	const season = { ...fixture.season, arcs: [{ ...arc, quests: [quest] }] }
+	const editor = scope()
+	const preview = scope()
+	const map = scope()
+	const field = () =>
+		render(editor, () =>
+			PlaceField({
+				seasonId: "season-1",
+				arcId: arc.id,
+				questId: quest.id,
+				location: quest.location,
+				puzzle: null,
+				seasonRadius: 40,
+				solvedTeams: 0,
+			}),
+		)
+	const input = (index: number) =>
+		field().props.children[1].props.children[index] as ReactElement<ComponentProps<"input">>
+	const previewGeometry = () => {
+		const view = render(preview, () => QuestPreview({ season, arcId: arc.id, quest, now: Date.now() })) as ReactElement<
+			ComponentProps<typeof GameView>
+		>
+		const location = view.props.quest?.location
+		if (location?.guidance !== "map") return null
+		const point = location.places[0]
+		if (!point) throw new Error("Missing preview place")
+		const tree = render(map, () => PlaceMap({ place: point, preview: true }))
+		return (tree.props.children[0] as ReactElement<MapViewProps>).props
+	}
+	const assertGeometry = (expected: typeof place) => {
+		const geometry = previewGeometry()
+		expect(geometry?.circle).toEqual({ lat: expected.lat, lng: expected.lng, radius: expected.radius })
+		expect(geometry?.framing).toEqual({ bounds: boundsFor(circleRing(expected, expected.radius)) })
+		const editorMap = field().props.children[3]
+		expect(editorMap.props.children[0].props.children[0].props.circle).toEqual(expected)
+	}
+	field()
+	assertGeometry(place)
+	for (const draft of ["", "0", "501", "12.5"]) {
+		input(1).props.onChange?.({
+			target: { value: draft, valueAsNumber: draft === "" ? Number.NaN : Number(draft) },
+		} as never)
+		expect(input(1).props.value).toBe(draft === "" ? "" : Number(draft))
+		assertGeometry(place)
+		await vi.advanceTimersByTimeAsync(500)
+		expect(saveSeasonField).not.toHaveBeenCalled()
+	}
+	input(1).props.onChange?.({ target: { value: "90", valueAsNumber: 90 } } as never)
+	assertGeometry({ ...place, radius: 90 })
+	await vi.advanceTimersByTimeAsync(500)
+	expect(saveSeasonField).toHaveBeenCalledExactlyOnceWith(
+		"season-1",
+		{ arcId: arc.id, questId: quest.id, field: "location" },
+		{ guidance: "map", places: [{ ...place, radius: 90 }] },
+	)
+	for (const draft of ["NaN, NaN", "55.2,", "91, 13", "55, 181", "Infinity, 13"]) {
+		input(0).props.onChange?.({ target: { value: draft } } as never)
+		assertGeometry({ ...place, radius: 90 })
+	}
+	input(0).props.onChange?.({ target: { value: "55.2, 13.2" } } as never)
+	assertGeometry({ ...place, lat: 55.2, lng: 13.2, radius: 90 })
+	input(0).props.onChange?.({ target: { value: "" } } as never)
+	expect(previewGeometry()).toBeNull()
+	input(0).props.onChange?.({ target: { value: "55.2," } } as never)
+	expect(previewGeometry()).toBeNull()
+	input(0).props.onChange?.({ target: { value: "55.2, 13.2" } } as never)
+	expect(input(0).props.value).toBe("55.2, 13.2")
+	expect(previewGeometry()).toBeNull()
+	for (const state of [editor, preview, map, owner.state]) unmount(state)
 })
 
 it.each(["direct", "via placeholder"])(

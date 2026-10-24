@@ -32,10 +32,7 @@ export function PlaceField({
 	const field = useAutosaveField<Quest["location"]>({ arcId, questId, field: "location" }, location ?? null)
 	const value = field.value ?? null
 	const place = value?.places[0]
-	const [lastValidPlace, setLastValidPlace] = useState(location?.places[0])
-	const validRadius = !place || (Number.isInteger(place.radius) && place.radius >= 5 && place.radius <= 500)
-	const mapPlace = validRadius ? place : lastValidPlace
-	if (validRadius && place !== lastValidPlace) setLastValidPlace(place)
+	const [radius, setRadius] = useState<number | "">(place?.radius ?? seasonRadius)
 	const guidance = value?.guidance ?? "none"
 	const savedCoordinates = place ? `${place.lat}, ${place.lng}` : ""
 	const [coordinates, setCoordinates] = useState(() => (place ? `${place.lat}, ${place.lng}` : ""))
@@ -47,8 +44,8 @@ export function PlaceField({
 		if (!locked && !puzzle) commit(locationAt(point))
 	})
 	const framing = useMemo(
-		() => (mapPlace ? { bounds: boundsFor(circleRing(mapPlace, mapPlace.radius)) } : mapArea),
-		[mapPlace, mapArea],
+		() => (place ? { bounds: boundsFor(circleRing(place, place.radius)) } : mapArea),
+		[place, mapArea],
 	)
 	const error = locked
 		? undefined
@@ -74,6 +71,9 @@ export function PlaceField({
 	useEffect(() => {
 		if (!pasteError) setCoordinates(savedCoordinates)
 	}, [savedCoordinates, pasteError])
+	useEffect(() => {
+		setRadius(place?.radius ?? seasonRadius)
+	}, [place?.radius, seasonRadius])
 
 	function locationAt(point: Pick<Place, "lat" | "lng">): NonNullable<Quest["location"]> {
 		const rounded = { lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) }
@@ -147,15 +147,14 @@ export function PlaceField({
 					min={5}
 					max={500}
 					step={1}
-					value={
-						(locked ? undefined : dragPlace?.radius) ??
-						(Number.isNaN(place?.radius) ? "" : place?.radius) ??
-						seasonRadius
-					}
+					value={(locked ? undefined : dragPlace?.radius) ?? radius}
 					disabled={locked || !place}
 					onChange={(event) => {
 						if (!place || !value || locked) return
-						field.onChange({ ...value, places: [{ ...place, radius: event.target.valueAsNumber }] })
+						const next = event.target.valueAsNumber
+						setRadius(Number.isNaN(next) ? "" : next)
+						if (Number.isInteger(next) && next >= 5 && next <= 500)
+							field.onChange({ ...value, places: [{ ...place, radius: next }] })
 					}}
 					onFocus={field.onFocus}
 					onBlur={() => void field.onBlur()}
@@ -175,7 +174,7 @@ export function PlaceField({
 				<div className="mt-3">
 					<div className="relative">
 						<LazyMap
-							circle={locked ? mapPlace : (dragPlace ?? mapPlace)}
+							circle={locked ? place : (dragPlace ?? place)}
 							framing={framing}
 							edit={
 								locked
