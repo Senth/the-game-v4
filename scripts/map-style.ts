@@ -20,6 +20,7 @@ export function navyStyle(style: StyleSpecification, css: string): StyleSpecific
 		const id = layer.id
 		if (layer.type === "background") layer.paint = { ...layer.paint, "background-color": color("z0") }
 		else if (layer.type === "fill") {
+			if (layer.paint?.["fill-pattern"] === "wood-pattern") delete layer.paint["fill-pattern"]
 			layer.paint = {
 				...layer.paint,
 				"fill-color": color(/water/.test(id) ? "z1" : "field"),
@@ -34,6 +35,8 @@ export function navyStyle(style: StyleSpecification, css: string): StyleSpecific
 				),
 			}
 		} else if (layer.type === "symbol") {
+			const icon = layer.layout?.["icon-image"]
+			if (Array.isArray(icon) && icon[0] === "step" && icon[2] === "circle-11") icon[2] = "circle_11"
 			layer.paint = {
 				...layer.paint,
 				"text-color": color("muted"),
