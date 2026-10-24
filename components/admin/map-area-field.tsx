@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, useId, useState } from "react"
+import { type FormEvent, useEffect, useId, useState } from "react"
 import { searchPlaces } from "@/app/admin/geocode-actions"
 import { inputClass, labelClass } from "@/components/auth-form"
 import LazyMap from "@/components/map/lazy-map"
@@ -21,6 +21,8 @@ export function MapAreaField({ serverValue }: { serverValue: Season["mapArea"] }
 	const [framing, setFraming] = useState<MapViewProps["framing"]>(() => field.value ?? serverValue ?? null)
 	const id = useId()
 
+	useEffect(() => setFraming(field.value), [field.value])
+
 	async function submit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		setSearching(true)
@@ -33,6 +35,8 @@ export function MapAreaField({ serverValue }: { serverValue: Season["mapArea"] }
 			}
 			setResults(result.results)
 			setSearchState(result.results.length ? "results" : "empty")
+		} catch {
+			setSearchState("unavailable")
 		} finally {
 			setSearching(false)
 		}

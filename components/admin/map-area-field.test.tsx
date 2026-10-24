@@ -8,7 +8,7 @@ import type { PlaceSearchResult } from "@/lib/geocode/nominatim"
 import { useAutosaveField } from "./autosave-provider"
 import { MapAreaField } from "./map-area-field"
 
-const hooks = vi.hoisted(() => ({ states: [] as unknown[], cursor: 0 }))
+const hooks = vi.hoisted(() => ({ states: [] as unknown[], effects: [] as unknown[][], cursor: 0 }))
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
 	useId: () => "map-area",
@@ -17,6 +17,17 @@ vi.mock("react", async (importOriginal) => ({
 		if (!(index in hooks.states))
 			hooks.states[index] = typeof initial === "function" ? (initial as () => unknown)() : initial
 		return [hooks.states[index], (value: unknown) => (hooks.states[index] = value)]
+	},
+	useEffect: (effect: () => void, dependencies: unknown[]) => {
+		const index = hooks.cursor++
+		const previous = hooks.effects[index]
+		if (
+			!previous ||
+			dependencies.some((dependency, dependencyIndex) => !Object.is(dependency, previous[dependencyIndex]))
+		) {
+			hooks.effects[index] = dependencies
+			effect()
+		}
 	},
 }))
 vi.mock("@/components/map/lazy-map", () => ({ default: () => <div>Map</div> }))
@@ -71,6 +82,7 @@ function mapProps(node: ReactNode): MapViewProps | undefined {
 beforeEach(() => {
 	vi.clearAllMocks()
 	hooks.states.length = 0
+	hooks.effects.length = 0
 	hooks.cursor = 0
 	field.value = null
 	field.failed = false
@@ -133,6 +145,7 @@ it("sharpens no-results copy and reports search failure for retry", async () => 
 
 it("shows saved centre crosshair and autosaves movement in every season state", () => {
 	const area = { lat: 55.5, lng: 13.2, zoom: 12.5 }
+	field.value = area
 	expect(render(area)).toContain('aria-hidden="true"')
 	const map = mapProps(component(area))
 	expect(map?.framing).toEqual(area)
@@ -141,4 +154,33 @@ it("shows saved centre crosshair and autosaves movement in every season state", 
 	map?.onMoveEnd?.({ lat: 55.51, lng: 13.21, zoom: 13 }, true)
 	expect(field.onChange).toHaveBeenCalledExactlyOnceWith({ lat: 55.51, lng: 13.21, zoom: 13 })
 	expect(field.onBlur).toHaveBeenCalledOnce()
+})
+
+it("frames accepted remote map area after a previously unset value", () => {
+	component()
+	const area = { lat: 55.5, lng: 13.2, zoom: 12.5 }
+	field.value = area
+	component(area)
+	expect(mapProps(component(area))?.framing).toEqual(area)
+})
+
+it("frames accepted remote map area changes", () => {
+	const initialArea = { lat: 55.5, lng: 13.2, zoom: 12.5 }
+	const remoteArea = { lat: 56.1, lng: 14.3, zoom: 11 }
+	field.value = initialArea
+	component(initialArea)
+	expect(mapProps(component(initialArea))?.framing).toEqual(initialArea)
+	field.value = remoteArea
+	component(remoteArea)
+	expect(mapProps(component(remoteArea))?.framing).toEqual(remoteArea)
+})
+
+it("reports rejected search and allows retry", async () => {
+	vi.mocked(searchPlaces).mockRejectedValueOnce(new Error("offline"))
+	const form = descendants<FormProps>(component(), "form")[0]
+	await form?.props.onSubmit?.({ preventDefault: vi.fn() } as never)
+	expect(render()).toContain("Search unavailable. Try again.")
+	vi.mocked(searchPlaces).mockResolvedValueOnce({ ok: true, results: [result] })
+	await descendants<FormProps>(component(), "form")[0]?.props.onSubmit?.({ preventDefault: vi.fn() } as never)
+	expect(render()).toContain("Svedala, Skåne County, Sweden")
 })
