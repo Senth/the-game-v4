@@ -7,7 +7,7 @@ import { seasonStatus } from "@/lib/domain/admin-seasons"
 import type { StructuralEditImpact } from "@/lib/domain/game"
 import { defaultPlaceRadius } from "@/lib/domain/location"
 import { missingLabel as formatMissingFields, missingForGame } from "@/lib/domain/playable-quests"
-import type { Quest } from "@/lib/domain/schemas"
+import type { Quest, Season } from "@/lib/domain/schemas"
 import { canEditStructure, questLabel } from "@/lib/domain/season-tree"
 import { AnswerChips } from "./answer-chips"
 import { AutosavePointsField } from "./autosave-points-field"
@@ -32,6 +32,7 @@ export function QuestEditor({
 	reachedTeams = 0,
 	solvedTeams = 0,
 	placeRadius = defaultPlaceRadius,
+	mapArea = null,
 	start,
 	end,
 	now,
@@ -46,6 +47,7 @@ export function QuestEditor({
 	reachedTeams?: number
 	solvedTeams?: number
 	placeRadius?: number
+	mapArea?: Season["mapArea"]
 	start: Date | null
 	end: Date | null
 	now: number
@@ -309,11 +311,13 @@ export function QuestEditor({
 					<AutosavePointsField arcId={arcId} questId={quest.id} serverValue={quest.points} missing="Needs points" />
 				</div>
 				<PlaceField
+					seasonId={seasonId}
 					arcId={arcId}
 					questId={quest.id}
 					location={quest.location ?? null}
 					puzzle={puzzle}
 					seasonRadius={placeRadius}
+					mapArea={mapArea}
 					solvedTeams={solvedTeams}
 				/>
 				<PuzzleSettings

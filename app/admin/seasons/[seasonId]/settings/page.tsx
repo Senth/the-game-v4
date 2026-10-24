@@ -21,6 +21,7 @@ export default async function SettingsPage({ params }: PageProps<"/admin/seasons
 				lengthMinutes: season.lengthMinutes,
 				defaultQuestPoints: season.defaultQuestPoints ?? null,
 				placeRadius: season.placeRadius ?? defaultPlaceRadius,
+				mapArea: season.mapArea ?? null,
 				shuffleArcs: season.shuffleArcs,
 				registrationOpen: season.registrationOpen,
 				finisherBonuses: season.finisherBonuses ?? [],

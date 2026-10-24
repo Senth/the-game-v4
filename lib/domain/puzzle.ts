@@ -1,4 +1,11 @@
-import { type PuzzleState, type Season, Spot, type Team } from "./schemas"
+import { z } from "zod"
+import type { PuzzleState, Season, Team } from "./schemas"
+
+export const Spot = z.union([
+	z.strictObject({ cell: z.number().int().min(0).max(48) }),
+	z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
+])
+export type Spot = z.infer<typeof Spot>
 
 export async function pieceIds(
 	questId: string,

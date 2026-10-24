@@ -61,6 +61,7 @@ describe("createSeasonAction", () => {
 			lengthMinutes: 60,
 			defaultQuestPoints: null,
 			placeRadius: 40,
+			mapArea: null,
 			start: null,
 			end: null,
 			shuffleArcs: false,

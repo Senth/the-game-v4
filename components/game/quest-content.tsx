@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { isValidElement, type ReactNode, useEffect, useState } from "react"
 import Markdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
@@ -9,6 +10,11 @@ import type { PlayerQuest } from "@/lib/domain/game"
 import type { Spot } from "@/lib/domain/schemas"
 import { AudioBar } from "./audio-bar"
 import { PuzzleBoard } from "./puzzle-board"
+
+const PlaceMap = dynamic(() => import("./place-map").then((module) => module.PlaceMap), {
+	ssr: false,
+	loading: () => <div className="aspect-[4/3] w-full rounded-md bg-z1" role="img" aria-label="Loading map" />,
+})
 
 function CodeFence({ children }: { children?: ReactNode }) {
 	const element = isValidElement<{ children?: ReactNode; className?: string }>(children) ? children : null
@@ -70,16 +76,20 @@ function CodeFence({ children }: { children?: ReactNode }) {
 export function QuestContent({
 	quest,
 	preview = false,
+	position,
 	onPuzzleDrop,
 	puzzleComplete,
 }: {
-	quest: Pick<PlayerQuest, "displayTitle" | "assetPath" | "content"> & Partial<Pick<PlayerQuest, "id" | "puzzle">>
+	quest: Pick<PlayerQuest, "displayTitle" | "assetPath" | "content"> &
+		Partial<Pick<PlayerQuest, "id" | "puzzle" | "location">>
 	preview?: boolean
+	position?: { lat: number; lng: number; accuracy: number }
 	onPuzzleDrop?: (pieceId: string, target: Spot) => Promise<void>
 	puzzleComplete?: number
 }) {
 	const kind = quest.assetPath ? assetKind(quest.assetPath) : null
 	const extension = quest.assetPath ? assetExtension(quest.assetPath) : "bin"
+	const place = quest.location?.guidance === "map" ? quest.location.places[0] : undefined
 	const AssetLink = preview ? "span" : "a"
 	return (
 		<section inert={preview}>
@@ -127,8 +137,9 @@ export function QuestContent({
 						className="h-auto max-h-[70vh] w-full rounded-md object-contain"
 					/>
 				))}
+			{place && <PlaceMap key={quest.id} place={place} position={position} preview={preview} />}
 			<div
-				className={`${quest.assetPath || quest.puzzle ? "mt-4 " : ""}break-words leading-relaxed [&_p+p]:mt-3 [&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-field [&_pre]:p-3 [&_pre]:text-sm [&_pre:focus-visible]:outline-2 [&_pre:focus-visible]:outline-link [&_img]:h-auto [&_img]:max-h-[70vh] [&_img]:max-w-full [&_img]:rounded-md [&_img]:object-contain [&_a]:text-link [&_a:hover]:underline [&_h1]:font-head [&_h1]:text-2xl [&_h1]:text-head [&_h2]:mt-5 [&_h2]:font-head [&_h2]:text-xl [&_h2]:text-head [&_h3]:mt-4 [&_h3]:font-head [&_h3]:text-lg [&_h3]:text-head [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-z2 [&_blockquote]:pl-4 [&_blockquote]:text-muted`}
+				className={`${quest.assetPath || quest.puzzle || place ? "mt-4 " : ""}break-words leading-relaxed [&_p+p]:mt-3 [&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-field [&_pre]:p-3 [&_pre]:text-sm [&_pre:focus-visible]:outline-2 [&_pre:focus-visible]:outline-link [&_img]:h-auto [&_img]:max-h-[70vh] [&_img]:max-w-full [&_img]:rounded-md [&_img]:object-contain [&_a]:text-link [&_a:hover]:underline [&_h1]:font-head [&_h1]:text-2xl [&_h1]:text-head [&_h2]:mt-5 [&_h2]:font-head [&_h2]:text-xl [&_h2]:text-head [&_h3]:mt-4 [&_h3]:font-head [&_h3]:text-lg [&_h3]:text-head [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-z2 [&_blockquote]:pl-4 [&_blockquote]:text-muted`}
 			>
 				<Markdown
 					rehypePlugins={[rehypeRaw]}

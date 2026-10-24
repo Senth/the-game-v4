@@ -67,6 +67,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 						reachedTeams={puzzleLocked(season, teams, quest.id)}
 						solvedTeams={solvedTeams}
 						placeRadius={season.placeRadius ?? defaultPlaceRadius}
+						mapArea={season.mapArea ?? null}
 						quest={{
 							id: quest.id,
 							displayTitle: quest.displayTitle,

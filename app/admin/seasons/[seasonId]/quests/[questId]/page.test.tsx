@@ -78,6 +78,7 @@ it("selects the quest's own arc and passes editor fields without hints across th
 	})
 	expect(titles.props.arcId).toBe(arc.id)
 	expect(titles.props.reachedTeams).toBe(puzzleLocked(season, fixture.teams, quest.id))
+	expect(titles.props.mapArea).toBeNull()
 	expect(titles.props.start).toBe(season.start)
 	expect(titles.props.end).toBe(season.end)
 	expect(titles.props.now).toBeGreaterThanOrEqual(before)
@@ -107,6 +108,15 @@ it("selects the quest's own arc and passes editor fields without hints across th
 		now: titles.props.now,
 	})
 	expect(listSeasonTeams).toHaveBeenCalledExactlyOnceWith(season._id)
+})
+
+it("passes the season map area to the quest editor without changing existing places", async () => {
+	const mapArea = { lat: 55.5079, lng: 13.2353, zoom: 14 }
+	vi.mocked(getSeason).mockResolvedValue({ ...season, mapArea })
+	const element = await QuestPage(props)
+	const editor = element.props.children[1].props.children.props.children[2]
+	expect(editor.props.mapArea).toEqual(mapArea)
+	expect(editor.props.quest.location).toEqual(quest.location)
 })
 
 it("passes hidden draft status to QuestEditor without adding hints", async () => {

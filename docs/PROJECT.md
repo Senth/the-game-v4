@@ -40,6 +40,7 @@ The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 | `lengthMinutes` | `number` | Configured game length |
 | `defaultQuestPoints` | `number \| null` | Points copied into quests created with "+ Quest"; null means none |
 | `placeRadius` | `number` | Whole-number radius from 5 to 500 metres copied into new places; absent reads as 40 |
+| `mapArea` | `{lat: number, lng: number, zoom: number} \| null` | Initial map view for new places; absent reads as null |
 | `start` | `Date \| null` | Scheduled or actual start; null before scheduling |
 | `end` | `Date \| null` | Scheduled or actual end; adjusted by live controls |
 | `shuffleArcs` | `boolean` | Shuffle arc order when building each team's order |
@@ -57,7 +58,7 @@ New seasons have no default quest points. A missing `defaultQuestPoints` reads a
 | --- | --- |
 | `Arc` | `id: string`, `title: string`, `shuffleQuests: boolean`, `quests: Quest[]` |
 | `Quest` | `id: string`, `displayTitle: string`, `internalTitle: string`, `content: string`, `assetPath: string \| null`, `answers: string[]`, `points: number \| null`, `adminNotes: string`, `hints: Hint[]` |
-| `Quest.location` | `{guidance: "none" \| "warmer", places: Place[]} \| null`; absent reads as null; absent guidance reads as `"none"`; exactly one place until #85 |
+| `Quest.location` | `{guidance: "none" \| "warmer" \| "map", places: Place[]} \| null`; absent reads as null; absent guidance reads as `"none"`; exactly one place until #85 |
 | `Place` | `id: string`, `lat: number`, `lng: number`, `radius: number` in metres |
 | `Hint` | `id: string`, `text: string`, `points: number` |
 
@@ -265,7 +266,7 @@ Team puzzle state never copies.
 
 ### Location quests
 
-`Quest.location` is `{guidance: "none" | "warmer", places: Place[]} | null`; absent reads as null.
+`Quest.location` is `{guidance: "none" | "warmer" | "map", places: Place[]} | null`; absent reads as null.
 New places start with `guidance: "none"`. Absent guidance and legacy data keep unguided behavior.
 Each place is `{id: string, lat: number, lng: number, radius: number}`.
 Exactly one place is supported until #85. Puzzle and location exclude each other.
@@ -289,7 +290,7 @@ Reports publish live events only on a solve.
 
 #### Warmer/colder guidance
 
-Only `guidance: "warmer"` enables guidance. With fix-to-place distance `d` and radius `r`,
+Only `guidance: "warmer"` enables warmer/colder guidance. With fix-to-place distance `d` and radius `r`,
 `d ≤ r` solves as usual. Outside, bands are `veryClose` when `d ≤ 3r`, `close` when `d ≤ 10r`,
 and `far` beyond that. Boundaries are inclusive. Never send distance to players.
 
@@ -311,8 +312,8 @@ An outside report on a warmer quest returns:
 {status: "outside", guidance: {band: "far" | "close" | "veryClose", bearing?: number, trend?: "warmer" | "colder"}}
 ```
 
-An unguided outside report still returns exactly `{status: "outside"}`. Other statuses are unchanged.
-Guidance goes only to the reporting phone, never through `getGame`, previews or live events.
+An unguided or map quest's outside report returns exactly `{status: "outside"}`. Other statuses are unchanged.
+Warmer/colder report guidance goes only to the reporting phone, never through `getGame`, previews or live events.
 A rough or stale fix shows the existing "GPS too rough" state and clears band, arrow and trend.
 
 Android Chrome reads magnetic heading from `deviceorientationabsolute` as `360 − alpha`.
@@ -327,7 +328,55 @@ for status, helper and switch copy. Existing off, rough, blocked, unavailable an
 Coordinate paste accepts two decimal numbers separated by a comma and/or spaces, optionally with `°`.
 Latitude ranges from −90 to 90 and longitude from −180 to 180; store both rounded to 6 decimals.
 Invalid paste returns "Paste latitude, longitude, like 55.5079, 13.2353."
-"Check on map ›" opens `https://www.openstreetmap.org/?mlat=<lat>&mlon=<lng>#map=18/<lat>/<lng>` in a new tab.
+
+#### Map guidance and place editor
+
+Only `guidance: "map"` exposes the place circles to players, following the
+[player data boundary](#player-data-boundary). Arrival, accuracy and fix-age rules stay unchanged.
+The player map frames the circle and the phone's own dot, refitting as fixes arrive until the player pans or zooms.
+"Recenter" resumes framing. Keep north up and rotation off.
+The dot uses the existing reporter's `watchPosition`, never a second watcher or `GeolocateControl`.
+Rough fixes still show the dot and its accuracy ring. Send nothing new to the server.
+Previews never request location permission or show an own dot.
+
+The Place field shows an editor map for every guidance choice.
+With a place, frame its circle with padding. Without one, use `Season.mapArea`; with neither, show no map.
+Tapping the map adds a place only when the quest has none, using `newPlace` and the season radius.
+Dragging the pin moves the place; dragging its edge handle resizes the radius.
+Save once on release, writing the same whole `location` object through `saveSeasonField` as coordinate paste.
+Round coordinates to 6 decimals and radius to whole metres, clamped from 5 to 500.
+Guidance locks with the place. Locked maps remain visible but cannot edit it.
+
+"◎ Use my position" starts a high-accuracy watch only on tap and accepts the first fix at most 50 metres accurate,
+using `maxFixAccuracy`. While waiting, show "◎ Finding you… ±N m" and "Cancel".
+Stop the watch on success, cancellation or after 30 seconds.
+On timeout, show "Couldn't get within 50 m. Try outside."
+On blocked permission, show "Location blocked. Allow it for this site, then try again."
+Moving an existing place needs no confirmation and preserves its radius. Disable this action when locked.
+Without a place or map area, offer "Set a map area in Settings ›" beside it.
+
+Every map uses cooperative touch gestures: one finger scrolls the page, two move the map.
+One finger still drags the pin and edge handle.
+Use MapLibre GL with `https://tiles.openfreemap.org/planet` vector tiles and the committed navy style.
+Show "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" once, expanded, on every map.
+Load map code only through `next/dynamic` with `ssr: false`.
+Players load it only for map quests; admins only when a Place field or Map area map renders.
+
+#### Season map area and search
+
+`Season.mapArea` is `{lat, lng, zoom} | null`; absent reads as null.
+Latitude ranges from −90 to 90 and longitude from −180 to 180, rounded to 6 decimals.
+Zoom ranges from 2 to 19, rounded to 2 decimals. Reject values outside those ranges before rounding.
+Map area stays editable in every season state. Changing it never moves existing places.
+Moving its map autosaves the resulting centre and zoom on `moveend` through ordinary field autosave.
+
+Search runs on Search press only, never per keystroke. Trim queries and require 2 to 200 characters.
+Call Nominatim server-side behind `requireAdmin`, with
+`search?format=jsonv2&limit=5&accept-language=sv` and User-Agent `the-game-v4 (https://game.senth.org)`.
+Allow at most one request per second and cache answers in memory for 24 hours.
+Picking a result fits its bounding box at maximum zoom 17 and saves the map's resulting centre and zoom.
+Show "Search © OpenStreetMap contributors" below results.
+Follow [Design](DESIGN.md#map-area) for field presentation and the shared copy above for permission failures.
 
 ### Pace
 
@@ -444,9 +493,13 @@ Players never receive internal titles, admin notes, answers or unrevealed hint t
 and live responses. Hidden hints may expose their id, position and penalty, not their text.
 Players reveal hints by id, not by index, so edits and deletions cannot shift a reveal onto another hint.
 Construct a player view without deleting fields from the shared season object.
-A location quest adds only `location: {guidance: "none" | "warmer"}` and `hasAnswers`, keeping `assetPath`.
-Player JSON never includes place coordinates, radius, place ids or distance, including in previews and live responses.
-Only the reporting phone's outside response may include the guidance object defined above.
+A location quest adds `location` and `hasAnswers`, keeping `assetPath`.
+For `"none"` and `"warmer"`, `location` is only `{guidance: "none" | "warmer"}`.
+Their place coordinates and radius stay server-side, including in previews and live responses.
+Only a `"map"` quest adds `location: {guidance: "map", places: [{lat, lng, radius}]}`.
+Build every location response by whitelist. Place ids and distance never reach players.
+Internal titles, admin notes, answers and unrevealed hint text remain excluded for every guidance choice.
+Only the reporting phone's outside response on a warmer quest may include the report guidance object defined above.
 The player finisher list exposes only team id, name, place and points, never claim times or other season fields.
 
 A puzzle quest's player view omits `assetPath` and exposes this shape:

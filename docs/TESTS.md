@@ -36,7 +36,10 @@ Write a red regression test first for a reproducible bug. On failure, rerun only
 ### Location quests
 
 Use [PROJECT.md's location rules](PROJECT.md#location-quests) for expected behavior and exact boundaries.
-Pure tests cover coordinate parsing, rounding, invalid pastes, geographic ranges, haversine distance and map URLs.
+Pure tests cover coordinate parsing, rounding, invalid pastes, geographic ranges and haversine distance.
+Cover closed circle rings, the east-facing edge point at the radius, rounded handle distances and both 5/500 clamps.
+Test antimeridian-safe bounds and Nominatim bounding-box conversion without mutating inputs.
+Check legacy `mapArea` reads as null, coordinate and zoom rounding, and rejection outside latitude, longitude and zoom ranges.
 Test accuracy, age, future-time and radius boundaries on both sides, including equality.
 Cover completeness without answers, missing places, legacy defaults and unchanged inputs.
 Test guidance bands on both sides of and at `r`, `3r` and `10r`; inside still solves without guidance.
@@ -63,11 +66,15 @@ Assert radius changes leave existing places unchanged.
 Test guarded copies retaining place configuration without team progress.
 Whitelist player, preview, live and report responses against
 [PROJECT.md's player data boundary](PROJECT.md#player-data-boundary).
-Reject coordinates, radius, place ids and distance alongside existing secrets, including with warmer guidance enabled.
+None and warmer quests reject coordinates, radius and places alongside existing secrets.
+Map quests expose exactly `location: {guidance: "map", places: [{lat, lng, radius}]}` in player and preview views.
+Reject place ids, distance, answers, internal titles, admin notes and hidden hint text for every guidance choice.
+Assert projection leaves inputs unchanged and does not share mutable place objects.
 Whitelist outside guidance to band, optional bearing and optional trend, only for the reporting phone.
-Assert unguided outside reports remain exactly `{status: "outside"}`; other statuses stay unchanged.
+Assert unguided and map outside reports remain exactly `{status: "outside"}`; other statuses stay unchanged.
 Very close omits bearing. Rough and stale fixes clear band, arrow and trend.
-Assert guidance never enters `getGame`, previews or live events; player location exposes only its guidance setting.
+Assert warmer/colder report guidance never enters `getGame`, previews or live events.
+Player location exposes only its guidance setting unless map guidance permits the circle whitelist above.
 
 Component tests cover every dock status, helper copy, accuracy, permission actions, backup-code visibility and inert previews.
 Test completion hold and teammate refetch feedback.
@@ -78,7 +85,15 @@ Test iPhone's tap-only permission request, refusal, no-compass fallback and list
 Cover band, trend and arrow states, including Very close, before first guidance and inert previews.
 Cover granted, prompt, denied and missing APIs, reporting cadence, hidden-tab pauses, resume and cleanup on quest changes.
 Assert stale callbacks and responses cannot restart reporting; release late wake locks and tolerate wake-lock failures.
-Test the Place field's empty state, valid and invalid paste, radius edits, map link, lock copy and disabled controls.
+Test the Place field's empty state, valid and invalid paste, radius edits, lock copy and disabled controls.
+Mock MapLibre in component tests. Cover pin and edge-handle drags, one save on release, tap-only creation,
+cooperative gestures, framing, own-dot accuracy rings and Recenter after manual pan or zoom.
+Verify the own dot reuses the reporter's watcher and previews never watch or ask permission.
+Mock geolocation for Use my position: tap-only start, first fix at most 50 metres accurate, rough-fix feedback,
+cancellation, 30-second timeout, blocked permission, cleanup, preserved radius and locked controls.
+Mock Nominatim fetch for admin guards, trimmed query bounds, Swedish results, submit-only search,
+one-request-per-second throttling, 24-hour caching, empty/error states and bounding-box selection autosave.
+Use no live tiles or geocoding in unit, component or browser tests.
 Cover puzzle exclusion, optional answers, draft previews, header autosave and retry.
 Test New place radius helpers and range errors.
 Keep these cases in unit and component tests. Add no browser flows.

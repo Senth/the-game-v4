@@ -21,6 +21,7 @@ vi.mock("./autosave-provider", () => ({ useAutosave: () => null, useAutosaveFiel
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("./use-season-clock", () => ({ useSeasonClock: vi.fn() }))
 vi.mock("./registration-switch", () => ({ RegistrationSwitch: vi.fn(() => <p>Registration field</p>) }))
+vi.mock("./map-area-field", () => ({ MapAreaField: () => <p>Map area field</p> }))
 
 const now = new Date("2026-10-12T17:00:00Z").getTime()
 const field = {
@@ -255,7 +256,8 @@ it.each(["unscheduled", "upcoming", "live", "ended"] as const)(
 		expect(html.indexOf(">Start</")).toBeLessThan(html.indexOf(">Length</label>"))
 		expect(html.indexOf(">Length</label>")).toBeLessThan(html.indexOf(">New quest points</label>"))
 		expect(html.indexOf(">New quest points</label>")).toBeLessThan(html.indexOf(">New place radius</label>"))
-		expect(html.indexOf(">New place radius</label>")).toBeLessThan(html.indexOf(">Shuffle arcs</span>"))
+		expect(html.indexOf(">New place radius</label>")).toBeLessThan(html.indexOf("Map area field"))
+		expect(html.indexOf("Map area field")).toBeLessThan(html.indexOf(">Shuffle arcs</span>"))
 		expect(html.indexOf(">Shuffle arcs</span>")).toBeLessThan(html.indexOf("Registration field"))
 		expect(html.includes("Applies to teams that join from now on.")).toBe(started)
 		expect(html.includes("Each team plays the arcs in its own order.")).toBe(!started)

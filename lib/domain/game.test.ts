@@ -563,6 +563,38 @@ describe("playerView", () => {
 		},
 	)
 
+	it("whitelists map circles without exposing place ids, distance or quest secrets", () => {
+		const input = {
+			...secretQuest,
+			location: {
+				guidance: "map" as const,
+				places: [{ id: "secret-place-id", lat: 55.5079, lng: 13.2353, radius: 47, distance: 100 }],
+			},
+		}
+		const before = structuredClone({ input, progress })
+		const view = playerView(input, progress)
+		expect(view).toEqual({
+			...playerView(secretQuest, progress),
+			location: { guidance: "map", places: [{ lat: 55.5079, lng: 13.2353, radius: 47 }] },
+			hasAnswers: true,
+		})
+		for (const secret of [
+			"internalTitle",
+			"adminNotes",
+			"answers",
+			"secret-place-id",
+			"distance",
+			"secret hidden hint",
+			"another secret hint",
+		]) {
+			expect(JSON.stringify(view)).not.toContain(secret)
+		}
+		expect({ input, progress }).toEqual(before)
+		const circle = view.location?.guidance === "map" ? view.location.places[0] : undefined
+		if (circle) circle.lat = 0
+		expect({ input, progress }).toEqual(before)
+	})
+
 	it("projects legacy location guidance as none without changing the quest", () => {
 		const legacy = {
 			...secretQuest,

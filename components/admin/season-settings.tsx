@@ -9,6 +9,7 @@ import { useAutosaveField } from "./autosave-provider"
 import { AutosaveSwitch } from "./autosave-switch"
 import { AutosaveInput, AutosaveTextField } from "./autosave-text-field"
 import { FinisherBonusRows } from "./finisher-bonus-rows"
+import { MapAreaField } from "./map-area-field"
 import { NewQuestPointsField } from "./new-quest-points-field"
 import { RegistrationSwitch } from "./registration-switch"
 import { useSeasonClock } from "./use-season-clock"
@@ -22,6 +23,7 @@ type Settings = Pick<
 	| "lengthMinutes"
 	| "defaultQuestPoints"
 	| "placeRadius"
+	| "mapArea"
 	| "shuffleArcs"
 	| "registrationOpen"
 	| "finisherBonuses"
@@ -71,6 +73,7 @@ export function SeasonSettings({
 			<AutosaveNumberField serverValue={season.lengthMinutes} readOnly={started} />
 			<NewQuestPointsField serverValue={season.defaultQuestPoints} />
 			<NewPlaceRadiusField serverValue={season.placeRadius ?? defaultPlaceRadius} />
+			<MapAreaField serverValue={season.mapArea ?? null} />
 			<AutosaveSwitch serverValue={season.shuffleArcs} started={started} />
 			<RegistrationSwitch seasonId={season._id} serverValue={season.registrationOpen} />
 			<FinisherBonusRows season={season} teams={teams} />

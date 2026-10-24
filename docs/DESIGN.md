@@ -77,6 +77,14 @@ Code fences use Shiki; the authoring textarea can use the platform monospace fon
   Use a "Not saved, retry" button with a 44 px target.
 - Mark internal titles and admin notes "admin only". Keep them out of real player previews.
 
+### Maps
+
+Maps use the navy style built from the tokens. The place circle is `head`; the own dot is `accent`.
+Controls over a map keep 44 px targets. Attribution stays visible, expanded and `muted`.
+On touch, one finger scrolls the page and two move the map; one finger still drags the pin and handle.
+Size the map's own container, because MapLibre's CSS overrides Tailwind's `absolute inset-0`.
+`components/map/lazy-map.tsx` is the only entry; never import MapLibre elsewhere.
+
 ## Component ownership
 
 `app/globals.css` owns runtime tokens. `app/` owns routing and page composition.
@@ -167,6 +175,16 @@ Use `role="status"` for status updates. Honor reduced motion by leaving dots sti
 Quest and team previews show the off state, with Share location and any backup controls disabled.
 Never request permission or report positions from previews.
 `components/game/location-dock.tsx` owns this dock; `components/game/use-location-reporter.ts` owns browser reporting.
+
+### Map guidance
+
+Surface brief: job is reaching the place with teammates. Primary action is walking into the circle.
+Read first the map with circle and dot, second the dock status, third the helper.
+Must not look like a navigation app or hide the quest text. Quiet the attribution and Recenter.
+
+The map takes the quest image slot, directly below the file when there is one.
+Previews show it inert, with no dot. None and Warmer/colder quests show no map.
+`components/game/place-map.tsx` owns it.
 
 ### Warmer/colder guidance
 
@@ -505,12 +523,13 @@ with the shared autosave controls.
 Final variant I: [phone](https://artifacts.senth.org/final-i-editor-one-line-phone-1c6d41.png),
 [desktop](https://artifacts.senth.org/final-i-editor-one-line-desktop-3fd1bd.png).
 
-Surface brief: job is pinning where a team must stand, often from a phone at the spot.
-Primary action is pasting coordinates. Read first coordinates, second radius, third "Check on map ›".
-Must not look like a map editor, a settings page or another upload row.
-Quiet the empty state and helper; sharpen bad-paste and locked lines.
+Surface brief: job is pinning where a team must stand and how close counts, often on a phone at the spot.
+Primary action is dragging the pin, or "Use my position" when standing there.
+Read first the map, second coordinates and radius, third the Guidance choice.
+Must not look like a GIS tool, a settings page or another upload row.
+Quiet the drag hint and attribution; sharpen bad-paste, timeout and locked lines.
 
-Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for parsing, radius defaults, locks and map URLs.
+Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for parsing, radius defaults, locks and map guidance.
 Place "Place" with muted "optional" after Points and before Puzzle.
 Keep coordinates, the compact radius number input and suffix `m` on one line, including on phone.
 Use ordinary field styles and header autosave. Do not add a Save button.
@@ -518,14 +537,15 @@ Use ordinary field styles and header autosave. Do not add a Save button.
 - Empty placeholder: "Paste latitude, longitude".
   Helper: "Empty means players type an answer." Disable the radius until a place exists.
 - With a place: "Getting within the radius solves it. Players never see the coordinates."
-  Show the quiet "Check on map ›" link below, opening a new tab.
 - Bad paste: "Paste latitude, longitude, like 55.5079, 13.2353." Use a `warn` field border and helper line.
   The label stays "Place", not "Coordinates".
 - Locked: disable and mute both coordinates and radius.
   Copy: `Locked: <N> teams have found this place.` Use "Locked: 1 team has found this place." for one team.
 - With puzzle mode on: "Turn off puzzle mode to add a place." Show no coordinate controls.
 
-Show a quiet "Warmer/colder" switch below the radius. It locks with the place.
+Show a 16:10 map under the coordinates on every location quest, whatever its guidance.
+Under it sit a quiet drag hint, "Use my position" and a segmented Guidance control (None / Warmer/colder / Map).
+Guidance locks with the place. When locked, the map stays visible but nothing on it can be changed.
 
 With a place set, Answers helper reads "optional backup codes, arriving solves it". Omit "Needs an answer".
 While a place is set, Puzzle shows "Puzzle mode is off while this quest has a place." instead of its switch.
@@ -742,6 +762,14 @@ Range error: "Use 5 to 500."
 Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for bounds, legacy defaults
 and copying the value into new places.
 `components/admin/season-settings.tsx` owns this field.
+
+#### Map area
+
+Surface brief: job is telling the game where this season plays, once. Primary action is searching and picking a result.
+Read first the map, second the search box. Must not look like a preferences dashboard or a GIS tool.
+
+Place it under New place radius. Follow [PROJECT.md's location rules](PROJECT.md#location-quests) for behaviour.
+`components/admin/map-area-field.tsx` owns this field.
 
 #### Start now confirmation
 

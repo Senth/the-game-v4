@@ -74,6 +74,23 @@ describe("seasons", () => {
 		)
 	})
 
+	it("saves and reads map area without changing existing places, and reads legacy map area as null", async () => {
+		const season = await createSeason(seasonInput())
+		const location = { guidance: "map" as const, places: [{ id: "place-1", lat: 55.5, lng: 13.2, radius: 75 }] }
+		await setSeasonField(season._id, { arcId: "a1", questId: "q1", field: "location" }, location)
+		await setSeasonField(season._id, { field: "mapArea" }, { lat: 55.5079126, lng: 13.2353126, zoom: 12.345 })
+		const saved = await getSeason(season._id)
+		expect(saved?.mapArea).toEqual({ lat: 55.507913, lng: 13.235313, zoom: 12.35 })
+		expect(saved?.arcs[0]?.quests[0]?.location).toEqual(location)
+		await (await collections()).seasons.updateOne({ _id: season._id }, { $unset: { mapArea: "" } })
+		const legacy = await getSeason(season._id)
+		expect(legacy?.mapArea).toBeNull()
+		expect(legacy?.arcs[0]?.quests[0]?.location).toEqual(location)
+		expect(await listSeasons()).toEqual(
+			expect.arrayContaining([expect.objectContaining({ _id: season._id, mapArea: null })]),
+		)
+	})
+
 	it("sets a season, arc, quest and hint field on that path only", async () => {
 		const season = await createSeason(seasonInput())
 		await setSeasonField(season._id, { field: "title" }, "Cipher Night 2026")

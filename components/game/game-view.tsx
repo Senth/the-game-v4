@@ -99,6 +99,7 @@ export function GameView(props: GameViewProps) {
 						<QuestContent
 							quest={quest}
 							preview={!!props.preview}
+							position={live?.locationStatus?.position}
 							onPuzzleDrop={live?.onPuzzleDrop}
 							puzzleComplete={props.puzzleComplete}
 						/>
@@ -128,6 +129,7 @@ export function GameView(props: GameViewProps) {
 								pointsEarned={props.locationComplete}
 								hasAnswers={quest.hasAnswers === true}
 								guidanceEnabled={quest.location.guidance === "warmer"}
+								mapEnabled={quest.location.guidance === "map"}
 								answer={live.answer}
 								onAnswerChange={live.onAnswerChange}
 								onSubmit={live.onSubmit}
