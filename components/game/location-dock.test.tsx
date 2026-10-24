@@ -51,4 +51,136 @@ describe("LocationDock", () => {
 		expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Share location<\/button>/)
 		if (hasAnswers) expect(html).toMatch(/<input[^>]*disabled=""/)
 	})
+
+	it.each([
+		[
+			"far",
+			"Warmer",
+			"text-warn font-bold",
+			"Hold the phone flat and follow the arrow. Arriving solves the quest. Keep this screen open and unlocked.",
+		],
+		[
+			"close",
+			"Colder",
+			"text-muted font-bold",
+			"Hold the phone flat and follow the arrow. Arriving solves the quest. Keep this screen open and unlocked.",
+		],
+	] as const)("shows the %s arrow guidance", (band, trend, statusClass, helper) => {
+		const html = renderToStaticMarkup(
+			<LocationDock
+				{...live}
+				state="on"
+				guidanceEnabled
+				guidance={{ band, bearing: 10, trend: trend === "Warmer" ? "warmer" : "colder" }}
+				compass={{ state: "on", heading: 350, request: vi.fn() }}
+				hasAnswers={false}
+			/>,
+		)
+		expect(html).toContain(`>${trend}</span>`)
+		expect(html).toContain(`class="text-sm ${statusClass}"`)
+		expect(html).toContain(helper)
+		expect(html).toContain('aria-hidden="true"')
+		expect(html).toContain('class="size-8')
+		expect(html).toContain('style="transform:rotate(20deg)"')
+		expect(html).toContain("Far")
+		expect(html).toContain("Close")
+		expect(html).toContain("Very close")
+		expect(html).toContain("motion-reduce:transition-none")
+	})
+
+	it("uses Location on when no trend exists and keeps the empty meter before guidance", () => {
+		const html = renderToStaticMarkup(
+			<LocationDock
+				{...live}
+				state="on"
+				guidanceEnabled
+				hasAnswers={false}
+				compass={{ state: "none", request: vi.fn() }}
+			/>,
+		)
+		expect(html).toContain(">Location on</span>")
+		expect(html).toContain("Finding which way to go. Keep this screen open and unlocked.")
+		expect(html).not.toContain("bg-head")
+		expect(html).toContain("Far")
+	})
+
+	it.each([
+		["veryClose", "Look around, the place is right here. Keep this screen open and unlocked."],
+		[
+			"none",
+			"This phone has no compass, so there's no arrow. Walk and watch the meter. Keep this screen open and unlocked.",
+		],
+		["refused", "The arrow needs motion access. Walk and watch the meter. Keep this screen open and unlocked."],
+	] as const)("shows %s fallback without an arrow", (compassState, helper) => {
+		const html = renderToStaticMarkup(
+			<LocationDock
+				{...live}
+				state="on"
+				guidanceEnabled
+				guidance={{ band: compassState === "veryClose" ? "veryClose" : "far", bearing: 90, trend: "warmer" }}
+				compass={{ state: compassState === "veryClose" ? "on" : compassState, heading: 0, request: vi.fn() }}
+				hasAnswers={false}
+			/>,
+		)
+		expect(html).toContain(helper.replaceAll("'", "&#x27;"))
+		expect(html).not.toContain('class="size-8')
+		expect(html).toContain('class="size-2.5 shrink-0 rounded-full bg-pace-ok')
+		expect(html).toContain(">Warmer</span>")
+	})
+
+	it("asks iPhone players to show the arrow before compass permission", () => {
+		const html = renderToStaticMarkup(
+			<LocationDock
+				{...live}
+				state="on"
+				guidanceEnabled
+				compass={{ state: "needsTap", request: vi.fn() }}
+				hasAnswers={true}
+			/>,
+		)
+		expect(html).toContain("Arriving solves the quest. Keep this screen open and unlocked.")
+		expect(html).toContain(">Show arrow</button>")
+		expect(html).toContain("min-h-11")
+		expect(html).toContain('placeholder="Code from the sign"')
+		expect(html).toContain(">Send</button>")
+	})
+
+	it("does not show guidance when location is rough or guidance is disabled", () => {
+		const rough = renderToStaticMarkup(
+			<LocationDock
+				{...live}
+				state="rough"
+				guidanceEnabled
+				guidance={{ band: "far", bearing: 90, trend: "warmer" }}
+				compass={{ state: "on", heading: 0, request: vi.fn() }}
+				hasAnswers={false}
+			/>,
+		)
+		const unguided = renderToStaticMarkup(
+			<LocationDock {...live} state="on" guidance={{ band: "far", bearing: 90, trend: "warmer" }} hasAnswers={false} />,
+		)
+		expect(rough).toContain("GPS too rough")
+		expect(rough).not.toContain(">Warmer</span>")
+		expect(rough).not.toContain('class="size-8')
+		expect(unguided).toContain("Walk to the place. Arriving solves the quest.")
+		expect(unguided).not.toContain("Far")
+		expect(unguided).not.toContain(">Warmer</span>")
+	})
+
+	it("keeps warmer guidance inert in previews", () => {
+		const html = renderToStaticMarkup(
+			<LocationDock
+				preview
+				guidanceEnabled
+				guidance={{ band: "far", bearing: 90, trend: "warmer" }}
+				compass={{ state: "needsTap", request: vi.fn() }}
+				hasAnswers
+			/>,
+		)
+		expect(html).toContain("Location off")
+		expect(html).not.toContain("Show arrow")
+		expect(html).not.toContain(">Warmer</span>")
+		expect(html).toMatch(/<input[^>]*disabled=""/)
+		expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Share location<\/button>/)
+	})
 })

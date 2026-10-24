@@ -127,6 +127,7 @@ export function GameView(props: GameViewProps) {
 								onShare={live.onShareLocation}
 								pointsEarned={props.locationComplete}
 								hasAnswers={quest.hasAnswers === true}
+								guidanceEnabled={quest.location.guidance === "warmer"}
 								answer={live.answer}
 								onAnswerChange={live.onAnswerChange}
 								onSubmit={live.onSubmit}
