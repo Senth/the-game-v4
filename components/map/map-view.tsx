@@ -6,6 +6,7 @@ import {
 	Map as LibreMap,
 	Marker,
 	type StyleSpecification,
+	setWorkerUrl,
 } from "maplibre-gl"
 import { useEffect, useEffectEvent, useRef } from "react"
 import { circleRing, edgePoint, radiusFromHandle, roundCoordinate } from "@/lib/domain/map"
@@ -87,7 +88,7 @@ export default function MapView({
 	})
 	const moved = useEffectEvent((manual: boolean) => {
 		const map = instance.current
-		if (!map) return
+		if (!map || !ready.current) return
 		const center = map.getCenter()
 		onMoveEnd?.(
 			{ lat: roundCoordinate(center.lat), lng: roundCoordinate(center.lng), zoom: Number(map.getZoom().toFixed(2)) },
@@ -169,6 +170,7 @@ export default function MapView({
 
 	useEffect(() => {
 		if (!container.current) return
+		setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href)
 		const map = new LibreMap({
 			container: container.current,
 			style: navy as StyleSpecification,

@@ -35,6 +35,7 @@ vi.mock("react", async (importOriginal) => ({
 
 const fake = vi.hoisted(() => {
 	const handler = () => ({ enable: vi.fn(), disable: vi.fn(), disableRotation: vi.fn() })
+	const setWorkerUrl = vi.fn()
 	class FakeMap {
 		static instances: FakeMap[] = []
 		events: Record<string, (event: never) => void> = {}
@@ -55,6 +56,7 @@ const fake = vi.hoisted(() => {
 		getCenter = vi.fn(() => ({ lat: 55.12345678, lng: 13.12345678 }))
 		getZoom = vi.fn(() => 15.6789)
 		remove = vi.fn()
+		workerUrl = setWorkerUrl.mock.lastCall?.[0]
 		constructor(public options: unknown) {
 			FakeMap.instances.push(this)
 		}
@@ -87,7 +89,7 @@ const fake = vi.hoisted(() => {
 			return this
 		}
 	}
-	return { Map: FakeMap, Marker }
+	return { Map: FakeMap, Marker, setWorkerUrl }
 })
 vi.mock("maplibre-gl", () => fake)
 
@@ -150,6 +152,12 @@ afterEach(() => {
 })
 
 describe("MapView", () => {
+	it("configures a bundled worker URL before constructing a map", () => {
+		const { map } = mount()
+		expect(fake.setWorkerUrl).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("maplibre-gl-worker.mjs"))
+		expect(map.workerUrl).toBe(fake.setWorkerUrl.mock.lastCall?.[0])
+	})
+
 	it("loads only through a no-SSR dynamic import with a same-aspect placeholder", async () => {
 		const placeholder = renderToStaticMarkup(<LazyMap />)
 		expect(lazy.options.ssr).toBe(false)
@@ -282,6 +290,8 @@ describe("MapView", () => {
 	it("frames bounds or an area without recreating the map and reports manual versus programmatic moves", () => {
 		const onMoveEnd = vi.fn()
 		const { map } = mount({ circle, dot, framing, onMoveEnd })
+		map.fire("moveend")
+		expect(onMoveEnd).not.toHaveBeenCalled()
 		map.fire("load")
 		expect(map.fitBounds).toHaveBeenLastCalledWith(framing.bounds, { padding: 44, maxZoom: 18, duration: 0 })
 		render({ framing: { lat: 55, lng: 13, zoom: 12 }, onMoveEnd })
