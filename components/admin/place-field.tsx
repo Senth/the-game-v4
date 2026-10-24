@@ -32,6 +32,10 @@ export function PlaceField({
 	const field = useAutosaveField<Quest["location"]>({ arcId, questId, field: "location" }, location ?? null)
 	const value = field.value ?? null
 	const place = value?.places[0]
+	const [lastValidPlace, setLastValidPlace] = useState(location?.places[0])
+	const validRadius = !place || (Number.isInteger(place.radius) && place.radius >= 5 && place.radius <= 500)
+	const mapPlace = validRadius ? place : lastValidPlace
+	if (validRadius && place !== lastValidPlace) setLastValidPlace(place)
 	const guidance = value?.guidance ?? "none"
 	const savedCoordinates = place ? `${place.lat}, ${place.lng}` : ""
 	const [coordinates, setCoordinates] = useState(() => (place ? `${place.lat}, ${place.lng}` : ""))
@@ -43,8 +47,8 @@ export function PlaceField({
 		if (!locked && !puzzle) commit(locationAt(point))
 	})
 	const framing = useMemo(
-		() => (place ? { bounds: boundsFor(circleRing(place, place.radius)) } : mapArea),
-		[place, mapArea],
+		() => (mapPlace ? { bounds: boundsFor(circleRing(mapPlace, mapPlace.radius)) } : mapArea),
+		[mapPlace, mapArea],
 	)
 	const error = locked
 		? undefined
@@ -143,7 +147,11 @@ export function PlaceField({
 					min={5}
 					max={500}
 					step={1}
-					value={(locked ? undefined : dragPlace?.radius) ?? place?.radius ?? seasonRadius}
+					value={
+						(locked ? undefined : dragPlace?.radius) ??
+						(Number.isNaN(place?.radius) ? "" : place?.radius) ??
+						seasonRadius
+					}
 					disabled={locked || !place}
 					onChange={(event) => {
 						if (!place || !value || locked) return
@@ -167,7 +175,7 @@ export function PlaceField({
 				<div className="mt-3">
 					<div className="relative">
 						<LazyMap
-							circle={locked ? place : (dragPlace ?? place)}
+							circle={locked ? mapPlace : (dragPlace ?? mapPlace)}
 							framing={framing}
 							edit={
 								locked

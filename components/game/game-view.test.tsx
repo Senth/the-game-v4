@@ -7,6 +7,10 @@ import { Intel } from "./intel"
 vi.mock("@/app/actions", () => {
 	throw new Error("GameView preview must not import server actions")
 })
+vi.mock("next/dynamic", async () => {
+	const { PlaceMap } = await import("./place-map")
+	return { default: () => PlaceMap }
+})
 vi.mock("@/components/map/lazy-map", () => ({
 	default: ({ dot }: { dot: { lat: number; lng: number; accuracy: number } | null }) => (
 		<div data-own-position={dot ? `${dot.lat},${dot.lng},${dot.accuracy}` : undefined} />

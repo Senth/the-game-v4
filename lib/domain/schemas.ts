@@ -1,6 +1,9 @@
 import { z } from "zod"
 import { defaultPlaceRadius } from "./location"
 import { roundCoordinate } from "./map"
+import { Spot } from "./puzzle"
+
+export { Spot } from "./puzzle"
 
 const id = z.string().min(1)
 
@@ -36,12 +39,6 @@ export const Location = z.object({
 	places: z.array(Place).length(1),
 })
 export type Location = z.infer<typeof Location>
-
-export const Spot = z.union([
-	z.strictObject({ cell: z.number().int().min(0).max(48) }),
-	z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
-])
-export type Spot = z.infer<typeof Spot>
 
 export const PuzzleState = z
 	.object({

@@ -72,7 +72,7 @@ function switches(node: ReactNode): ReactElement<SwitchProps>[] {
 }
 
 function change(input: ReactElement<InputProps>, value: string) {
-	input.props.onChange?.({ target: { value, valueAsNumber: Number(value) } } as never)
+	input.props.onChange?.({ target: { value, valueAsNumber: value === "" ? Number.NaN : Number(value) } } as never)
 }
 
 function component(props: Parameters<typeof PlaceField>[0]) {
@@ -87,6 +87,7 @@ function render(props: Parameters<typeof PlaceField>[0]) {
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	field.onChange.mockReset()
 	hooks.states.length = 0
 	hooks.cursor = 0
 	field.value = null
@@ -189,6 +190,27 @@ function mapProps(node: ReactNode): MapViewProps | undefined {
 		if (found) return found
 	}
 }
+
+it("keeps the last valid map geometry while clearing and retyping the radius", () => {
+	field.value = { guidance: "map", places: [place] }
+	field.onChange.mockImplementation((value: Quest["location"]) => {
+		field.value = value
+	})
+	const initial = mapProps(component(props))
+	for (const draft of ["", "0", "501", "12.5", "90"]) {
+		const radius = inputs(component(props))[1]
+		if (!radius) throw new Error("Radius input missing")
+		change(radius, draft)
+		const tree = component(props)
+		const expected = draft === "90" ? { ...place, radius: 90 } : place
+		expect(mapProps(tree)?.circle).toEqual(expected)
+		expect(mapProps(tree)?.framing).toEqual(
+			draft === "90" ? { bounds: boundsFor(circleRing(expected, expected.radius)) } : initial?.framing,
+		)
+		expect(inputs(tree)[1]?.props.value).toBe(draft === "" ? "" : Number(draft))
+	}
+	expect(field.onChange).toHaveBeenLastCalledWith({ guidance: "map", places: [{ ...place, radius: 90 }] })
+})
 
 it("frames the circle, previews pin movement live without saving and saves the same whole location as paste once on release", () => {
 	field.value = { guidance: "map", places: [place] }

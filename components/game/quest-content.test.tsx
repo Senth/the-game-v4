@@ -1,3 +1,4 @@
+import dynamic from "next/dynamic"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 import type { PaceBand, RailArc, StripEntry } from "@/lib/domain/game"
@@ -5,6 +6,11 @@ import { ArcRail } from "./arc-rail"
 import { GameHeader } from "./game-header"
 import { QuestContent } from "./quest-content"
 import { StandingsStrip } from "./standings-strip"
+
+vi.mock("next/dynamic", async () => {
+	const { PlaceMap } = await import("./place-map")
+	return { default: vi.fn(() => PlaceMap) }
+})
 
 vi.mock("@/components/map/lazy-map", () => ({
 	default: ({
@@ -40,8 +46,19 @@ const strip: StripEntry[] = [
 	{ kind: "team", id: "ninjas", rank: 7, name: "Ninjas", score: 64, you: true },
 ]
 const quest = { displayTitle: "The keeper's last log", assetPath: null, content: "Read the log." }
+const mapImport = vi.mocked(dynamic).mock.calls[0]
 
 describe("QuestContent", () => {
+	it("loads player map code only through a client-only dynamic import with a sized placeholder", async () => {
+		expect(mapImport).toEqual([expect.any(Function), expect.objectContaining({ ssr: false })])
+		const [load, options] = mapImport ?? []
+		expect(await (load as () => Promise<unknown>)()).toBe((await import("./place-map")).PlaceMap)
+		const loading = options?.loading
+		if (!loading) throw new Error("Map loading placeholder missing")
+		expect(renderToStaticMarkup(loading({ isLoading: true, pastDelay: false, timedOut: false }))).toContain(
+			"aspect-[4/3]",
+		)
+	})
 	it("keeps quest prose separated from the puzzle helper like the replaced File slot", () => {
 		const html = renderToStaticMarkup(
 			<QuestContent

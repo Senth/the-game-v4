@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { isValidElement, type ReactNode, useEffect, useState } from "react"
 import Markdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
@@ -8,8 +9,12 @@ import { assetExtension, assetKind } from "@/lib/domain/assets"
 import type { PlayerQuest } from "@/lib/domain/game"
 import type { Spot } from "@/lib/domain/schemas"
 import { AudioBar } from "./audio-bar"
-import { PlaceMap } from "./place-map"
 import { PuzzleBoard } from "./puzzle-board"
+
+const PlaceMap = dynamic(() => import("./place-map").then((module) => module.PlaceMap), {
+	ssr: false,
+	loading: () => <div className="aspect-[4/3] w-full rounded-md bg-z1" role="img" aria-label="Loading map" />,
+})
 
 function CodeFence({ children }: { children?: ReactNode }) {
 	const element = isValidElement<{ children?: ReactNode; className?: string }>(children) ? children : null
