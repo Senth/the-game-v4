@@ -57,7 +57,7 @@ New seasons have no default quest points. A missing `defaultQuestPoints` reads a
 | --- | --- |
 | `Arc` | `id: string`, `title: string`, `shuffleQuests: boolean`, `quests: Quest[]` |
 | `Quest` | `id: string`, `displayTitle: string`, `internalTitle: string`, `content: string`, `assetPath: string \| null`, `answers: string[]`, `points: number \| null`, `adminNotes: string`, `hints: Hint[]` |
-| `Quest.location` | `{guidance: "none", places: Place[]} \| null`; absent reads as null; exactly one place until #85 |
+| `Quest.location` | `{guidance: "none" \| "warmer", places: Place[]} \| null`; absent reads as null; absent guidance reads as `"none"`; exactly one place until #85 |
 | `Place` | `id: string`, `lat: number`, `lng: number`, `radius: number` in metres |
 | `Hint` | `id: string`, `text: string`, `points: number` |
 
@@ -265,7 +265,8 @@ Team puzzle state never copies.
 
 ### Location quests
 
-`Quest.location` is `{guidance: "none", places: Place[]} | null`; absent reads as null.
+`Quest.location` is `{guidance: "none" | "warmer", places: Place[]} | null`; absent reads as null.
+New places start with `guidance: "none"`. Absent guidance and legacy data keep unguided behavior.
 Each place is `{id: string, lat: number, lng: number, radius: number}`.
 Exactly one place is supported until #85. Puzzle and location exclude each other.
 The server rejects setting either while the other is set.
@@ -273,7 +274,7 @@ The server rejects setting either while the other is set.
 `Season.placeRadius` is a whole number from 5 to 500 metres, default 40.
 Absent reads as 40; no migration is needed. A new place copies the season's value.
 Changing the season value never edits existing places.
-Place coordinates and radius lock once any team has `solvedAt` on the quest.
+Guidance, place coordinates and radius lock once any team has `solvedAt` on the quest.
 Answers remain editable.
 
 While a location quest is current and the game screen is open, each phone reports fixes as
@@ -285,6 +286,43 @@ The server keeps each phone's latest accepted fix in memory for 30 seconds, keye
 Nothing is persisted. Any teammate arriving inside solves through `solveCurrentQuest`, with the normal
 hint penalties, finisher claim and live events. Reports never write team state except through that solve path.
 Reports publish live events only on a solve.
+
+#### Warmer/colder guidance
+
+Only `guidance: "warmer"` enables guidance. With fix-to-place distance `d` and radius `r`,
+`d ≤ r` solves as usual. Outside, bands are `veryClose` when `d ≤ 3r`, `close` when `d ≤ 10r`,
+and `far` beyond that. Boundaries are inclusive. Never send distance to players.
+
+Far and Close include the initial great-circle bearing from the fix to the place, minus magnetic
+declination at the fix. Use `magvar` with WMM2025, valid from 2025 up to 2030, evaluated at the fix timestamp.
+Round the magnetic bearing to a whole number from 0 to 359, wrapping after rounding.
+Very close omits the bearing and hides the arrow. Never show degrees.
+
+Keep each phone's accepted fixes for the current quest in server memory for 60 seconds, keyed by team,
+phone and quest. Compare the current distance with the mean distance of that phone's earlier accepted
+fixes in the window. Mean minus current distance at least 25 metres gives `warmer`; at most −25 metres
+gives `colder`; otherwise omit trend. No earlier fix means no trend. Nothing is persisted.
+`guidanceWindowMs = 60_000` and `trendMinMeters = 25` in `lib/domain/location.ts` own tuning.
+This history does not change `latestFixes` or its separate 30-second rule.
+
+An outside report on a warmer quest returns:
+
+```ts
+{status: "outside", guidance: {band: "far" | "close" | "veryClose", bearing?: number, trend?: "warmer" | "colder"}}
+```
+
+An unguided outside report still returns exactly `{status: "outside"}`. Other statuses are unchanged.
+Guidance goes only to the reporting phone, never through `getGame`, previews or live events.
+A rough or stale fix shows the existing "GPS too rough" state and clears band, arrow and trend.
+
+Android Chrome reads magnetic heading from `deviceorientationabsolute` as `360 − alpha`.
+iPhone reads `webkitCompassHeading` after `DeviceOrientationEvent.requestPermission()` from a tap.
+Both use magnetic north; subtract `screen.orientation.angle` from the heading.
+No usable reading within 2 seconds means no compass: retain band and trend, but show no arrow.
+Listen only while the dock is live, guidance is `"warmer"` and the page is visible.
+Compass access never blocks location reporting or solving. Previews never request permissions or report fixes.
+Follow [Design](DESIGN.md#warmercolder-guidance) for presentation and its location dock and Place field rules
+for status, helper and switch copy. Existing off, rough, blocked, unavailable and found states stay unchanged.
 
 Coordinate paste accepts two decimal numbers separated by a comma and/or spaces, optionally with `°`.
 Latitude ranges from −90 to 90 and longitude from −180 to 180; store both rounded to 6 decimals.
@@ -406,8 +444,9 @@ Players never receive internal titles, admin notes, answers or unrevealed hint t
 and live responses. Hidden hints may expose their id, position and penalty, not their text.
 Players reveal hints by id, not by index, so edits and deletions cannot shift a reveal onto another hint.
 Construct a player view without deleting fields from the shared season object.
-A location quest adds only `location: {guidance: "none"}` and `hasAnswers`, keeping `assetPath`.
-Player JSON never includes place coordinates, radius or place ids, including in previews and live responses.
+A location quest adds only `location: {guidance: "none" | "warmer"}` and `hasAnswers`, keeping `assetPath`.
+Player JSON never includes place coordinates, radius, place ids or distance, including in previews and live responses.
+Only the reporting phone's outside response may include the guidance object defined above.
 The player finisher list exposes only team id, name, place and points, never claim times or other season fields.
 
 A puzzle quest's player view omits `assetPath` and exposes this shape:

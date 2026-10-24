@@ -1,13 +1,20 @@
+import { magvar } from "magvar"
 import { describe, expect, it } from "vitest"
 import {
+	bearingDegrees,
 	defaultPlaceRadius,
 	distanceMeters,
 	evaluateFix,
 	fixTtlMs,
+	guidanceBand,
+	guidanceFor,
+	guidanceWindowMs,
 	maxFixAccuracy,
 	newPlace,
 	osmUrl,
 	parseCoordinates,
+	trendFrom,
+	trendMinMeters,
 } from "./location"
 import type { Location } from "./schemas"
 
@@ -121,5 +128,109 @@ describe("newPlace and osmUrl", () => {
 		expect(osmUrl(55.5079, -13.2353)).toBe(
 			"https://www.openstreetmap.org/?mlat=55.5079&mlon=-13.2353#map=18/55.5079/-13.2353",
 		)
+	})
+})
+
+describe("location guidance", () => {
+	const at = Date.parse("2026-10-24T12:00:00Z")
+	const fix = { lat: 55.5, lng: 13.2, accuracy: 10, at }
+	const place = { id: "secret-place", lat: 55.51, lng: 13.2, radius: 40 }
+	const location: Location = { guidance: "warmer", places: [place] }
+
+	it("keeps trend tuning separate from the latest-fix lifetime", () => {
+		expect({ guidanceWindowMs, trendMinMeters, fixTtlMs }).toEqual({
+			guidanceWindowMs: 60_000,
+			trendMinMeters: 25,
+			fixTtlMs: 30_000,
+		})
+	})
+
+	it.each([
+		[39.999, "veryClose"],
+		[40, "veryClose"],
+		[40.001, "veryClose"],
+		[119.999, "veryClose"],
+		[120, "veryClose"],
+		[120.001, "close"],
+		[399.999, "close"],
+		[400, "close"],
+		[400.001, "far"],
+	] as const)("bands distance %s with inclusive radius multiples", (distance, band) => {
+		expect(guidanceBand(distance, 40)).toBe(band)
+	})
+
+	it.each([
+		[{ lat: 1, lng: 0 }, 0],
+		[{ lat: 0, lng: 1 }, 90],
+		[{ lat: -1, lng: 0 }, 180],
+		[{ lat: 0, lng: -1 }, 270],
+	] as const)("computes initial true bearing to %j", (to, bearing) => {
+		expect(bearingDegrees({ lat: 0, lng: 0 }, to)).toBeCloseTo(bearing, 8)
+	})
+
+	it("wraps initial bearings across north and the date line", () => {
+		expect(bearingDegrees({ lat: 0, lng: 0 }, { lat: 1, lng: -0.001 })).toBeGreaterThan(359)
+		expect(bearingDegrees({ lat: 0, lng: 0 }, { lat: 1, lng: 0.001 })).toBeLessThan(1)
+		expect(bearingDegrees({ lat: 0, lng: 179 }, { lat: 0, lng: -179 })).toBeCloseTo(90)
+	})
+
+	it.each([
+		[[], 100, undefined],
+		[[124.999], 100, undefined],
+		[[125], 100, "warmer"],
+		[[125.001], 100, "warmer"],
+		[[75.001], 100, undefined],
+		[[75], 100, "colder"],
+		[[74.999], 100, "colder"],
+		[[100, 200], 125, "warmer"],
+		[[100, 200], 175, "colder"],
+		[[100, 200], 150, undefined],
+	] as const)("compares history %j with distance %s", (previous, distance, trend) => {
+		expect(trendFrom(previous, distance)).toBe(trend)
+	})
+
+	it("subtracts WMM2025 east declination at the fix and rounds magnetic bearings", () => {
+		expect(magvar(fix.lat, fix.lng, 0, new Date(at))).toBeCloseTo(5.46, 1)
+		expect(guidanceFor(location, fix, [])).toEqual({ band: "far", bearing: 355 })
+		const elsewhere = { ...location, places: [{ ...place, lat: 55.5, lng: -60 }] }
+		const bearing = bearingDegrees(fix, elsewhere.places[0] as typeof place)
+		expect(guidanceFor(elsewhere, fix, [])?.bearing).toBe(
+			(Math.round(bearing - magvar(fix.lat, fix.lng, 0, new Date(at))) + 360) % 360,
+		)
+	})
+
+	it.each([
+		[13.34, 359],
+		[13.37, 0],
+	])("normalizes rounded magnetic bearing for longitude %s", (lng, bearing) => {
+		expect(guidanceFor({ ...location, places: [{ ...place, lat: 56.5, lng }] }, fix, [])?.bearing).toBe(bearing)
+	})
+
+	it.each([
+		[20, undefined],
+		[40, undefined],
+		[40.001, "veryClose"],
+		[120, "veryClose"],
+		[120.001, "close"],
+		[400, "close"],
+		[400.001, "far"],
+	] as const)("returns guidance only outside and hides very-close bearings at %s metres", (distance, band) => {
+		const target = { ...place, lat: fix.lat + 0.001 }
+		const measured = distanceMeters(fix, target)
+		const located = { ...location, places: [{ ...target, radius: measured * (40 / distance) }] }
+		const guidance = guidanceFor(located, fix, [measured + 25])
+		if (!band) expect(guidance).toBeUndefined()
+		else {
+			expect(guidance).toEqual({ band, trend: "warmer", ...(band === "veryClose" ? {} : { bearing: 355 }) })
+		}
+	})
+
+	it("whitelists output, leaves inputs unchanged and gives none quests no guidance", () => {
+		const previous = [2000, 2100]
+		const before = structuredClone({ location, fix, previous })
+		expect(guidanceFor(location, fix, previous)).toEqual({ band: "far", bearing: 355, trend: "warmer" })
+		expect(guidanceFor({ ...location, guidance: "none" }, fix, previous)).toBeUndefined()
+		expect(guidanceFor({ ...location, places: [] }, fix, previous)).toBeUndefined()
+		expect({ location, fix, previous }).toEqual(before)
 	})
 })

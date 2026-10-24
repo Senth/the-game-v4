@@ -31,7 +31,7 @@ export const Place = z.object({
 export type Place = z.infer<typeof Place>
 
 export const Location = z.object({
-	guidance: z.literal("none"),
+	guidance: z.enum(["none", "warmer"]).default("none"),
 	places: z.array(Place).length(1),
 })
 export type Location = z.infer<typeof Location>

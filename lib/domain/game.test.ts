@@ -515,9 +515,9 @@ describe("playerView", () => {
 		expect(view.hints.map((hint) => hint.revealed)).toEqual([false, false, false])
 	})
 
-	it("serializes no answer, internal title, admin note or hidden hint text", () => {
+	it.each(["none", "warmer"] as const)("serializes no secrets for guidance %s", (guidance) => {
 		const location = {
-			guidance: "none" as const,
+			guidance,
 			places: [{ id: "secret-place-id", lat: 55.5079, lng: 13.2353, radius: 47 }],
 		}
 		const input = { ...secretQuest, location }
@@ -528,6 +528,7 @@ describe("playerView", () => {
 			"lng",
 			"radius",
 			"places",
+			"distance",
 			"secret-place-id",
 			"55.5079",
 			"13.2353",
@@ -545,17 +546,32 @@ describe("playerView", () => {
 		expect(input).toEqual(before)
 	})
 
-	it.each([{ answers: [] }, { answers: ["backup secret"] }])(
-		"exposes only guidance and backup-code presence for location answers $answers",
-		({ answers }) => {
-			const location = { guidance: "none" as const, places: [{ id: "p1", lat: 55.5, lng: 13.2, radius: 40 }] }
-			expect(playerView({ ...secretQuest, location, answers }, progress)).toEqual({
+	it.each([
+		{ guidance: "none", answers: [] },
+		{ guidance: "none", answers: ["backup secret"] },
+		{ guidance: "warmer", answers: [] },
+		{ guidance: "warmer", answers: ["backup secret"] },
+	] as const)(
+		"exposes only $guidance guidance and backup-code presence for location answers $answers",
+		({ guidance, answers }) => {
+			const location = { guidance, places: [{ id: "p1", lat: 55.5, lng: 13.2, radius: 40 }] }
+			expect(playerView({ ...secretQuest, location, answers: [...answers] }, progress)).toEqual({
 				...playerView(secretQuest, progress),
-				location: { guidance: "none" },
+				location: { guidance },
 				hasAnswers: answers.length > 0,
 			})
 		},
 	)
+
+	it("projects legacy location guidance as none without changing the quest", () => {
+		const legacy = {
+			...secretQuest,
+			location: { places: [{ id: "p1", lat: 55.5, lng: 13.2, radius: 40 }] },
+		} as Quest
+		const before = structuredClone(legacy)
+		expect(playerView(legacy).location).toEqual({ guidance: "none" })
+		expect(legacy).toEqual(before)
+	})
 
 	it("leaves a shared deep-frozen season unchanged", () => {
 		const { frozen, original } = frozenCopy({ season: shared, progress })
