@@ -10,6 +10,7 @@ type LocationDockProps = ComponentProps<typeof AnswerDock> & {
 	state?: LocationStatus["state"]
 	accuracy?: number
 	guidanceEnabled?: boolean
+	mapEnabled?: boolean
 	guidance?: LocationStatus["guidance"]
 	compass?: ReturnType<typeof useCompass>
 	pointsEarned?: number
@@ -164,7 +165,11 @@ export function LocationDock(props: LocationDockProps) {
 						)}
 					</div>
 					<p className="mt-1.5 ml-5 font-cond text-xs leading-relaxed text-muted">
-						{found ? "Next quest in a moment." : helpers[state]}
+						{found
+							? "Next quest in a moment."
+							: state === "on" && props.mapEnabled
+								? "Walk into the circle. Arriving solves the quest. Keep this screen open and unlocked."
+								: helpers[state]}
 					</p>
 				</div>
 			)}

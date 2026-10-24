@@ -84,16 +84,33 @@ describe("useLocationReporter", () => {
 		send.mockResolvedValue({ ok: true, json: async () => ({ status: "outside", guidance }) })
 		await mount()
 		fix()
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({
+			state: "on",
+			accuracy: 12,
+			position: { lat: 55.5, lng: 13.2, accuracy: 12 },
+		})
 		await vi.advanceTimersByTimeAsync(0)
-		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", accuracy: 12, guidance })
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({
+			state: "on",
+			accuracy: 12,
+			position: { lat: 55.5, lng: 13.2, accuracy: 12 },
+			guidance,
+		})
 		fix(20)
-		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "on", accuracy: 20, guidance })
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({
+			state: "on",
+			accuracy: 20,
+			position: { lat: 55.5, lng: 13.2, accuracy: 20 },
+			guidance,
+		})
 		visible(true)
 		expect(hooks.setStatus.mock.lastCall?.[0].guidance).toBeUndefined()
+		expect(hooks.setStatus.mock.lastCall?.[0].position).toBeUndefined()
 		visible(false)
 		for (const stop of cleanup) stop()
 		await mount("next-place")
 		expect(hooks.setStatus.mock.lastCall?.[0].guidance).toBeUndefined()
+		expect(hooks.setStatus.mock.lastCall?.[0].position).toBeUndefined()
 		for (const stop of cleanup) stop()
 		await mount(null)
 		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "off" })
@@ -110,7 +127,11 @@ describe("useLocationReporter", () => {
 		send.mockResolvedValue({ ok: true, json: async () => ({ status }) })
 		fix()
 		await vi.advanceTimersByTimeAsync(0)
-		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "rough", accuracy: 12 })
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({
+			state: "rough",
+			accuracy: 12,
+			position: { lat: 55.5, lng: 13.2, accuracy: 12 },
+		})
 	})
 
 	it.each(["rough", "stale"])("local %s clears guidance and prevents older responses restoring it", async (kind) => {
@@ -123,7 +144,11 @@ describe("useLocationReporter", () => {
 		await mount()
 		fix()
 		fix(kind === "rough" ? 70 : 12, Date.now() - (kind === "stale" ? 30_001 : 0))
-		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "rough", accuracy: kind === "rough" ? 70 : 12 })
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({
+			state: "rough",
+			accuracy: kind === "rough" ? 70 : 12,
+			position: { lat: 55.5, lng: 13.2, accuracy: kind === "rough" ? 70 : 12 },
+		})
 		finish({ ok: true, json: async () => ({ status: "outside", guidance: { band: "far", bearing: 90 } }) })
 		await vi.advanceTimersByTimeAsync(0)
 		expect(hooks.setStatus.mock.lastCall?.[0].guidance).toBeUndefined()
@@ -157,7 +182,11 @@ describe("useLocationReporter", () => {
 		fix(70)
 		await vi.advanceTimersByTimeAsync(0)
 		expect(send).toHaveBeenCalledTimes(2)
-		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "rough", accuracy: 70 })
+		expect(hooks.setStatus).toHaveBeenLastCalledWith({
+			state: "rough",
+			accuracy: 70,
+			position: { lat: 55.5, lng: 13.2, accuracy: 70 },
+		})
 	})
 
 	it("waits for Share location when permission prompts or cannot be queried", async () => {
@@ -182,9 +211,11 @@ describe("useLocationReporter", () => {
 		permission.state = "granted"
 		permission.dispatchEvent(new Event("change"))
 		expect(watchPosition).toHaveBeenCalledOnce()
+		fix()
 		error({ code: 1 } as GeolocationPositionError)
 		expect(clearWatch).toHaveBeenCalledWith(1)
 		expect(hooks.setStatus).toHaveBeenLastCalledWith({ state: "blocked" })
+		expect(hooks.setStatus.mock.lastCall?.[0].position).toBeUndefined()
 	})
 
 	it.each(["stop", "solved"])("stops watch, requests and wake lock on %s reply", async (status) => {

@@ -37,6 +37,13 @@ describe("LocationDock", () => {
 		expect(html.match(/fixed inset-x-0 bottom-0/g)).toHaveLength(1)
 	})
 
+	it("uses map guidance helper only while location is on", () => {
+		const on = renderToStaticMarkup(<LocationDock {...live} state="on" mapEnabled hasAnswers={false} />)
+		const off = renderToStaticMarkup(<LocationDock {...live} state="off" mapEnabled hasAnswers={false} />)
+		expect(on).toContain("Walk into the circle. Arriving solves the quest. Keep this screen open and unlocked.")
+		expect(off).toContain("Arriving at the place solves this quest. Share your location so the game can tell.")
+	})
+
 	it("shows found earnings and keeps backup controls inert", () => {
 		const html = renderToStaticMarkup(<LocationDock {...live} state="on" hasAnswers pointsEarned={15} />)
 		expect(html).toContain("Found it · +15p")

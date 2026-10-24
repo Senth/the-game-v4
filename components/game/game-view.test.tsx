@@ -7,6 +7,11 @@ import { Intel } from "./intel"
 vi.mock("@/app/actions", () => {
 	throw new Error("GameView preview must not import server actions")
 })
+vi.mock("@/components/map/lazy-map", () => ({
+	default: ({ dot }: { dot: { lat: number; lng: number; accuracy: number } | null }) => (
+		<div data-own-position={dot ? `${dot.lat},${dot.lng},${dot.accuracy}` : undefined} />
+	),
+}))
 
 const quest: PlayerQuest = {
 	id: "quest-one",
@@ -150,4 +155,31 @@ describe("GameView preview", () => {
 		expect(html).toContain("Waiting for a quest.")
 		expect(html).not.toContain('aria-label="Your answer"')
 	})
+})
+
+it("shows map guidance helper and forwards the rough own fix to its map", () => {
+	const html = renderToStaticMarkup(
+		<GameView
+			timeLeftMs={0}
+			pace={null}
+			rail={rail}
+			quest={{
+				...quest,
+				location: { guidance: "map", places: [{ lat: 55.5, lng: 13.2, radius: 40 }] },
+				hasAnswers: false,
+			}}
+			locationStatus={{ state: "rough", accuracy: 95, position: { lat: 55.501, lng: 13.201, accuracy: 95 } }}
+			answer=""
+			onAnswerChange={() => {}}
+			onSubmit={() => {}}
+			pending={false}
+			feedback={null}
+			onReveal={async () => {}}
+			decrypting={new Set()}
+			onDecryptComplete={() => {}}
+		/>,
+	)
+	expect(html).toContain('data-own-position="55.501,13.201,95"')
+	expect(html).toContain("GPS too rough")
+	expect(html).toContain("Step out into the open and wait a few seconds. The game keeps trying.")
 })

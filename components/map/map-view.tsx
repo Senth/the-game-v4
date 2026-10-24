@@ -20,6 +20,7 @@ type Area = Coordinates & { zoom: number }
 type Framing = Area | { bounds: [[number, number], [number, number]]; maxZoom?: number }
 
 export type MapViewProps = {
+	aspectRatio?: "16/10" | "4/3"
 	circle?: Circle | null
 	dot?: (Coordinates & { accuracy: number }) | null
 	edit?: {
@@ -41,7 +42,15 @@ function polygon(center: Coordinates | null | undefined, radius: number): GeoJSO
 	}
 }
 
-export default function MapView({ circle, dot, edit, framing, interactive = true, onMoveEnd }: MapViewProps) {
+export default function MapView({
+	aspectRatio = "16/10",
+	circle,
+	dot,
+	edit,
+	framing,
+	interactive = true,
+	onMoveEnd,
+}: MapViewProps) {
 	const container = useRef<HTMLDivElement>(null)
 	const instance = useRef<LibreMap | null>(null)
 	const markers = useRef<{ pin?: Marker; edge?: Marker; dot?: Marker }>({})
@@ -190,5 +199,10 @@ export default function MapView({ circle, dot, edit, framing, interactive = true
 		setInteraction(interactive)
 	}, [interactive])
 
-	return <div ref={container} className="game-map aspect-[16/10] w-full overflow-hidden rounded-md bg-z1" />
+	return (
+		<div
+			ref={container}
+			className={`game-map ${aspectRatio === "4/3" ? "aspect-[4/3]" : "aspect-[16/10]"} w-full overflow-hidden rounded-md bg-z1`}
+		/>
+	)
 }

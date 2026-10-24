@@ -1,10 +1,27 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { PaceBand, RailArc, StripEntry } from "@/lib/domain/game"
 import { ArcRail } from "./arc-rail"
 import { GameHeader } from "./game-header"
 import { QuestContent } from "./quest-content"
 import { StandingsStrip } from "./standings-strip"
+
+vi.mock("@/components/map/lazy-map", () => ({
+	default: ({
+		dot,
+		aspectRatio,
+	}: {
+		dot: { lat: number; lng: number; accuracy: number } | null
+		aspectRatio: string
+	}) => (
+		<div
+			className={aspectRatio === "4/3" ? "aspect-[4/3]" : "aspect-[16/10]"}
+			data-own-position={dot ? `${dot.lat},${dot.lng},${dot.accuracy}` : undefined}
+			role="img"
+			aria-label="Loading map"
+		/>
+	),
+}))
 
 const rail: RailArc[] = [
 	{
@@ -102,6 +119,28 @@ describe("QuestContent", () => {
 		expect(html).toContain("object-contain")
 		expect(html).not.toContain("object-cover")
 		expect(html).not.toContain("aspect-")
+	})
+
+	it("renders the map in the image slot only for map guidance, including previews", () => {
+		const location = { guidance: "map" as const, places: [{ lat: 55.5, lng: 13.2, radius: 40 }] }
+		const position = { lat: 55.501, lng: 13.201, accuracy: 95 }
+		for (const preview of [false, true]) {
+			const html = renderToStaticMarkup(
+				<QuestContent
+					quest={{ ...quest, assetPath: "/assets/clue.jpg", location }}
+					position={position}
+					preview={preview}
+				/>,
+			)
+			expect(html).toContain('aria-label="Loading map"')
+			expect(html).toContain("aspect-[4/3]")
+			expect(html.includes('data-own-position="55.501,13.201,95"')).toBe(!preview)
+			expect(html.indexOf('src="/assets/clue.jpg"')).toBeLessThan(html.indexOf('aria-label="Loading map"'))
+		}
+		for (const guidance of ["none", "warmer"] as const) {
+			const html = renderToStaticMarkup(<QuestContent quest={{ ...quest, location: { guidance } }} />)
+			expect(html).not.toContain('aria-label="Loading map"')
+		}
 	})
 
 	it("renders PDFs as a quiet link, not an image", () => {

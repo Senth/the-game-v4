@@ -6,6 +6,7 @@ import { fixTtlMs, type guidanceFor, maxFixAccuracy } from "@/lib/domain/locatio
 export type LocationStatus = {
 	state: "off" | "on" | "rough" | "blocked" | "unavailable"
 	accuracy?: number
+	position?: { lat: number; lng: number; accuracy: number }
 	guidance?: ReturnType<typeof guidanceFor>
 }
 
@@ -29,6 +30,7 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 		let lastSent = -Infinity
 		let request: AbortController | undefined
 		let guidance: LocationStatus["guidance"]
+		let latestPosition: LocationStatus["position"]
 
 		function clearGuidance() {
 			guidance = undefined
@@ -44,6 +46,7 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 		function pause() {
 			generation++
 			stopWatching()
+			latestPosition = undefined
 			if (!disposed) setStatus({ state: "off" })
 			void wake?.release().catch(() => {})
 			wake = undefined
@@ -57,6 +60,7 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 				async (position) => {
 					if (disposed || stopped || document.hidden || currentGeneration !== watchGeneration || !allowed) return
 					const { latitude: lat, longitude: lng, accuracy } = position.coords
+					latestPosition = { lat, lng, accuracy }
 					const rough =
 						!Number.isFinite(accuracy) ||
 						accuracy < 0 ||
@@ -64,7 +68,12 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 						!Number.isFinite(position.timestamp) ||
 						Math.abs(Date.now() - position.timestamp) > fixTtlMs
 					if (rough) clearGuidance()
-					setStatus({ state: rough ? "rough" : "on", accuracy, ...(guidance && { guidance }) })
+					setStatus({
+						state: rough ? "rough" : "on",
+						accuracy,
+						position: latestPosition,
+						...(guidance && { guidance }),
+					})
 					if (request || Date.now() - lastSent < 5000) return
 					lastSent = Date.now()
 					const controller = new AbortController()
@@ -81,10 +90,15 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 						if (controller.signal.aborted) return
 						if (result.status === "rough" || result.status === "stale") {
 							guidance = undefined
-							setStatus({ state: "rough", accuracy })
+							setStatus({ state: "rough", accuracy: latestPosition?.accuracy, position: latestPosition })
 						} else if (result.status === "outside" && !rough) {
 							guidance = result.guidance
-							setStatus({ state: "on", accuracy, ...(guidance && { guidance }) })
+							setStatus({
+								state: "on",
+								accuracy: latestPosition?.accuracy,
+								position: latestPosition,
+								...(guidance && { guidance }),
+							})
 						} else if (result.status === "stop" || result.status === "solved") {
 							stopped = true
 							pause()
@@ -100,9 +114,14 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 					clearGuidance()
 					if (error.code === 1) {
 						allowed = false
+						latestPosition = undefined
 						stopWatching()
 						setStatus({ state: "blocked" })
-					} else setStatus({ state: "rough" })
+					} else
+						setStatus({
+							state: "rough",
+							...(latestPosition && { accuracy: latestPosition.accuracy, position: latestPosition }),
+						})
 				},
 				{ enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
 			)
@@ -128,6 +147,7 @@ export function useLocationReporter(questId: string | null, onChange: () => void
 			allowed = permission.state === "granted"
 			if (allowed) watchLocation()
 			else {
+				latestPosition = undefined
 				stopWatching()
 				setStatus({ state: permission.state === "denied" ? "blocked" : "off" })
 			}
