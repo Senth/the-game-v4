@@ -14,6 +14,7 @@ describe("design contract", () => {
 		for (let index = 200; index < lines.length; index += 1) addViolation(index)
 
 		let inDecisions = false
+		let decisionContentColumn = -1
 		let decisionStart = -1
 		let decisionHasContested = false
 		const finishDecision = () => {
@@ -23,16 +24,25 @@ describe("design contract", () => {
 		}
 
 		lines.forEach((line, index) => {
-			if (/^#{1,6}\s/.test(line)) {
+			if (/^#{1,2}\s/.test(line)) {
 				finishDecision()
 				inDecisions = /^##\s+Decisions\s*$/.test(line)
+				decisionContentColumn = -1
+			} else if (inDecisions && /^#{3,6}\s/.test(line)) {
+				finishDecision()
+				decisionContentColumn = -1
 			}
 
-			if (inDecisions && /^[-*+]\s/.test(line)) {
-				finishDecision()
-				decisionStart = index
-				decisionHasContested = line.includes("Contested:")
-			} else if (decisionStart !== -1 && line.includes("Contested:")) {
+			const bullet = inDecisions && /^ {0,3}[-*+]\s/.test(line)
+			if (bullet) {
+				const indentation = line.search(/\S/)
+				if (decisionContentColumn === -1 || indentation < decisionContentColumn) {
+					finishDecision()
+					decisionStart = index
+					decisionContentColumn = indentation + 2
+				}
+			}
+			if (decisionStart !== -1 && line.includes("Contested:")) {
 				decisionHasContested = true
 			}
 
