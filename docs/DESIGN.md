@@ -4,8 +4,7 @@
 
 The Game keeps v3's dark navy palette and Roboto family. It is a puzzle hunt, not a dashboard.
 Quest content gets the player's attention; admin tools stay dense enough to run a game from a phone.
-Conform to the nine accepted mocks in [mocks/README.md](mocks/README.md), subject to the corrections there.
-Surfaces without a mock use this same language, not a new visual direction.
+New surfaces use this same language, not a new visual direction.
 
 `app/globals.css` owns the runtime token values.
 [PROJECT.md](PROJECT.md) alone defines pace math, rail meaning, standings-strip selection and game rules.
@@ -51,7 +50,7 @@ Fonts: `--font-head` for headings, `--font-body` for quest prose and body text,
   Show it only on pages with an autosave field. A failed field gets a `warn` border and a retry control.
 - Confirmations and copy flows use the native `<dialog>` style: `accent` confirm for additions,
   `pace-3` for removals and deletions.
-- Mark internal titles and admin notes "admin only". Keep them out of real player previews.
+- Label internal titles and admin notes as visible to admins only. Keep them out of real player previews.
 - Admin labels a quest by internal title, else display title, else a muted untitled placeholder.
 
 ### Drag and reorder
