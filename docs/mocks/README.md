@@ -1,7 +1,7 @@
 # Accepted mocks
 
 These nine HTML/PNG pairs are the accepted visual references. The committed files remain available
-after the hosted previews expire. [DESIGN.md](../DESIGN.md) owns surface briefs and visual rules;
+after the hosted previews expire. [DESIGN.md](../DESIGN.md) owns visual rules;
 [PROJECT.md](../PROJECT.md) owns behavior, pace math, rails and standings selection.
 
 | Id | HTML | PNG | Shows |
@@ -31,7 +31,7 @@ after the hosted previews expire. [DESIGN.md](../DESIGN.md) owns surface briefs 
 - M4 lacks Reset password. Accepted variant B opens the field from a quiet link:
   [phone](https://artifacts.senth.org/b-expanding-link-phone-aed874.png),
   [desktop](https://artifacts.senth.org/b-expanding-link-desktop-21b10e.png).
-  [DESIGN.md's M4 rules](../DESIGN.md#m4-admin-team-history) own copy, states, action order and preview corrections.
+  The code and its tests own copy, states, action order and preview corrections.
 - The mock-only color aliases and one-off colors are not additions to DESIGN.md's application palette.
 - Some mock controls are visibly shorter than 44 px; implementation must provide 44 px touch targets.
 - Some mock regions combine background and border; implementation follows DESIGN.md's single-separator rule.

@@ -54,7 +54,7 @@ Keep temporary artifacts under `.tmp/`. Do not use live databases or services in
 
 - [Project](docs/PROJECT.md) owns domain rules, pace math, standings selection and migration decisions.
 - [Tests](docs/TESTS.md) owns fixtures, test responsibilities and the e2e budget.
-- [Design](docs/DESIGN.md) owns the dark visual language, tokens and accepted surface briefs.
+- [Design](docs/DESIGN.md) owns the dark visual language, token meanings and component ownership.
 - [Personas](docs/PERSONAS.md) describes players and game masters.
 - [Mocks](docs/mocks/README.md) records accepted references and superseded details.
 - `.ai/config.toml` owns application gates and review boot instructions.

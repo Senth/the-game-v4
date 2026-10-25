@@ -21,4 +21,4 @@ tabs, with an Edit/Preview toggle in the quest editor. Both save fields without 
 During play the game master checks completion and hint reveals, opens a team to see its history and current quest,
 and adjusts the end time. Structural changes show how many teams will be affected before confirmation.
 
-Use [PROJECT.md](PROJECT.md) for behavior and [DESIGN.md](DESIGN.md) for the layouts and reading order.
+Use [PROJECT.md](PROJECT.md) for behavior and [DESIGN.md](DESIGN.md) for the visual rules.

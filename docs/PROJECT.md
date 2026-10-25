@@ -322,8 +322,9 @@ Both use magnetic north; subtract `screen.orientation.angle` from the heading.
 No usable reading within 2 seconds means no compass: retain band and trend, but show no arrow.
 Listen only while the dock is live, guidance is `"warmer"` and the page is visible.
 Compass access never blocks location reporting or solving. Previews never request permissions or report fixes.
-Follow [Design](DESIGN.md#warmercolder-guidance) for presentation and its location dock and Place field rules
-for status, helper and switch copy. Existing off, rough, blocked, unavailable and found states stay unchanged.
+Follow [Design](DESIGN.md) for presentation. `components/game/location-dock.tsx` owns dock status and helper copy,
+`components/admin/place-field.tsx` owns the Place field. Existing off, rough, blocked, unavailable and found states
+stay unchanged.
 
 Coordinate paste accepts two decimal numbers separated by a comma and/or spaces, optionally with `°`.
 Latitude ranges from −90 to 90 and longitude from −180 to 180; store both rounded to 6 decimals.
@@ -376,7 +377,8 @@ Call Nominatim server-side behind `requireAdmin`, with
 Allow at most one request per second and cache answers in memory for 24 hours.
 Picking a result fits its bounding box at maximum zoom 17 and saves the map's resulting centre and zoom.
 Show "Search © OpenStreetMap contributors" below results.
-Follow [Design](DESIGN.md#map-area) for field presentation and the shared copy above for permission failures.
+Follow [Design](DESIGN.md#maps) for map presentation, `components/admin/map-area-field.tsx` for the field
+and the shared copy above for permission failures.
 
 ### Pace
 
