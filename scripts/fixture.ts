@@ -157,6 +157,25 @@ const arcs: Arc[] = [
 					},
 				},
 			),
+			quest(
+				"three-corners",
+				"Three corners",
+				25,
+				"The old town was laid out from three stones. Stand on all three at once and the town will tell you where to go next.\n\nSplit up. Each circle needs one of you inside it.",
+				[],
+				[],
+				{
+					displayTitle: "Three corners",
+					location: {
+						guidance: "map",
+						places: [
+							{ id: "three-corners-place-1", lat: 55.5074, lng: 13.2346, radius: 35 },
+							{ id: "three-corners-place-2", lat: 55.50793, lng: 13.235, radius: 38 },
+							{ id: "three-corners-place-3", lat: 55.50728, lng: 13.23548, radius: 40 },
+						],
+					},
+				},
+			),
 		],
 	},
 	{
@@ -404,6 +423,7 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 	const teams = teamSpecs.map(({ _id, name, order, solved, reveals }): FixtureTeam => {
 		const questOrder = [...order, ...finale]
 		questOrder.splice(solved + 1, 0, "svedala-station")
+		questOrder.splice(solved + 2, 0, "three-corners")
 		const step = (now.getTime() - start) / (solved + 1)
 		const progress = questOrder.slice(0, solved + 1).map((questId, index): TeamQuestProgress => {
 			const { hints, points } = quests.get(questId) as Quest
