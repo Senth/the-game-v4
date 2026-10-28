@@ -78,7 +78,10 @@ const fake = vi.hoisted(() => {
 		})
 		getLngLat = vi.fn(() => this.position)
 		getElement = () => this.options.element
-		addTo = vi.fn(() => this)
+		addTo = vi.fn(() => {
+			this.options.element.style.opacity = "1"
+			return this
+		})
 		setDraggable = vi.fn(() => this)
 		remove = vi.fn()
 		constructor(public options: { element: HTMLElement; draggable: boolean }) {
@@ -143,6 +146,7 @@ beforeEach(() => {
 			const attributes: Record<string, string> = {}
 			const element = {
 				className: "",
+				style: {},
 				classList: {
 					toggle: (name: string, force: boolean): boolean => {
 						const classes = new Set(element.className.split(" ").filter(Boolean))
@@ -271,23 +275,46 @@ describe("MapView", () => {
 		expect(held?.options.element.dataset.held).toBe("true")
 		expect(empty?.setLngLat).toHaveBeenLastCalledWith(circleRing(circle, circle.radius, 4)[0])
 		expect([empty, held].map((marker) => marker?.options.element.children[0]?.textContent)).toEqual(["1", "2"])
-		expect(teammate?.options.element.className).toContain("map-teammate-dot")
+		const visible = teammate?.options.element.firstElementChild
+		expect(visible?.className).toContain("map-teammate-dot")
 		for (const marker of [empty, held, teammate])
 			expect(marker?.options.element.className).toContain("maplibregl-marker")
-		expect(teammate?.options.element.children[0]?.textContent).toBe("Keen <Otter>")
+		expect(visible?.firstElementChild?.textContent).toBe("Keen <Otter>")
 		expect(teammate?.options.draggable).toBe(false)
 		for (const ageMs of [20_000, 29_999]) {
 			render({ circles, teammates: [{ ...phone, ageMs }] })
 			for (const effect of hooks.effects.slice(1)) effect()
-			expect(teammate?.options.element.className).toContain("opacity-50")
+			expect(visible?.className).toContain("opacity-50")
 			expect(teammate?.options.element.className).toContain("maplibregl-marker")
-			expect(teammate?.options.element.children[0]?.className).toContain("motion-safe:animate-pulse")
-			expect(teammate?.options.element.children[0]?.textContent).toBe(`Keen <Otter> · ${Math.floor(ageMs / 1000)} s`)
+			expect(visible?.firstElementChild?.className).toContain("motion-safe:animate-pulse")
+			expect(visible?.firstElementChild?.textContent).toBe(`Keen <Otter> · ${Math.floor(ageMs / 1000)} s`)
 		}
 		render({ circles, teammates: [{ ...phone, ageMs: 30_000 }] })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(teammate?.remove).toHaveBeenCalledOnce()
 		expect(map.fitBounds).not.toHaveBeenCalled()
+	})
+
+	it("fades teammate dot and name inside the marker root despite MapLibre inline opacity", () => {
+		const phone = { name: "Keen Otter", lat: 55.52, lng: 13.21, ageMs: 19_999 }
+		const { map } = mount({ teammates: [phone] })
+		map.fire("load")
+		const root = fake.Marker.instances[0]?.getElement()
+		if (!root) throw new Error("Teammate marker missing")
+		expect(root.style.opacity).toBe("1")
+		for (const ageMs of [20_000, 28_000, 29_999, 0]) {
+			render({ teammates: [{ ...phone, ageMs }] })
+			for (const effect of hooks.effects.slice(1)) effect()
+			expect(root.className).not.toContain("opacity-50")
+			const dot = root.firstElementChild
+			expect(dot?.className).toContain("map-teammate-dot")
+			expect(dot?.className.includes("opacity-50")).toBe(ageMs >= 20_000)
+			expect(dot?.firstElementChild?.className.includes("motion-safe:animate-pulse")).toBe(ageMs >= 20_000)
+			expect(dot?.firstElementChild?.textContent).toBe(
+				`Keen Otter${ageMs >= 20_000 ? ` · ${Math.floor(ageMs / 1000)} s` : ""}`,
+			)
+			expect(root.style.opacity).toBe("1")
+		}
 	})
 
 	it("saves rounded pin moves and clamped handle resizes only on release", () => {

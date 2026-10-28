@@ -217,15 +217,17 @@ export default function MapView({
 				let marker = markers.current.teammates.get(phone.name)
 				if (!marker) {
 					const element = document.createElement("div")
-					element.className = "map-teammate-dot"
-					element.append(document.createElement("span"))
+					const visible = document.createElement("div")
+					visible.className = "map-teammate-dot"
+					visible.append(document.createElement("span"))
+					element.append(visible)
 					marker = new Marker({ element, draggable: false }).setLngLat([phone.lng, phone.lat]).addTo(map)
 					markers.current.teammates.set(phone.name, marker)
 				}
 				const fading = phone.ageMs >= fadeStartMs
-				const element = marker.getElement()
-				element.classList.toggle("opacity-50", fading)
-				const label = element.firstElementChild as HTMLElement
+				const visible = marker.getElement().firstElementChild as HTMLElement
+				visible.classList.toggle("opacity-50", fading)
+				const label = visible.firstElementChild as HTMLElement
 				label.className = `map-teammate-name${fading ? " motion-safe:animate-pulse" : ""}`
 				label.textContent = `${phone.name}${fading ? ` · ${Math.floor(phone.ageMs / 1000)} s` : ""}`
 				marker.setLngLat([phone.lng, phone.lat])
