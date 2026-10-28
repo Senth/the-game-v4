@@ -2,9 +2,17 @@
 
 import { useRouter } from "next/navigation"
 import { type ReactNode, useCallback, useEffect, useState, useTransition } from "react"
-import { dropPuzzlePiece, getGame, getSolvedLocation, getSolvedPuzzle, revealHint, submitAnswer } from "@/app/actions"
+import {
+	dropPuzzlePiece,
+	getGame,
+	getSolvedLocation,
+	getSolvedPuzzle,
+	revealHint,
+	setPhoneName,
+	submitAnswer,
+} from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
-import type { PlayerGame } from "@/lib/domain/player-game"
+import type { PlayerGame, PlayerPhone } from "@/lib/domain/player-game"
 import type { Spot } from "@/lib/domain/schemas"
 import { useFinisherNotices } from "@/lib/events/use-finisher-notices"
 import { useLiveState } from "@/lib/events/use-live-state"
@@ -16,6 +24,7 @@ import { TeamMenu } from "./team-menu"
 import { useCompass } from "./use-compass"
 import { useGameClock } from "./use-game-clock"
 import { useLocationReporter } from "./use-location-reporter"
+import { usePhoneHeartbeat } from "./use-phone-heartbeat"
 
 export function GameScreen({
 	initial,
@@ -38,6 +47,19 @@ export function GameScreen({
 		channels,
 		initial,
 	)
+	const updatePhones = useCallback(
+		(phones: PlayerPhone[]) => setGame((current) => ("phones" in current ? { ...current, phones } : current)),
+		[setGame],
+	)
+	const saveName = useCallback(
+		async (name: string) => {
+			const result = await setPhoneName(name)
+			if ("phones" in result) updatePhones(result.phones)
+			return result
+		},
+		[updatePhones],
+	)
+	usePhoneHeartbeat(updatePhones)
 	const [previous, setPrevious] = useState(initial)
 	const [completion, setCompletion] = useState<{
 		game: Extract<PlayerGame, { lifecycleState: "running" }>
@@ -180,7 +202,8 @@ export function GameScreen({
 	}
 
 	const shown = completingGame ?? game
-	if (shown.lifecycleState !== "running") return <LifecycleScreen game={shown} now={now} qr={qr} />
+	if (shown.lifecycleState !== "running")
+		return <LifecycleScreen game={shown} now={now} qr={qr} savePhoneName={saveName} />
 	const quest = shown.quest
 	const solvedQuest =
 		completion?.solved?.ids && quest?.puzzle
@@ -189,7 +212,7 @@ export function GameScreen({
 					puzzle: { ...quest.puzzle, pieces: completion.solved.ids.map((id, cell) => ({ id, spot: { cell } })) },
 				}
 			: quest
-	const teamName = shown.strip.flatMap((entry) => (entry.kind === "team" && entry.you ? [entry.name] : []))[0]
+	const teamName = shown.teamName
 	const pace = paceFromCounts({ start: shown.start, end: shown.end, solved: shown.solved, total: shown.total, now })
 	return (
 		<GameView
@@ -199,7 +222,7 @@ export function GameScreen({
 			strip={shown.strip}
 			finishers={shown.finishers}
 			notices={notices}
-			menu={teamName && <TeamMenu teamName={teamName} />}
+			menu={teamName && <TeamMenu teamName={teamName} phones={shown.phones} savePhoneName={saveName} />}
 			nextBonus={shown.nextBonus}
 			quest={solvedQuest}
 			puzzleComplete={quest?.puzzle ? completion?.solved?.pointsEarned : undefined}
