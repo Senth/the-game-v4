@@ -4,6 +4,7 @@ import { joinToken, verifyJoinToken } from "@/lib/auth/join"
 import { verifyPassword } from "@/lib/auth/password"
 import { getSession } from "@/lib/auth/session"
 import { collections } from "@/lib/db/collections"
+import { ensurePhone, listTeamPhones } from "@/lib/db/phones"
 import { createSeason } from "@/lib/db/seasons"
 import * as teams from "@/lib/db/teams"
 import { newArc, newQuest } from "@/lib/domain/season-tree"
@@ -271,11 +272,15 @@ describe("deleteTeamAction", () => {
 			await setup(start)
 			const removed = await existing()
 			const kept = await existing("season", "Owls")
+			await ensurePhone(removed._id, crypto.randomUUID(), now)
+			const keptPhone = await ensurePhone(kept._id, crypto.randomUUID(), now)
 			const session = { kind: "team", id: removed._id } as const
 			expect(authorizeChannels([`team:${removed._id}`], allowedChannels(session, removed))).toBe(true)
 			expect(await deleteTeamAction("season", removed._id)).toEqual({ ok: true })
 			expect(await teams.getTeam(removed._id)).toBeNull()
 			expect(await teams.getTeam(kept._id)).toEqual(kept)
+			expect(await listTeamPhones(removed._id)).toEqual([])
+			expect(await listTeamPhones(kept._id)).toEqual([keptPhone.phone])
 			expect(vi.mocked(publish).mock.calls).toEqual([[`team:${removed._id}`], ["season:season"], ["board"]])
 			vi.mocked(getSession).mockResolvedValueOnce(session as Awaited<ReturnType<typeof getSession>>)
 			await expect(requireTeam()).rejects.toMatchObject({ digest: expect.stringContaining(";/login;") })

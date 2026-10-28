@@ -27,7 +27,7 @@ Use pnpm, Biome, `tsc --noEmit`, Vitest and Playwright. MongoDB 8 uses the offic
 
 ## Data model
 
-`seasons`, `teams` and `admins` are the MongoDB collections. Nested arcs, quests and hints
+`seasons`, `teams`, `admins` and `phones` are the MongoDB collections. Nested arcs, quests and hints
 stay inside the season document. References use stable string ids; MongoDB dates are `Date` values.
 The zod schemas in `lib/domain/schemas.ts` validate data at write boundaries.
 
@@ -118,6 +118,25 @@ Logged-in sessions stay valid. Old QR join links stop working because they sign 
 A reset publishes `team:<id>` so waiting and countdown screens refetch their QR code.
 Admins may delete a team at any time. Deletion publishes `team:<id>`, `season:<id>` and `board`.
 
+### phones
+
+Each record belongs to one team and one phone. The same phone can have separate records on different teams.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `_id` | `string` | Phone record id |
+| `teamId` | `string` | Team id |
+| `phoneId` | `string` | UUID from the existing phone cookie; never exposed in player data |
+| `name` | `string` | Trimmed, NFC-normalized name, 1 to 20 characters |
+| `lastSeenAt` | `Date` | Most recent presence update |
+| `createdAt` | `Date` | First creation time |
+
+Unique indexes cover `{teamId, phoneId}` and `{teamId, name}`; the name index uses case-insensitive
+collation with strength 2. Initial names pair a random English adjective and animal, skipping taken names
+and falling back to a numeric suffix. Saving an empty name generates a new random name.
+Presence writes are skipped while `lastSeenAt` is under 60 seconds old. Deleting a team deletes its phones.
+Development fixtures seed no phone records.
+
 ### admins and sessions
 
 | Field | Type | Meaning |
@@ -131,6 +150,9 @@ Sessions last 30 days. Production requires `SESSION_SECRET`.
 Each phone has a separate random UUID cookie, `the-game-phone`, lasting 400 days.
 It is httpOnly, sameSite lax, secure in production and scoped to path `/`.
 The phone id never enters the iron-session payload.
+Team-session requests without a valid phone UUID get one in the proxy, forwarded on the same request
+so the first page render sees it. Existing valid cookies are reused; admin and anonymous requests get none.
+Phone names use this existing identity, never a second cookie or identity in the session.
 `proxy.ts` denies by default.
 Public paths are `/login`, `/logout`, `/register`, `/board`, `/api/events`, `/assets/`, `/_next/`, `/join/` and the icons.
 `/api/events` authorizes its requested channels against the session itself.

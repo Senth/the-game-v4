@@ -98,6 +98,7 @@ describe("location reports", () => {
 					expect(JSON.stringify(stored)).not.toContain(`"${key}"`)
 				expect((await (await getDb()).listCollections().toArray()).map(({ name }) => name).sort()).toEqual([
 					"admins",
+					"phones",
 					"seasons",
 					"teams",
 				])

@@ -1,12 +1,14 @@
 import { MongoClient } from "mongodb"
 import { describe, expect, it, vi } from "vitest"
 import { useTestDb } from "@/test/db"
-import { getDb } from "./client"
+import { closeDb, getDb } from "./client"
 
 useTestDb()
 
 describe("getDb", () => {
 	it("closes the client when index setup fails and connects on retry", async () => {
+		await (await getDb()).dropDatabase()
+		await closeDb()
 		const uri = process.env.MONGODB_URI ?? ""
 		const seeder = new MongoClient(uri)
 		const teams = seeder.db().collection("teams")

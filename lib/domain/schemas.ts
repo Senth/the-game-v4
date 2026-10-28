@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { defaultPlaceRadius } from "./location"
 import { roundCoordinate } from "./map"
+import { PhoneName } from "./phone-names"
 import { Spot } from "./puzzle"
 
 export { Spot } from "./puzzle"
@@ -156,6 +157,16 @@ export const Team = z.object({
 	progress: z.array(TeamQuestProgress),
 })
 export type Team = z.infer<typeof Team>
+
+export const Phone = z.object({
+	_id: id,
+	teamId: id,
+	phoneId: z.uuid(),
+	name: PhoneName,
+	lastSeenAt: z.date(),
+	createdAt: z.date(),
+})
+export type Phone = z.infer<typeof Phone>
 
 export const Admin = z.object({
 	_id: id,

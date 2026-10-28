@@ -98,6 +98,18 @@ Cover puzzle exclusion, optional answers, draft previews, header autosave and re
 Test New place radius helpers and range errors.
 Keep these cases in unit and component tests. Add no browser flows.
 
+### Phone names and storage
+
+Pure tests cover trimmed and NFC-normalized names, the 1/20-character boundaries, invalid lengths,
+case-insensitive comparison, random names skipping taken names and numeric suffixes after word-pair exhaustion.
+Database tests cover distinct phones on one team, the same phone on separate teams, stable repeated creation,
+case-insensitive duplicate rejection, concurrent random-name and same-identity races, empty-name regeneration,
+60-second presence write throttling, scoped removal and the admin team-delete cascade.
+Seed tests assert no seeded phones and that a database containing only phones is not empty.
+Proxy tests cover missing, valid and malformed UUID cookies, required attributes, same-request forwarding,
+unchanged session payloads and no phone cookie for admin or anonymous sessions.
+Keep the existing location-route cookie tests unchanged.
+
 ## End-to-end budget
 
 Playwright global setup boots `mongodb-memory-server`, supplies `MONGODB_URI`, starts the app,
