@@ -62,9 +62,11 @@ export function PlaceField({
 	const coordinatesClass = error
 		? inputClass.replaceAll("border-z2", "border-warn").replaceAll("focus:border-accent", "focus:border-warn")
 		: inputClass
-	const radiusClass = field.failed
-		? inputClass.replaceAll("border-z2", "border-warn").replaceAll("focus:border-accent", "focus:border-warn")
-		: inputClass
+	const radiusClass = (
+		field.failed
+			? inputClass.replaceAll("border-z2", "border-warn").replaceAll("focus:border-accent", "focus:border-warn")
+			: inputClass
+	).replace("w-full", "w-16")
 
 	function locationAt(point: Coordinates, placeId?: string): NonNullable<Quest["location"]> {
 		const rounded = { lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) }
@@ -174,7 +176,7 @@ export function PlaceField({
 							aria-label={`Place ${index + 1} radius`}
 							aria-invalid={field.failed && !locked ? true : undefined}
 							aria-describedby={error ? `${id}-error` : `${id}-helper`}
-							className={`${radiusClass} w-16 shrink-0 px-2 text-sm${locked ? " text-muted" : ""}`}
+							className={`${radiusClass} shrink-0 px-2 text-sm${locked ? " text-muted" : ""}`}
 							type="number"
 							inputMode="numeric"
 							min={5}

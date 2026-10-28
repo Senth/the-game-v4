@@ -57,6 +57,7 @@ type ButtonProps = Pick<
 	ComponentProps<"button">,
 	"aria-label" | "aria-pressed" | "className" | "disabled" | "onClick" | "children"
 >
+type DivProps = Pick<ComponentProps<"div">, "className" | "children">
 
 function descendants<T>(node: ReactNode, type: string): ReactElement<T>[] {
 	return Children.toArray(node).flatMap((child) => {
@@ -71,6 +72,18 @@ function inputs(node: ReactNode): ReactElement<InputProps>[] {
 
 function buttons(node: ReactNode): ReactElement<ButtonProps>[] {
 	return descendants<ButtonProps>(node, "button")
+}
+
+function placeRows(node: ReactNode): ReactElement<DivProps>[] {
+	return Children.toArray(node).flatMap((child) => {
+		if (!isValidElement<DivProps>(child)) return []
+		const row = child.type === "div" && child.props.className === "flex min-w-0 items-center gap-1" ? [child] : []
+		return [...row, ...placeRows(child.props.children)]
+	})
+}
+
+function classTokens(className: string | undefined) {
+	return className?.split(/\s+/) ?? []
 }
 
 function change(input: ReactElement<InputProps>, value: string) {
@@ -324,9 +337,17 @@ it("keeps map controls within a flexible row at phone width", () => {
 	const tree = component(selectLocation({ guidance: "map", places: [place, secondPlace, thirdPlace] }))
 	const coordinateFields = inputs(tree).filter((input) => String(input.props["aria-label"]).includes("coordinates"))
 	const radiusFields = inputs(tree).filter((input) => String(input.props["aria-label"]).includes("radius"))
+	const rows = placeRows(tree)
 	const removeButtons = buttons(tree).filter((button) => button.props["aria-label"]?.startsWith("Remove place"))
-	expect(coordinateFields.every((input) => input.props.className?.includes("min-w-0 flex-1"))).toBe(true)
-	expect(radiusFields.every((input) => input.props.className?.includes("w-16"))).toBe(true)
+	expect(
+		coordinateFields.every((input) =>
+			["min-w-0", "flex-1"].every((token) => classTokens(input.props.className).includes(token)),
+		),
+	).toBe(true)
+	expect(radiusFields.every((input) => classTokens(input.props.className).includes("w-16"))).toBe(true)
+	expect(radiusFields.every((input) => !classTokens(input.props.className).includes("w-full"))).toBe(true)
+	expect(rows).toHaveLength(3)
+	expect(rows.every((row) => classTokens(row.props.className).includes("min-w-0"))).toBe(true)
 	expect(removeButtons.every((button) => button.props.className?.includes("size-11 shrink-0"))).toBe(true)
 })
 
