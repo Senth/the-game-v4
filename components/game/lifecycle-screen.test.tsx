@@ -33,8 +33,8 @@ afterEach(() => vi.restoreAllMocks())
 
 describe("LifecycleScreen", () => {
 	it.each<LifecycleGame>([
-		{ lifecycleState: "waiting" },
-		{ lifecycleState: "countdown", start: new Date(now.getTime() + 60_000) },
+		{ lifecycleState: "waiting", teamName: "Ninjas", phones: [] },
+		{ lifecycleState: "countdown", start: new Date(now.getTime() + 60_000), teamName: "Ninjas", phones: [] },
 		{ lifecycleState: "completed", teamId: "team", finishers: [], score: 120, rank: 1, teamCount: 10 },
 		{ lifecycleState: "ended", teamId: "team", finishers: [], score: 64, rank: 7, teamCount: 10 },
 	])("keeps $lifecycleState previews inert even with a QR slot", (game) => {
@@ -45,9 +45,19 @@ describe("LifecycleScreen", () => {
 		expect(html).not.toContain("<footer")
 	})
 	it.each<[LifecycleGame, string, string | null, boolean]>([
-		[{ lifecycleState: "waiting" }, "The game hasn&#x27;t been scheduled yet.", null, true],
-		[{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000) }, "The game starts in", "4:32", true],
-		[{ lifecycleState: "countdown", start: now }, "The game is starting…", null, true],
+		[
+			{ lifecycleState: "waiting", teamName: "Ninjas", phones: [] },
+			"The game hasn&#x27;t been scheduled yet.",
+			null,
+			true,
+		],
+		[
+			{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000), teamName: "Ninjas", phones: [] },
+			"The game starts in",
+			"4:32",
+			true,
+		],
+		[{ lifecycleState: "countdown", start: now, teamName: "Ninjas", phones: [] }, "The game is starting…", null, true],
 		[
 			{ lifecycleState: "completed", teamId: "team", finishers: [], score: 120, rank: 1, teamCount: 10 },
 			"You solved every quest.",
@@ -109,7 +119,9 @@ describe("LifecycleScreen", () => {
 		const start = new Date(now.getTime() + distance)
 		const format = vi.spyOn(Date.prototype, "toLocaleString").mockReturnValue("Phone-local date")
 		const render = () =>
-			renderToStaticMarkup(<LifecycleScreen game={{ lifecycleState: "countdown", start }} now={now} />)
+			renderToStaticMarkup(
+				<LifecycleScreen game={{ lifecycleState: "countdown", start, teamName: "Ninjas", phones: [] }} now={now} />,
+			)
 		const server = render()
 		expect(server).toContain("min-h-18")
 		expect(server).not.toContain("Phone-local date")

@@ -1,5 +1,8 @@
 import { Collection } from "mongodb"
 import { describe, expect, it, vi } from "vitest"
+
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
+
 import { newArc, newQuest } from "@/lib/domain/season-tree"
 import { loadGame, submitAnswer } from "@/lib/game/game"
 import { useTestDb } from "@/test/db"

@@ -1,6 +1,9 @@
+import { cookies } from "next/headers"
 import { getPuzzleTiles } from "@/lib/assets/puzzle-tiles"
+import { readPhoneId } from "@/lib/auth/phone"
 import { sessionOptions } from "@/lib/auth/session"
 import { claimFinish } from "@/lib/db/finishers"
+import { ensurePhone, listTeamPhones, touchPhone } from "@/lib/db/phones"
 import { getSeason, listSeasons } from "@/lib/db/seasons"
 import { finishSeasonStructure, withSeasonStructure } from "@/lib/db/structural-writes"
 import {
@@ -62,6 +65,16 @@ async function fillEmptyQuestOrders(season: Season | null, teams: Team[], now: D
 }
 
 export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame> {
+	const phoneId = readPhoneId(await cookies())
+	if (phoneId) {
+		const { created } = await ensurePhone(team._id, phoneId, now)
+		await touchPhone(team._id, phoneId, now)
+		if (created) {
+			publish(teamChannel(team._id))
+			publish(seasonChannel(team.seasonId))
+		}
+	}
+	const phones = await listTeamPhones(team._id)
 	const [season, listed] = await Promise.all([getSeason(team.seasonId), listTeams(team.seasonId)])
 	let freshSeason = season
 	let teams = await fillEmptyQuestOrders(season, listed, now)
@@ -133,9 +146,17 @@ export async function loadGame(team: Team, now = new Date()): Promise<PlayerGame
 		current = (await getTeam(current._id)) ?? current
 		if (current.questOrder[current.questIndex] !== quest.id) return loadGame(current, now)
 		const ids = await pieceIds(quest.id, found.quest.assetPath, rows, cols, sessionOptions().password)
-		return playerGame(freshSeason, current, teams, now, { ids, aspect, fullUrl: `/api/puzzle/${quest.id}/full` })
+		return playerGame(
+			freshSeason,
+			current,
+			teams,
+			now,
+			{ ids, aspect, fullUrl: `/api/puzzle/${quest.id}/full` },
+			phones,
+			phoneId,
+		)
 	}
-	return playerGame(freshSeason, current, teams, now)
+	return playerGame(freshSeason, current, teams, now, undefined, phones, phoneId)
 }
 
 export type PuzzleDropResult = { status: "moved" | "stale" } | { status: "solved"; pointsEarned: number }

@@ -1,8 +1,14 @@
 "use server"
 
+import { cookies } from "next/headers"
 import { teamJoinQr } from "@/components/team-qr"
 import { requireTeam } from "@/lib/auth/guards"
+import { readPhoneId } from "@/lib/auth/phone"
+import { ensurePhone, listTeamPhones, renamePhone, touchPhone } from "@/lib/db/phones"
+import { PhoneName } from "@/lib/domain/phone-names"
+import { type PlayerPhone, playerPhones } from "@/lib/domain/player-game"
 import type { Spot } from "@/lib/domain/schemas"
+import { publish, seasonChannel, teamChannel } from "@/lib/events/bus"
 import {
 	dropPuzzlePiece as dropTeamPuzzlePiece,
 	getSolvedLocation as getTeamSolvedLocation,
@@ -14,6 +20,32 @@ import {
 
 export async function getGame() {
 	return loadGame(await requireTeam())
+}
+
+export async function setPhoneName(name: string): Promise<{ phones: PlayerPhone[] } | { error: "taken" | "invalid" }> {
+	const team = await requireTeam()
+	if (typeof name !== "string" || (name.trim() !== "" && !PhoneName.safeParse(name).success))
+		return { error: "invalid" }
+	const phoneId = readPhoneId(await cookies())
+	if (!phoneId) return { error: "invalid" }
+	const now = new Date()
+	await ensurePhone(team._id, phoneId, now)
+	const result = await renamePhone(team._id, phoneId, name)
+	if (!result.ok) return { error: result.error }
+	publish(teamChannel(team._id))
+	publish(seasonChannel(team.seasonId))
+	return { phones: playerPhones(await listTeamPhones(team._id), phoneId, now) }
+}
+
+export async function pingPhone(): Promise<{ phones: PlayerPhone[] }> {
+	const team = await requireTeam()
+	const phoneId = readPhoneId(await cookies())
+	const now = new Date()
+	if (phoneId) {
+		await ensurePhone(team._id, phoneId, now)
+		await touchPhone(team._id, phoneId, now)
+	}
+	return { phones: playerPhones(await listTeamPhones(team._id), phoneId, now) }
 }
 
 export async function submitAnswer(questId: string, answer: string) {

@@ -20,6 +20,8 @@ import {
 } from "./seasons"
 import { createTeam, getTeam } from "./teams"
 
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
+
 useTestDb()
 afterEach(() => vi.restoreAllMocks())
 const now = new Date("2026-10-24T16:00:00Z")

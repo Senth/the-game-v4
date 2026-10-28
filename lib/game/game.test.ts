@@ -26,6 +26,7 @@ import { secretAnswer, withSecrets } from "@/test/secrets"
 import { loadBoard, loadGame, loadStandings, revealHint, submitAnswer } from "./game"
 
 const session = vi.hoisted(() => ({ teamId: "" }))
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
 vi.mock("@/lib/auth/guards", async () => {
 	const { getTeam } = await import("@/lib/db/teams")
 	return { requireTeam: async () => getTeam(session.teamId) }
@@ -115,7 +116,8 @@ describe("loadGame", () => {
 	})
 
 	it("returns waiting when the team's season record is missing", async () => {
-		expect(await loadGame(await freshTeam({ seasonId: "missing-season" }), now)).toEqual({ lifecycleState: "waiting" })
+		const team = await freshTeam({ seasonId: "missing-season" })
+		expect(await loadGame(team, now)).toEqual({ lifecycleState: "waiting", teamName: team.name, phones: [] })
 	})
 
 	it("keeps join URLs out of getGame JSON", async () => {
@@ -616,7 +618,12 @@ describe("lazy quest orders", () => {
 		const registered = await registerTeam("Early birds", "password", beforeStart)
 		if (!registered.ok) throw new Error(registered.error)
 		expect(registered.team.questOrder).toEqual([])
-		expect(await loadGame(registered.team, beforeStart)).toEqual({ lifecycleState: "countdown", start: now })
+		expect(await loadGame(registered.team, beforeStart)).toEqual({
+			lifecycleState: "countdown",
+			start: now,
+			teamName: registered.team.name,
+			phones: [],
+		})
 		expect(vi.mocked(fillQuestOrders)).not.toHaveBeenCalled()
 		const game = await loadGame(registered.team, now)
 		const stored = await getTeam(registered.team._id)

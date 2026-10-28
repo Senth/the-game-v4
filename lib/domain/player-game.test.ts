@@ -3,6 +3,7 @@ import { buildFixture } from "@/scripts/fixture"
 import { withSecrets } from "@/test/secrets"
 import { standingsRows } from "./game"
 import { playerGame, playerStandings, publicBoard } from "./player-game"
+import type { Phone } from "./schemas"
 
 const now = new Date("2026-10-09T18:00:00Z")
 const fixture = buildFixture(now)
@@ -13,6 +14,59 @@ const start = season.start as Date
 const end = season.end as Date
 
 const secretSeason = withSecrets(season)
+
+const phones: Phone[] = [
+	["Zebra", "you", 0],
+	["Bear", "other", 600_000],
+	["Away", "away", 600_001],
+	["Ant", "third", 1],
+].map(([name, phoneId, age]) => ({
+	_id: `record-${phoneId}`,
+	teamId: ninjas._id,
+	phoneId: String(phoneId),
+	name: String(name),
+	lastSeenAt: new Date(now.getTime() - Number(age)),
+	createdAt: now,
+}))
+
+it("whitelists here phones, includes the ten-minute edge and orders your phone first without mutation", () => {
+	const before = structuredClone(phones)
+	for (const state of ["waiting", "countdown", "running"] as const) {
+		const timing = state === "waiting" ? { start: null } : state === "countdown" ? { start: end } : {}
+		const view = playerGame({ ...season, ...timing }, ninjas, teams, now, undefined, phones, "you")
+		expect(view).toMatchObject({
+			lifecycleState: state,
+			teamName: ninjas.name,
+			phones: [
+				{ name: "Zebra", you: true },
+				{ name: "Ant", you: false },
+				{ name: "Bear", you: false },
+			],
+		})
+		if (!("phones" in view)) throw new Error("Expected phones")
+		for (const phone of view.phones) expect(Object.keys(phone).sort()).toEqual(["name", "you"])
+	}
+	const preview = playerGame(season, ninjas, teams, now, undefined, phones)
+	expect(preview).toHaveProperty("phones", [
+		{ name: "Ant", you: false },
+		{ name: "Bear", you: false },
+		{ name: "Zebra", you: false },
+	])
+	expect(phones).toEqual(before)
+})
+
+it("keeps phones out of completed, ended, standings, board and finisher data", () => {
+	for (const view of [
+		playerGame(season, { ...ninjas, completed: true }, teams, now, undefined, phones, "you"),
+		playerGame(season, ninjas, teams, end, undefined, phones, "you"),
+		playerStandings(season, ninjas, teams, now),
+		publicBoard([season], { [season._id]: teams }, now),
+	]) {
+		expect(view).not.toHaveProperty("phones")
+		expect(view).not.toHaveProperty("teamName")
+		for (const phone of phones) expect(JSON.stringify(view)).not.toContain(phone.name)
+	}
+})
 
 const cases = {
 	waiting: [{ ...secretSeason, start: null, end: null }, ninjas, now],
@@ -69,17 +123,29 @@ it("exposes only next open bonus to running game and board notices", () => {
 
 describe("playerGame", () => {
 	it("returns waiting for a null, missing or unscheduled season", () => {
-		expect(playerGame(null, ninjas, teams, now)).toEqual({ lifecycleState: "waiting" })
-		expect(playerGame(undefined, ninjas, teams, now)).toEqual({ lifecycleState: "waiting" })
+		expect(playerGame(null, ninjas, teams, now)).toEqual({
+			lifecycleState: "waiting",
+			teamName: ninjas.name,
+			phones: [],
+		})
+		expect(playerGame(undefined, ninjas, teams, now)).toEqual({
+			lifecycleState: "waiting",
+			teamName: ninjas.name,
+			phones: [],
+		})
 		expect(playerGame({ ...season, start: null, end: null }, ninjas, teams, now)).toEqual({
 			lifecycleState: "waiting",
+			teamName: ninjas.name,
+			phones: [],
 		})
 	})
 
-	it("returns only the start during countdown", () => {
+	it("returns team identity and start during countdown", () => {
 		expect(playerGame(season, ninjas, teams, new Date(start.getTime() - 1))).toEqual({
 			lifecycleState: "countdown",
 			start,
+			teamName: ninjas.name,
+			phones: [],
 		})
 	})
 

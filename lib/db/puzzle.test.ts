@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
+
 import * as actions from "@/app/actions"
 import { saveSeasonField } from "@/app/admin/autosave-actions"
 import { getPuzzleTiles } from "@/lib/assets/puzzle-tiles"

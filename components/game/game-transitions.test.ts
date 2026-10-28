@@ -4,6 +4,8 @@ import { gameTransitions } from "./game-transitions"
 
 const running: Extract<PlayerGame, { lifecycleState: "running" }> = {
 	lifecycleState: "running",
+	teamName: "Ninjas",
+	phones: [],
 	teamId: "team",
 	finishers: [],
 	nextBonus: null,

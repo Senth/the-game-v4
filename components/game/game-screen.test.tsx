@@ -156,11 +156,11 @@ describe("GameScreen", () => {
 		}
 	})
 
-	it.each([
-		{ lifecycleState: "waiting" },
-		{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000) },
-		{ lifecycleState: "countdown", start: now },
-	] as const)("shows the join slot for $lifecycleState, including starting", (initial) => {
+	it.each<PlayerGame>([
+		{ lifecycleState: "waiting", teamName: team.name, phones: [] },
+		{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000), teamName: team.name, phones: [] },
+		{ lifecycleState: "countdown", start: now, teamName: team.name, phones: [] },
+	])("shows the join slot for $lifecycleState, including starting", (initial) => {
 		const html = renderToStaticMarkup(<GameScreen {...props} initial={initial} qr={<div>/join/token</div>} />)
 		expect(html).toContain("/join/token")
 	})
@@ -200,7 +200,7 @@ describe("player home route", () => {
 
 	it("keeps waiting live with team and season channels, logout and no game controls", async () => {
 		vi.mocked(requireTeam).mockResolvedValue({ ...team, passwordHash: "x" })
-		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting" })
+		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting", teamName: team.name, phones: [] })
 		const page = await Home()
 		expect(page.type).toBe(GameScreen)
 		expect(page.props.channels).toEqual(props.channels)

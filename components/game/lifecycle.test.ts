@@ -6,7 +6,7 @@ const day = 24 * 60 * 60 * 1000
 
 describe("lifecycleView", () => {
 	it("shows waiting copy without a value", () => {
-		expect(lifecycleView({ lifecycleState: "waiting" }, now)).toEqual({
+		expect(lifecycleView({ lifecycleState: "waiting", teamName: "Ninjas", phones: [] }, now)).toEqual({
 			sentence: "The game hasn't been scheduled yet.",
 			value: null,
 			helper: "This page updates by itself.",
@@ -20,7 +20,7 @@ describe("lifecycleView", () => {
 		[day - 1, "23:59:59"],
 	])("formats a countdown %i ms away as %s", (distance, text) => {
 		const start = new Date(now.getTime() + distance)
-		expect(lifecycleView({ lifecycleState: "countdown", start }, now)).toEqual({
+		expect(lifecycleView({ lifecycleState: "countdown", start, teamName: "Ninjas", phones: [] }, now)).toEqual({
 			sentence: "The game starts in",
 			value: { kind: "countdown", date: start, band: "under-24-hours", text },
 			helper: null,
@@ -35,7 +35,7 @@ describe("lifecycleView", () => {
 		[8 * day, "7-days-or-more"],
 	] as const)("leaves a start %i ms away unformatted in band %s", (distance, band) => {
 		const start = new Date(now.getTime() + distance)
-		expect(lifecycleView({ lifecycleState: "countdown", start }, now)).toEqual({
+		expect(lifecycleView({ lifecycleState: "countdown", start, teamName: "Ninjas", phones: [] }, now)).toEqual({
 			sentence: "The game starts",
 			value: { kind: "countdown", date: start, band, text: null },
 			helper: null,
@@ -43,7 +43,12 @@ describe("lifecycleView", () => {
 	})
 
 	it.each([0, -1, -1000])("shows starting copy at %i ms without a clock", (distance) => {
-		expect(lifecycleView({ lifecycleState: "countdown", start: new Date(now.getTime() + distance) }, now)).toEqual({
+		expect(
+			lifecycleView(
+				{ lifecycleState: "countdown", start: new Date(now.getTime() + distance), teamName: "Ninjas", phones: [] },
+				now,
+			),
+		).toEqual({
 			sentence: "The game is starting…",
 			value: null,
 			helper: null,
@@ -82,7 +87,12 @@ describe("lifecycleView", () => {
 	})
 
 	it("leaves countdown input and server time unchanged", () => {
-		const game = { lifecycleState: "countdown" as const, start: new Date(now.getTime() + day) }
+		const game = {
+			lifecycleState: "countdown" as const,
+			start: new Date(now.getTime() + day),
+			teamName: "Ninjas",
+			phones: [],
+		}
 		const before = structuredClone(game)
 		const serverTime = now.getTime()
 		lifecycleView(game, now)
