@@ -34,6 +34,8 @@ vi.mock("@/lib/events/use-live-state", () => ({
 const initialNow = new Date("2026-10-10T18:00:00Z").getTime()
 const running: PlayerGame = {
 	lifecycleState: "running",
+	teamName: "Ninjas",
+	phones: [],
 	teamId: "team",
 	finishers: [],
 	nextBonus: null,
@@ -134,7 +136,12 @@ describe("game clock effects", () => {
 	)
 
 	it("flips a countdown mounted three seconds before start into running without reload", async () => {
-		const countdown: PlayerGame = { lifecycleState: "countdown", start: new Date(initialNow + 3000) }
+		const countdown: PlayerGame = {
+			lifecycleState: "countdown",
+			start: new Date(initialNow + 3000),
+			teamName: "Ninjas",
+			phones: [],
+		}
 		vi.mocked(getGame).mockResolvedValue(running)
 		mount(countdown)
 		await vi.advanceTimersByTimeAsync(2999)
@@ -147,7 +154,12 @@ describe("game clock effects", () => {
 	})
 
 	it.each(["failed", "still-countdown"])("retries a %s start refresh with backoff", async (result) => {
-		const countdown: PlayerGame = { lifecycleState: "countdown", start: new Date(initialNow) }
+		const countdown: PlayerGame = {
+			lifecycleState: "countdown",
+			start: new Date(initialNow),
+			teamName: "Ninjas",
+			phones: [],
+		}
 		if (result === "failed") vi.mocked(getGame).mockRejectedValueOnce(new Error("Offline"))
 		else vi.mocked(getGame).mockResolvedValueOnce(countdown)
 		vi.mocked(getGame).mockResolvedValueOnce(countdown).mockResolvedValue(running)
@@ -167,7 +179,12 @@ describe("game clock effects", () => {
 	})
 
 	it("shows starting while a start refresh is pending and ignores its result after unmount", async () => {
-		const countdown: PlayerGame = { lifecycleState: "countdown", start: new Date(initialNow + 2500) }
+		const countdown: PlayerGame = {
+			lifecycleState: "countdown",
+			start: new Date(initialNow + 2500),
+			teamName: "Ninjas",
+			phones: [],
+		}
 		let finish!: (game: PlayerGame) => void
 		vi.mocked(getGame).mockReturnValueOnce(
 			new Promise((resolve) => {
@@ -189,7 +206,7 @@ describe("game clock effects", () => {
 	})
 
 	it("cancels countdown timers when unmounted before start", async () => {
-		mount({ lifecycleState: "countdown", start: new Date(initialNow + 3000) })
+		mount({ lifecycleState: "countdown", start: new Date(initialNow + 3000), teamName: "Ninjas", phones: [] })
 		for (const cleanup of cleanups) cleanup()
 		await vi.advanceTimersByTimeAsync(60_000)
 		expect(getGame).not.toHaveBeenCalled()
@@ -202,7 +219,7 @@ describe("game clock effects", () => {
 		const distance = 30 * 24 * 60 * 60 * 1000
 		const timeout = vi.spyOn(globalThis, "setTimeout")
 		vi.mocked(getGame).mockResolvedValue(running)
-		mount({ lifecycleState: "countdown", start: new Date(initialNow + distance) })
+		mount({ lifecycleState: "countdown", start: new Date(initialNow + distance), teamName: "Ninjas", phones: [] })
 		expect(timeout).toHaveBeenLastCalledWith(expect.any(Function), 2_147_483_647)
 		await vi.advanceTimersByTimeAsync(2_147_483_647)
 		expect(getGame).not.toHaveBeenCalled()

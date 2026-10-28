@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/guards"
 import { hashPassword } from "@/lib/auth/password"
 import { createSeasonTeam, passwordError } from "@/lib/auth/register"
 import { NotFoundError } from "@/lib/db/collections"
+import { deleteTeamPhones } from "@/lib/db/phones"
 import { getSeason } from "@/lib/db/seasons"
 import { deleteTeam, getTeam, setTeamField } from "@/lib/db/teams"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
@@ -79,6 +80,7 @@ export async function deleteTeamAction(seasonId: string, teamId: string): Promis
 		if (!team || team.seasonId !== seasonId || !(await deleteTeam(teamId))) {
 			throw new NotFoundError(`Team ${teamId} not found`)
 		}
+		await deleteTeamPhones(teamId)
 	} catch (error) {
 		return actionFailure(error, now)
 	}

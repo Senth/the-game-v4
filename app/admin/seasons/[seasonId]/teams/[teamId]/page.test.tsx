@@ -3,8 +3,10 @@ import { DeleteTeamButton } from "@/components/admin/delete-team-button"
 import { ResetPassword } from "@/components/admin/reset-password"
 import { TeamHeader } from "@/components/admin/team-header"
 import { TeamHistory } from "@/components/admin/team-history"
+import { TeamPhones } from "@/components/admin/team-phones"
 import { TeamPreview } from "@/components/admin/team-preview"
 import { requireAdmin } from "@/lib/auth/guards"
+import { listTeamPhones } from "@/lib/db/phones"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
 import { buildFixture } from "@/scripts/fixture"
@@ -12,6 +14,7 @@ import TeamPage from "./page"
 
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn() }))
+vi.mock("@/lib/db/phones", () => ({ listTeamPhones: vi.fn() }))
 vi.mock("@/lib/db/teams", () => ({ listSeasonTeams: vi.fn() }))
 vi.mock("@/app/admin/team-actions", () => ({
 	createTeamAction: vi.fn(),
@@ -30,6 +33,7 @@ beforeEach(() => {
 	vi.useFakeTimers()
 	vi.setSystemTime(now)
 	vi.mocked(getSeason).mockResolvedValue(season)
+	vi.mocked(listTeamPhones).mockResolvedValue([])
 	vi.mocked(listSeasonTeams).mockResolvedValue(teams)
 })
 afterEach(() => vi.useRealTimers())
@@ -38,6 +42,7 @@ it("guards before reading season or team data", async () => {
 	vi.mocked(requireAdmin).mockRejectedValueOnce(new Error("Unauthorized"))
 	await expect(TeamPage(props)).rejects.toThrow("Unauthorized")
 	expect(getSeason).not.toHaveBeenCalled()
+	expect(listTeamPhones).not.toHaveBeenCalled()
 	expect(listSeasonTeams).not.toHaveBeenCalled()
 })
 
@@ -72,10 +77,16 @@ it("redirects missing season without reading teams", async () => {
 it("composes header, safe history, reset, delete control and phone-only preview in reading order", async () => {
 	const page = await TeamPage(props)
 	const [header, summary, reset, footer, preview] = page.props.children
+	const phones = summary.props.children
 	expect(header.type).toBe(TeamHeader)
 	expect(header.props).toEqual({ seasonId: season._id, name: "Ninjas" })
 	expect(summary.type).toBe(TeamHistory)
-	expect(summary.props).toEqual({ season, team, now: now.getTime() })
+	expect(summary.props.season).toEqual(season)
+	expect(summary.props.team).toEqual(team)
+	expect(summary.props.now).toBe(now.getTime())
+	expect(phones.type).toBe(TeamPhones)
+	expect(phones.props).toEqual({ phones: [], now })
+	expect(listTeamPhones).toHaveBeenCalledWith(team._id)
 	expect(reset.type).toBe(ResetPassword)
 	expect(reset.key).toBe(team._id)
 	expect(reset.props).toEqual({ seasonId: season._id, teamId: team._id })

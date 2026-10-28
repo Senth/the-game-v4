@@ -16,6 +16,7 @@ import { addQuest, moveQuest, removeArc, removeQuest } from "@/app/admin/tree-ac
 import type { GameView } from "@/components/game/game-view"
 import { PlaceMap } from "@/components/game/place-map"
 import type { MapViewProps } from "@/components/map/map-view"
+import { listTeamPhones } from "@/lib/db/phones"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
 import { boundsFor, circleRing } from "@/lib/domain/map"
@@ -112,6 +113,7 @@ vi.mock("@/app/admin/tree-actions", () => ({
 vi.mock("@/lib/events/live-connection", () => ({ createLiveConnection: vi.fn(() => hooks.connection) }))
 vi.mock("@/app/admin/actions", () => ({ getPuzzlePreviewAssets: vi.fn() }))
 vi.mock("@/lib/auth/guards", () => ({ requireAdmin: vi.fn() }))
+vi.mock("@/lib/db/phones", () => ({ listTeamPhones: vi.fn() }))
 vi.mock("@/lib/db/seasons", () => ({ getSeason: vi.fn() }))
 vi.mock("@/lib/db/teams", () => ({ listSeasonTeams: vi.fn() }))
 vi.mock("@/app/admin/team-actions", () => ({ createTeamAction: vi.fn(), deleteTeamAction: vi.fn() }))
@@ -187,7 +189,7 @@ it.each(["list", "history"])(
 		const timing = { start: season.start, end: season.end, now }
 		const tick = () => provider(state, timing)
 		let page = await load()
-		const markup = () => render(scope(), () => renderToStaticMarkup(page))
+		const markup = () => render(scope(), () => renderToStaticMarkup(page), false)
 		let html = markup()
 		expect(html).not.toContain('aria-current="step"')
 		expect(html).not.toContain("w-5 shrink-0 text-xs text-muted")
@@ -608,6 +610,7 @@ beforeEach(() => {
 	vi.stubGlobal("window", new EventTarget())
 	vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: false }))
 	vi.mocked(saveSeasonField).mockReset().mockResolvedValue({ ok: true })
+	vi.mocked(listTeamPhones).mockReset().mockResolvedValue([])
 	vi.mocked(patchSeasonList).mockReset().mockResolvedValue({ ok: true })
 	vi.mocked(removeArc).mockReset().mockResolvedValue({ ok: true })
 	vi.mocked(removeQuest).mockReset().mockResolvedValue({ ok: true })

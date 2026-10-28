@@ -59,7 +59,9 @@ it.each(["waiting", "countdown"] as const)(
 			return current
 		})
 		const game: PlayerGame =
-			lifecycleState === "waiting" ? { lifecycleState } : { lifecycleState, start: new Date(Date.now() + 60_000) }
+			lifecycleState === "waiting"
+				? { lifecycleState, teamName: team.name, phones: [] }
+				: { lifecycleState, start: new Date(Date.now() + 60_000), teamName: team.name, phones: [] }
 		vi.mocked(getGame).mockResolvedValue(game)
 		let page = await Home()
 		let qr = await TeamQr(page.props.qr.props)

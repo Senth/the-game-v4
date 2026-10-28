@@ -3,8 +3,10 @@ import { DeleteTeamButton } from "@/components/admin/delete-team-button"
 import { ResetPassword } from "@/components/admin/reset-password"
 import { TeamHeader } from "@/components/admin/team-header"
 import { TeamHistory } from "@/components/admin/team-history"
+import { TeamPhones } from "@/components/admin/team-phones"
 import { TeamPreview } from "@/components/admin/team-preview"
 import { requireAdmin } from "@/lib/auth/guards"
+import { listTeamPhones } from "@/lib/db/phones"
 import { getSeason } from "@/lib/db/seasons"
 import { listSeasonTeams } from "@/lib/db/teams"
 
@@ -17,10 +19,13 @@ export default async function TeamPage({ params }: PageProps<"/admin/seasons/[se
 	const now = Date.now()
 	const team = teams.find((team) => team._id === teamId)
 	if (!team) redirect(`/admin/seasons/${seasonId}/teams`)
+	const phones = await listTeamPhones(team._id)
 	return (
 		<>
 			<TeamHeader seasonId={seasonId} name={team.name} />
-			<TeamHistory season={season} team={team} now={now} />
+			<TeamHistory season={season} team={team} now={now}>
+				<TeamPhones phones={phones.map(({ name, lastSeenAt }) => ({ name, lastSeenAt }))} now={new Date(now)} />
+			</TeamHistory>
 			<ResetPassword key={teamId} seasonId={seasonId} teamId={teamId} />
 			<div className="mx-4 mt-6 border-t border-z1 py-6">
 				<DeleteTeamButton key={teamId} seasonId={seasonId} teamId={teamId} name={team.name} />

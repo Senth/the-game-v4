@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
+
 import * as actions from "@/app/actions"
 import { patchSeasonList, saveSeasonField } from "@/app/admin/autosave-actions"
 import { copyQuest } from "@/app/admin/copy-actions"
@@ -98,6 +101,7 @@ describe("location reports", () => {
 					expect(JSON.stringify(stored)).not.toContain(`"${key}"`)
 				expect((await (await getDb()).listCollections().toArray()).map(({ name }) => name).sort()).toEqual([
 					"admins",
+					"phones",
 					"seasons",
 					"teams",
 				])

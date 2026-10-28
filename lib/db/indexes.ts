@@ -18,4 +18,7 @@ export async function ensureIndexes(db: Db): Promise<void> {
 	}
 	await teams.createIndex({ name: 1 }, { collation: { locale: "en", strength: 2 } })
 	await db.collection("admins").createIndex({ name: 1 }, { unique: true })
+	const phones = db.collection("phones")
+	await phones.createIndex({ teamId: 1, phoneId: 1 }, { unique: true })
+	await phones.createIndex({ teamId: 1, name: 1 }, { unique: true, collation: { locale: "en", strength: 2 } })
 }

@@ -35,7 +35,14 @@ vi.mock("react", async (importOriginal) => {
 	}
 })
 
-vi.mock("@/app/actions", () => ({ getGame: vi.fn(), submitAnswer: vi.fn(), revealHint: vi.fn(), getJoinQr: vi.fn() }))
+vi.mock("@/app/actions", () => ({
+	getGame: vi.fn(),
+	setPhoneName: vi.fn(),
+	pingPhone: vi.fn(),
+	submitAnswer: vi.fn(),
+	revealHint: vi.fn(),
+	getJoinQr: vi.fn(),
+}))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("@/lib/auth/guards", () => ({ requireTeam: vi.fn() }))
 vi.mock("@/components/team-qr", () => ({ TeamQr: () => <div>Test /join/token</div> }))
@@ -104,7 +111,8 @@ describe("GameScreen", () => {
 		expect(html).toContain("You solved every quest.")
 		expect(html).toContain("99p")
 		expect(html).toContain("Log out")
-		expect(html).not.toContain("<input")
+		expect(html).not.toContain('aria-label="Your name"')
+		expect(html).not.toContain("On this team")
 		expect(html).not.toContain("Team menu")
 	})
 
@@ -156,11 +164,11 @@ describe("GameScreen", () => {
 		}
 	})
 
-	it.each([
-		{ lifecycleState: "waiting" },
-		{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000) },
-		{ lifecycleState: "countdown", start: now },
-	] as const)("shows the join slot for $lifecycleState, including starting", (initial) => {
+	it.each<PlayerGame>([
+		{ lifecycleState: "waiting", teamName: team.name, phones: [] },
+		{ lifecycleState: "countdown", start: new Date(now.getTime() + 272_000), teamName: team.name, phones: [] },
+		{ lifecycleState: "countdown", start: now, teamName: team.name, phones: [] },
+	])("shows the join slot for $lifecycleState, including starting", (initial) => {
 		const html = renderToStaticMarkup(<GameScreen {...props} initial={initial} qr={<div>/join/token</div>} />)
 		expect(html).toContain("/join/token")
 	})
@@ -200,14 +208,15 @@ describe("player home route", () => {
 
 	it("keeps waiting live with team and season channels, logout and no game controls", async () => {
 		vi.mocked(requireTeam).mockResolvedValue({ ...team, passwordHash: "x" })
-		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting" })
+		vi.mocked(getGame).mockResolvedValue({ lifecycleState: "waiting", teamName: team.name, phones: [] })
 		const page = await Home()
 		expect(page.type).toBe(GameScreen)
 		expect(page.props.channels).toEqual(props.channels)
 		const html = renderToStaticMarkup(page)
 		expect(html).toContain("The game hasn&#x27;t been scheduled yet.")
 		expect(html).toContain("Log out")
-		expect(html).not.toContain("<input")
+		expect(html).toContain('for="lifecycle-name"')
+		expect(html).toContain("On this team")
 		expect(html).toContain("/join/token")
 		expect(page.props.qr.type).toBe(TeamQr)
 		expect(page.props.qr.props.team._id).toBe(team._id)

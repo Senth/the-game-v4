@@ -1,5 +1,6 @@
 import { cookies } from "next/headers"
 import { z } from "zod"
+import { phoneCookieName, phoneCookieOptions, readPhoneId } from "@/lib/auth/phone"
 import { getSession } from "@/lib/auth/session"
 import { getTeam } from "@/lib/db/teams"
 import { Place } from "@/lib/domain/schemas"
@@ -23,16 +24,9 @@ export async function POST(request: Request) {
 	const parsed = Report.safeParse(await request.json().catch(() => null))
 	if (!parsed.success) return new Response(null, { status: 400 })
 	const store = await cookies()
-	const existing = z.uuid().safeParse(store.get("the-game-phone")?.value)
-	const phoneId = existing.success ? existing.data : crypto.randomUUID()
-	if (!existing.success)
-		store.set("the-game-phone", phoneId, {
-			httpOnly: true,
-			sameSite: "lax",
-			secure: process.env.NODE_ENV === "production",
-			path: "/",
-			maxAge: 400 * 24 * 60 * 60,
-		})
+	const existing = readPhoneId(store)
+	const phoneId = existing ?? crypto.randomUUID()
+	if (!existing) store.set(phoneCookieName, phoneId, phoneCookieOptions())
 	const { questId, ...fix } = parsed.data
 	return Response.json(await reportPosition(team, phoneId, questId, fix))
 }

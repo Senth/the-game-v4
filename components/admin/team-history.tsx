@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment } from "react"
+import { Fragment, type ReactNode } from "react"
 import { FinishFlag } from "@/components/finish-flag"
 import { ordinal } from "@/lib/domain/game"
 import { teamHistory } from "@/lib/domain/team-history"
@@ -17,10 +17,12 @@ export function TeamHistory({
 	season,
 	team,
 	now,
+	children,
 }: {
 	season: Parameters<typeof teamHistory>[0]
 	team: Parameters<typeof teamHistory>[1]
 	now: number
+	children?: ReactNode
 }) {
 	const clock = useSeasonClock(now, season.start, season.end)
 	const history = teamHistory(season, team, new Date(clock))
@@ -93,6 +95,7 @@ export function TeamHistory({
 					<p className={stateColor}>{stateLabel}</p>
 				</div>
 			</section>
+			{children}
 			{groups.map((group) => (
 				<section key={group.id}>
 					<h3

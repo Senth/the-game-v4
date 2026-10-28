@@ -23,14 +23,14 @@ describe("seed", () => {
 	it("loads the fixture, reloads it on a second run and hashes passwords", async () => {
 		const db = await getDb()
 		const counts = async () =>
-			Promise.all(["seasons", "teams", "admins"].map((name) => db.collection(name).countDocuments()))
+			Promise.all(["seasons", "teams", "admins", "phones"].map((name) => db.collection(name).countDocuments()))
 
 		expect(await isEmpty(db)).toBe(true)
 		await seed(db, new Date())
-		expect(await counts()).toEqual([1, 10, 1])
+		expect(await counts()).toEqual([1, 10, 1, 0])
 		expect(hashPassword).toHaveBeenCalledTimes(11)
 		await seed(db, new Date())
-		expect(await counts()).toEqual([1, 10, 1])
+		expect(await counts()).toEqual([1, 10, 1, 0])
 		expect(hashPassword).toHaveBeenCalledTimes(22)
 		expect(await isEmpty(db)).toBe(false)
 
@@ -39,6 +39,13 @@ describe("seed", () => {
 		await expect(access(path.join(assetsDir, path.basename(backwardsLogAsset)))).resolves.toBeUndefined()
 		await expect(access(path.join(assetsDir, path.basename(gatherThePiecesAsset)))).resolves.toBeUndefined()
 	}, 15_000)
+
+	it("does not count a database with only phone records as empty", async () => {
+		const db = await getDb()
+		await db.dropDatabase()
+		await db.collection("phones").insertOne({ name: "Bright Owl" })
+		expect(await isEmpty(db)).toBe(false)
+	})
 })
 
 describe("assertSeedTarget", () => {

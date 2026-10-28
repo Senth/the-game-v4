@@ -1,4 +1,4 @@
-import type { EffectCallback, ReactNode } from "react"
+import type { EffectCallback, ReactElement, ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, type Mock, vi } from "vitest"
 import { getJoinQr } from "@/app/actions"
@@ -6,6 +6,8 @@ import { InviteDialog } from "./invite-dialog"
 import { TeamMenu } from "./team-menu"
 
 type Qr = Awaited<ReturnType<typeof getJoinQr>>
+const onePhone = [{ name: "Quiet Fox", you: true }]
+const savePhoneName = vi.fn()
 
 const hooks = vi.hoisted(() => ({
 	states: [] as unknown[],
@@ -26,6 +28,7 @@ vi.mock("react", async (importOriginal) => ({
 		hooks.effects.push(effect)
 	},
 	useRef: (initial: unknown) => ({ current: initial ?? hooks.dialog }),
+	useId: () => "team-menu-test",
 }))
 vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }))
 vi.mock("@/app/actions", () => ({ getJoinQr: vi.fn() }))
@@ -45,18 +48,49 @@ afterEach(() => {
 })
 
 it("renders a closed ⋮ button that announces its menu", () => {
-	const html = render(<TeamMenu teamName="Ninjas" />)
+	const html = render(<TeamMenu teamName="Ninjas" phones={onePhone} savePhoneName={savePhoneName} />)
 	expect(html).toMatch(/<button[^>]*aria-label="Team menu"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"/)
 	expect(html).not.toContain('role="menu"')
 	expect(html).not.toContain("<dialog")
 })
 
-it("opens with the team name heading and one invite item", () => {
-	const html = render(<TeamMenu teamName="Ninjas" />, true)
+it("opens with invite and name rows plus one teammate", () => {
+	const html = render(<TeamMenu teamName="Ninjas" phones={onePhone} savePhoneName={savePhoneName} />, true, null)
 	expect(html).toContain('aria-expanded="true"')
 	expect(html).toMatch(/role="menu"[^>]*><p[^>]*>Ninjas<\/p>/)
-	expect(html.match(/role="menuitem"/g)).toHaveLength(1)
+	expect(html.match(/role="menuitem"/g)).toHaveLength(2)
 	expect(html).toMatch(/role="menuitem"[^>]*>Invite a teammate</)
+	expect(html).toContain("Quiet Fox")
+	expect(html).toContain("(you)")
+	expect(html).toContain("On this team")
+	expect(html.indexOf("Invite a teammate")).toBeLessThan(html.indexOf("Your name"))
+	expect(html.indexOf("Your name")).toBeLessThan(html.indexOf("On this team"))
+})
+
+it("lists several teammates in order and marks only your name", () => {
+	const phones = [
+		{ name: "Quiet Fox", you: true },
+		{ name: "Ben", you: false },
+		{ name: "Kim", you: false },
+		{ name: "Brave Owl", you: false },
+	]
+	const html = render(<TeamMenu teamName="Ninjas" phones={phones} savePhoneName={savePhoneName} />, true, null)
+	const positions = ["Quiet Fox", "(you)", "Ben", "Kim", "Brave Owl"].map((name) => html.indexOf(name))
+	expect(positions.every((position) => position >= 0)).toBe(true)
+	expect(positions).toEqual([...positions].sort((a, b) => a - b))
+})
+
+it("opens the name dialog from the Your name menu row", () => {
+	hooks.states = [true, null]
+	hooks.cursor = 0
+	hooks.setters = []
+	const menu = TeamMenu({ teamName: "Ninjas", phones: onePhone, savePhoneName }) as ReactElement<{
+		children: [ReactElement, ReactElement<{ children: ReactElement[] }>]
+	}>
+	const nameButton = menu.props.children[1].props.children[2] as ReactElement<{ onClick: () => void }>
+	nameButton.props.onClick()
+	expect(hooks.setters[0]).toHaveBeenCalledWith(false)
+	expect(hooks.setters[1]).toHaveBeenCalledWith("name")
 })
 
 it("closes on an outside click after default focus and returns focus to ⋮", () => {
@@ -68,7 +102,7 @@ it("closes on an outside click after default focus and returns focus to ⋮", ()
 	})
 	hooks.dialog = { focus, contains: () => false }
 
-	render(<TeamMenu teamName="Ninjas" />, true)
+	render(<TeamMenu teamName="Ninjas" phones={onePhone} savePhoneName={savePhoneName} />, true, null)
 	const [setOpen] = hooks.setters
 	hooks.effects[0]?.()
 	expect(listeners.has("pointerdown")).toBe(false)
@@ -100,7 +134,7 @@ it("offers a retry when the code cannot load", () => {
 })
 
 it("mounts a fresh loading dialog for each invitation", () => {
-	const html = render(<TeamMenu teamName="Ninjas" />, false, true)
+	const html = render(<TeamMenu teamName="Ninjas" phones={onePhone} savePhoneName={savePhoneName} />, false, "invite")
 	expect(html).toContain("<dialog")
 	expect(html).toContain("Loading…")
 })

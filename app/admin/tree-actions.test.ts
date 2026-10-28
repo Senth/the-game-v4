@@ -27,6 +27,7 @@ import {
 } from "./tree-actions"
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }))
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
 vi.mock("next/cache", () => ({ refresh: vi.fn() }))
 vi.mock("@/lib/events/bus", async (original) => ({
 	...(await original<typeof import("@/lib/events/bus")>()),

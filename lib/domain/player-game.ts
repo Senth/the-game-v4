@@ -18,13 +18,24 @@ import {
 	standingsRows,
 	standingsStrip,
 } from "./game"
-import type { Season, Team } from "./schemas"
+import type { Phone, Season, Team } from "./schemas"
+
+export type PlayerPhone = { name: string; you: boolean }
+
+export function playerPhones(phones: Phone[], phoneId: string | null, now: Date): PlayerPhone[] {
+	return phones
+		.filter((phone) => now.getTime() - phone.lastSeenAt.getTime() <= 600_000)
+		.map((phone) => ({ name: phone.name, you: phone.phoneId === phoneId }))
+		.sort((a, b) => Number(b.you) - Number(a.you) || a.name.localeCompare(b.name))
+}
 
 export type PlayerGame =
-	| { lifecycleState: "waiting" }
-	| { lifecycleState: "countdown"; start: Date }
+	| { lifecycleState: "waiting"; teamName: string; phones: PlayerPhone[] }
+	| { lifecycleState: "countdown"; start: Date; teamName: string; phones: PlayerPhone[] }
 	| {
 			lifecycleState: "running"
+			teamName: string
+			phones: PlayerPhone[]
 			teamId: string
 			finishers: PlayerFinisher[]
 			nextBonus: ReturnType<typeof nextOpenBonus>
@@ -103,14 +114,17 @@ export function playerGame(
 		| (Pick<Season, "start" | "end" | "arcs" | "finishers"> & Partial<Pick<Season, "finisherBonuses">>)
 		| null
 		| undefined,
-	team: Pick<Team, "_id" | "questOrder" | "questIndex" | "score" | "completed" | "progress">,
+	team: Pick<Team, "_id" | "name" | "questOrder" | "questIndex" | "score" | "completed" | "progress">,
 	teams: Pick<Team, "_id" | "name" | "score" | "progress">[],
 	now: Date,
 	puzzleAssets?: PuzzleAssets,
+	phones: Phone[] = [],
+	phoneId: string | null = null,
 ): PlayerGame {
 	const state = lifecycleState(season ?? null, team, now)
-	if (state === "waiting" || !season?.start) return { lifecycleState: "waiting" }
-	if (state === "countdown") return { lifecycleState: state, start: season.start }
+	const identity = { teamName: team.name, phones: playerPhones(phones, phoneId, now) }
+	if (state === "waiting" || !season?.start) return { lifecycleState: "waiting", ...identity }
+	if (state === "countdown") return { lifecycleState: state, start: season.start, ...identity }
 	const finishers = playerFinishers(season, teams)
 	if (state !== "running") {
 		return {
@@ -127,6 +141,7 @@ export function playerGame(
 	const teamPace = paceFromCounts({ ...season, ...counts, now })
 	return {
 		lifecycleState: state,
+		...identity,
 		teamId: team._id,
 		finishers,
 		nextBonus: nextOpenBonus(season),

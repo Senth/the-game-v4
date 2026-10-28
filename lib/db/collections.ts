@@ -1,5 +1,5 @@
 import type { Db } from "mongodb"
-import type { Admin, Season, Team } from "@/lib/domain/schemas"
+import type { Admin, Phone, Season, Team } from "@/lib/domain/schemas"
 import { getDb } from "./client"
 import type { PendingStructure } from "./structural-writes"
 
@@ -12,6 +12,7 @@ export function collectionsOf(db: Db) {
 		seasons: db.collection<Season & { pendingStructure?: PendingStructure }>("seasons"),
 		teams: db.collection<Team>("teams"),
 		admins: db.collection<Admin>("admins"),
+		phones: db.collection<Phone>("phones"),
 	}
 }
 
