@@ -12,7 +12,7 @@ export async function ensurePhone(
 	phoneId: string,
 	now: Date,
 ): Promise<{ phone: Phone; created: boolean }> {
-	const { phones } = await collections()
+	const { phones, teams } = await collections()
 	for (;;) {
 		const existing = await phones.findOne({ teamId, phoneId })
 		if (existing) return { phone: existing, created: false }
@@ -26,6 +26,10 @@ export async function ensurePhone(
 		})
 		try {
 			const result = await phones.updateOne({ teamId, phoneId }, { $setOnInsert: phone }, { upsert: true })
+			if (!(await teams.findOne({ _id: teamId }, { projection: { _id: 1 } }))) {
+				await removePhone(teamId, phoneId)
+				throw new NotFoundError(`Team ${teamId} not found`)
+			}
 			if (result.upsertedCount) return { phone, created: true }
 		} catch (error) {
 			if (!(error instanceof MongoServerError && error.code === 11000)) throw error

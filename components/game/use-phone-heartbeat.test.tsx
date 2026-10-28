@@ -1,7 +1,10 @@
-import type { EffectCallback } from "react"
+import type { EffectCallback, ReactElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { pingPhone } from "@/app/actions"
+import { QuestPreview } from "@/components/admin/quest-preview"
+import { TeamPreview } from "@/components/admin/team-preview"
+import { buildFixture } from "@/scripts/fixture"
 import { usePhoneHeartbeat } from "./use-phone-heartbeat"
 
 const hooks = vi.hoisted(() => ({ effects: [] as EffectCallback[] }))
@@ -13,6 +16,11 @@ vi.mock("react", async (importOriginal) => {
 	}
 })
 vi.mock("@/app/actions", () => ({ pingPhone: vi.fn() }))
+vi.mock("@/app/admin/actions", () => ({ getPuzzlePreviewAssets: vi.fn() }))
+vi.mock("@/components/admin/autosave-provider", () => ({
+	useDraftValue: (_target: unknown, value: unknown) => value,
+	useDraftHints: (_target: unknown, value: unknown) => value,
+}))
 
 const phones = [{ name: "Quiet Fox", you: true }]
 const onPhones = vi.fn()
@@ -23,9 +31,9 @@ function Harness() {
 	return null
 }
 
-function mount() {
+function mount(view: ReactElement = <Harness />) {
 	hooks.effects.length = 0
-	renderToStaticMarkup(<Harness />)
+	renderToStaticMarkup(view)
 	cleanup = hooks.effects.map((effect) => effect()).filter((stop): stop is () => void => !!stop)
 }
 
@@ -94,3 +102,41 @@ it("does not ping when initially hidden", async () => {
 	await vi.advanceTimersByTimeAsync(0)
 	expect(pingPhone).toHaveBeenCalledOnce()
 })
+
+it.each(["waiting", "countdown", "running", "quest"] as const)(
+	"never pings from the real %s preview with effects, timers and visibility changes",
+	async (state) => {
+		const now = Date.now()
+		const { season, teams } = buildFixture(new Date(now))
+		const team = teams.find((team) => team.name === "Ninjas")
+		if (!team) throw new Error("Missing Ninjas fixture")
+		const arc = season.arcs[0]
+		const quest = arc?.quests[0]
+		if (!arc || !quest) throw new Error("Missing quest fixture")
+		mount(
+			state === "quest" ? (
+				<QuestPreview season={season} arcId={arc.id} quest={quest} now={now} />
+			) : (
+				<TeamPreview
+					season={{
+						...season,
+						...(state === "waiting"
+							? { start: null, end: null }
+							: state === "countdown"
+								? { start: new Date(now + 600_000) }
+								: {}),
+					}}
+					team={team}
+					teams={teams}
+					now={now}
+				/>
+			),
+		)
+		await vi.advanceTimersByTimeAsync(240_000)
+		visible(true)
+		await vi.advanceTimersByTimeAsync(240_000)
+		visible(false)
+		await vi.advanceTimersByTimeAsync(240_000)
+		expect(pingPhone).not.toHaveBeenCalled()
+	},
+)

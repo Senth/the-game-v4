@@ -189,7 +189,7 @@ it.each(["list", "history"])(
 		const timing = { start: season.start, end: season.end, now }
 		const tick = () => provider(state, timing)
 		let page = await load()
-		const markup = () => render(scope(), () => renderToStaticMarkup(page))
+		const markup = () => render(scope(), () => renderToStaticMarkup(page), false)
 		let html = markup()
 		expect(html).not.toContain('aria-current="step"')
 		expect(html).not.toContain("w-5 shrink-0 text-xs text-muted")

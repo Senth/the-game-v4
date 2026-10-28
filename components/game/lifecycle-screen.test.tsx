@@ -3,8 +3,14 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { LifecycleScreen } from "./lifecycle-screen"
+import type { SavePhoneName } from "./name-dialog"
 
-const hooks = vi.hoisted(() => ({ mounted: false, effects: [] as EffectCallback[], cursor: 0 }))
+const hooks = vi.hoisted(() => ({
+	mounted: false,
+	effects: [] as EffectCallback[],
+	cursor: 0,
+	states: [] as unknown[],
+}))
 
 vi.mock("react", async (importOriginal) => {
 	const react = await importOriginal<typeof import("react")>()
@@ -15,7 +21,10 @@ vi.mock("react", async (importOriginal) => {
 			const index = hooks.cursor++
 			return index === 0
 				? [hooks.mounted, (mounted: boolean) => (hooks.mounted = mounted)]
-				: [typeof initial === "function" ? (initial as () => unknown)() : initial, vi.fn()]
+				: [
+						hooks.states[index] ?? (typeof initial === "function" ? (initial as () => unknown)() : initial),
+						(value: unknown) => (hooks.states[index] = value),
+					]
 		},
 	}
 })
@@ -28,11 +37,39 @@ beforeEach(() => {
 	hooks.mounted = false
 	hooks.effects.length = 0
 	hooks.cursor = 0
+	hooks.states = []
 })
 
 afterEach(() => vi.restoreAllMocks())
 
 describe("LifecycleScreen", () => {
+	it.each(["waiting", "countdown"] as const)(
+		"disables %s name edits until a deferred save finishes",
+		async (lifecycleState) => {
+			const game: LifecycleGame = {
+				lifecycleState,
+				start: new Date(now.getTime() + 60_000),
+				teamName: "Ninjas",
+				phones: [{ name: "Quiet Fox", you: true }],
+			}
+			let finish!: (result: Awaited<ReturnType<SavePhoneName>>) => void
+			const savePhoneName = vi.fn<SavePhoneName>(() => new Promise((resolve) => (finish = resolve)))
+			const props = { game, now, savePhoneName }
+			const screen = LifecycleScreen(props)
+			const form = screen.props.children[0].props.children[1].props.children[0]
+			const pending = form.props.onSubmit({ preventDefault: vi.fn() })
+			const html = () => {
+				hooks.cursor = 0
+				return renderToStaticMarkup(<LifecycleScreen {...props} />)
+			}
+			expect(savePhoneName).toHaveBeenCalledWith("Quiet Fox")
+			expect(html()).toMatch(/<input[^>]*disabled=""/)
+			finish({ phones: [{ name: "Quiet Fox", you: true }] })
+			await pending
+			expect(html()).not.toMatch(/<input[^>]*disabled=""/)
+		},
+	)
+
 	function render(
 		game: LifecycleGame,
 		options: { qr?: ReactNode; preview?: boolean } = {},

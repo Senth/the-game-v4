@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useTestDb } from "@/test/db"
 import { collections } from "./collections"
 import { deleteTeamPhones, ensurePhone, listTeamPhones, removePhone, renamePhone, touchPhone } from "./phones"
+import { createTeam } from "./teams"
 
 useTestDb()
 const now = new Date("2026-10-28T17:00:00Z")
@@ -11,9 +12,28 @@ const secondId = crypto.randomUUID()
 beforeEach(async () => {
 	vi.restoreAllMocks()
 	await (await collections()).phones.deleteMany({})
+	await (await collections()).teams.deleteMany({})
+	for (const _id of ["team", "other"]) {
+		await createTeam({
+			_id,
+			name: _id,
+			seasonId: "season",
+			passwordHash: "hash",
+			questOrder: [],
+			questIndex: 0,
+			score: 0,
+			completed: false,
+			progress: [],
+		})
+	}
 })
 
 describe("phones", () => {
+	it("rejects missing parents without leaving orphan phones", async () => {
+		await expect(ensurePhone("missing", firstId, now)).rejects.toThrow("Team missing not found")
+		expect(await listTeamPhones("missing")).toEqual([])
+	})
+
 	it("creates separate team/phone records and reuses existing identity unchanged", async () => {
 		const first = await ensurePhone("team", firstId, now)
 		expect(first.created).toBe(true)

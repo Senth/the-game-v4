@@ -114,6 +114,7 @@ export function LifecycleScreen({
 									id="lifecycle-name"
 									type="text"
 									value={name}
+									disabled={saving}
 									autoComplete="off"
 									onChange={(event) => {
 										setName(event.currentTarget.value)

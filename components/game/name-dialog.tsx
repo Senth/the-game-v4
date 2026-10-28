@@ -89,6 +89,7 @@ export function NameDialog({
 					id={`${titleId}-input`}
 					type="text"
 					value={value}
+					disabled={saving}
 					autoComplete="off"
 					onChange={(event) => {
 						setValue(event.currentTarget.value)

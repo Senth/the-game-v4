@@ -1,3 +1,4 @@
+import { Collection } from "mongodb"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { requireTeam } from "@/lib/auth/guards"
 import { joinToken, verifyJoinToken } from "@/lib/auth/join"
@@ -266,6 +267,18 @@ describe("resetTeamPasswordAction", () => {
 })
 
 describe("deleteTeamAction", () => {
+	it("rejects an in-flight phone upsert after the team-delete cascade finishes", async () => {
+		const team = await existing()
+		const updateOne = Collection.prototype.updateOne
+		vi.spyOn(Collection.prototype, "updateOne").mockImplementationOnce(async function (this: Collection, ...args) {
+			expect(await deleteTeamAction("season", team._id)).toEqual({ ok: true })
+			return updateOne.apply(this, args)
+		})
+		await expect(ensurePhone(team._id, crypto.randomUUID(), now)).rejects.toThrow(`Team ${team._id} not found`)
+		expect(await teams.getTeam(team._id)).toBeNull()
+		expect(await listTeamPhones(team._id)).toEqual([])
+	})
+
 	it.each([null, now, new Date(now.getTime() - 7_200_000)])(
 		"deletes at any start %j and invalidates old session and channels",
 		async (start) => {

@@ -1,7 +1,22 @@
-import { Fragment } from "react"
+"use client"
+
+import { useRouter } from "next/navigation"
+import { Fragment, useEffect } from "react"
 import type { Phone } from "@/lib/domain/schemas"
 
 export function TeamPhones({ phones, now }: { phones: Pick<Phone, "name" | "lastSeenAt">[]; now: Date }) {
+	const router = useRouter()
+	useEffect(() => {
+		const refresh = () => {
+			if (!document.hidden) router.refresh()
+		}
+		const timer = setInterval(refresh, 60_000)
+		document.addEventListener("visibilitychange", refresh)
+		return () => {
+			clearInterval(timer)
+			document.removeEventListener("visibilitychange", refresh)
+		}
+	}, [router])
 	const isHere = (phone: Pick<Phone, "lastSeenAt">) => now.getTime() - phone.lastSeenAt.getTime() <= 600_000
 	const ordered = [...phones].sort(
 		(left, right) => Number(!isHere(left)) - Number(!isHere(right)) || left.name.localeCompare(right.name),

@@ -15,7 +15,7 @@ vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
 	useState: (initial: unknown) => {
 		const index = hooks.cursor++
-		const set = vi.fn()
+		const set = vi.fn((value: unknown) => (hooks.states[index] = value))
 		hooks.setters[index] = set
 		return [hooks.states[index] ?? (typeof initial === "function" ? initial() : initial), set]
 	},
@@ -80,6 +80,21 @@ it("saves the current name and closes when accepted", async () => {
 	const dialog = tree()
 	await dialog.props.children.props.onSubmit({ preventDefault: vi.fn() })
 	expect(onSaveName).toHaveBeenCalledWith("Quiet Fox")
+	expect(close).toHaveBeenCalledOnce()
+})
+
+it("disables name edits until a deferred save finishes", async () => {
+	const close = vi.fn()
+	hooks.dialog = { close }
+	let finish!: (result: Awaited<ReturnType<SavePhoneName>>) => void
+	onSaveName.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+	const pending = tree().props.children.props.onSubmit({ preventDefault: vi.fn() })
+	expect(onSaveName).toHaveBeenCalledWith("Quiet Fox")
+	expect(render(hooks.states)).toMatch(/<input[^>]*disabled=""/)
+	expect(close).not.toHaveBeenCalled()
+	finish({ phones: [{ name: "Quiet Fox", you: true }] })
+	await pending
+	expect(render(hooks.states)).not.toMatch(/<input[^>]*disabled=""/)
 	expect(close).toHaveBeenCalledOnce()
 })
 
