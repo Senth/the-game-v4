@@ -5,6 +5,8 @@ import {
 	defaultPlaceRadius,
 	distanceMeters,
 	evaluateFix,
+	fadeStartMs,
+	fixAgeMs,
 	fixTtlMs,
 	guidanceBand,
 	guidanceFor,
@@ -13,6 +15,8 @@ import {
 	newPlace,
 	osmUrl,
 	parseCoordinates,
+	placeCoverage,
+	positionsPushMs,
 	trendFrom,
 	trendMinMeters,
 } from "./location"
@@ -72,10 +76,12 @@ describe("evaluateFix", () => {
 	const fix = { lat: place.lat, lng: place.lng, accuracy: 50, at: now }
 
 	it("keeps the agreed constants", () => {
-		expect({ defaultPlaceRadius, maxFixAccuracy, fixTtlMs }).toEqual({
+		expect({ defaultPlaceRadius, maxFixAccuracy, fixTtlMs, positionsPushMs, fadeStartMs }).toEqual({
 			defaultPlaceRadius: 40,
 			maxFixAccuracy: 50,
 			fixTtlMs: 30_000,
+			positionsPushMs: 5_000,
+			fadeStartMs: 20_000,
 		})
 	})
 
@@ -108,6 +114,84 @@ describe("evaluateFix", () => {
 		expect(evaluateFix(location, { ...fix, lat: 0 }, now)).toBe("outside")
 		expect(evaluateFix(location, fix, now)).toBe("inside")
 		expect({ location, fix }).toEqual(before)
+	})
+})
+
+describe("placeCoverage", () => {
+	const places = [0, 0.001, 0.002].map((lng, index) => ({ id: `place-${index}`, lat: 0, lng, radius: 40 }))
+	const fixes = new Map(places.map((place, index) => [`phone-${index}`, { ...place, accuracy: 10, at: 0 }]))
+
+	it.each([1, 2, 3])("covers %s places with distinct phones without changing inputs", (count) => {
+		const selected = places.slice(0, count)
+		const before = structuredClone({ selected, fixes })
+		expect(placeCoverage(selected, fixes)).toEqual({
+			held: Array.from({ length: count }, (_, index) => `phone-${index}`),
+			complete: true,
+		})
+		expect({ selected, fixes }).toEqual(before)
+	})
+
+	it("keeps uncovered places null, including when no phone is inside", () => {
+		expect(placeCoverage(places, new Map())).toEqual({ held: [null, null, null], complete: false })
+		expect(placeCoverage(places, new Map([["phone", { lat: 0, lng: 0.001, accuracy: 10, at: 0 }]]))).toEqual({
+			held: [null, "phone", null],
+			complete: false,
+		})
+	})
+
+	it("never uses one phone twice in overlapping circles and favors the lower place", () => {
+		const overlapping = places.map((place) => ({ ...place, lng: 0 }))
+		expect(
+			placeCoverage(overlapping.slice(0, 2), new Map([["phone", { lat: 0, lng: 0, accuracy: 10, at: 0 }]])),
+		).toEqual({
+			held: ["phone", null],
+			complete: false,
+		})
+	})
+
+	it.each([2, 3])("finds complete coverage for %s places when the first phone reaches every circle", (count) => {
+		const wide = places.slice(0, count).map((place) => ({ ...place, radius: 150 }))
+		const flexible = new Map([
+			["a-flexible", { lat: 0, lng: 0.001, accuracy: 10, at: 0 }],
+			["b-left", { lat: 0, lng: -0.001, accuracy: 10, at: 0 }],
+			...(count === 3 ? [["c-right", { lat: 0, lng: 0.003, accuracy: 10, at: 0 }] as const] : []),
+		])
+		expect(placeCoverage(wide, flexible)).toEqual({
+			held: count === 2 ? ["b-left", "a-flexible"] : ["b-left", "a-flexible", "c-right"],
+			complete: true,
+		})
+	})
+
+	it("breaks equal-count ties by lower place numbers even when an earlier permutation covers a later place", () => {
+		const overlapping = [0, 0.001, -0.001].map((lng, index) => ({ id: `place-${index}`, lat: 0, lng, radius: 100 }))
+		const partial = new Map([
+			["a-right", { lat: 0, lng: 0.0005, accuracy: 10, at: 0 }],
+			["b-left", { lat: 0, lng: -0.0005, accuracy: 10, at: 0 }],
+		])
+		expect(placeCoverage(overlapping, partial)).toEqual({ held: ["b-left", "a-right", null], complete: false })
+		expect(placeCoverage(overlapping, new Map([...partial].reverse()))).toEqual(placeCoverage(overlapping, partial))
+	})
+
+	it("includes the exact haversine radius without expanding by accuracy", () => {
+		const fix = { lat: 0, lng: 0.0001, accuracy: 50, at: 0 }
+		const place = { id: "edge", lat: 0, lng: 0, radius: distanceMeters({ lat: 0, lng: 0 }, fix) }
+		expect(placeCoverage([place], new Map([["phone", fix]]))).toEqual({ held: ["phone"], complete: true })
+		expect(placeCoverage([{ ...place, radius: place.radius - 0.000001 }], new Map([["phone", fix]]))).toEqual({
+			held: [null],
+			complete: false,
+		})
+	})
+})
+
+describe("fixAgeMs", () => {
+	it.each([
+		[0, 0, 30_000, 30_000],
+		[0, 0, 30_001, 30_001],
+		[0, 30_001, 30_001, 30_001],
+		[30_000, 0, 30_001, 30_001],
+		[0, 10_000, 20_000, 20_000],
+	])("ages timestamp %s received at %s, now %s, as %s", (at, receivedAt, now, age) => {
+		expect(fixAgeMs({ lat: 0, lng: 0, accuracy: 10, at }, receivedAt, now)).toBe(age)
 	})
 })
 

@@ -1,4 +1,4 @@
-import { type Fix, fixTtlMs, guidanceWindowMs } from "@/lib/domain/location"
+import { type Fix, fixAgeMs, fixTtlMs, guidanceWindowMs } from "@/lib/domain/location"
 
 type PhoneFix = { teamId: string; phoneId: string; fix: Fix; receivedAt: number }
 type GuidanceHistory = { questId: string; fixes: { fix: Fix; receivedAt: number }[] }
@@ -13,7 +13,7 @@ const histories = cache.theGameGuidanceHistory
 
 function prune(now: number) {
 	for (const [key, { fix, receivedAt }] of fixes) {
-		if (now - fix.at > fixTtlMs || now - receivedAt > fixTtlMs) fixes.delete(key)
+		if (fixAgeMs(fix, receivedAt, now) > fixTtlMs) fixes.delete(key)
 	}
 }
 

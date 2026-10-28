@@ -36,6 +36,15 @@ describe("phone fixes", () => {
 		recordFix(team, "new", { ...fix, at: now + fixTtlMs + 1 }, now + fixTtlMs + 1)
 		expect([...latestFixes(team, now + fixTtlMs + 1).keys()]).toEqual(["new"])
 	})
+
+	it("expires an old fix timestamp despite a fresh receipt", () => {
+		const now = Date.now()
+		const team = crypto.randomUUID()
+		const fix = { lat: 55, lng: 13, accuracy: 10, at: now - fixTtlMs }
+		recordFix(team, "phone", fix, now)
+		expect(latestFixes(team, now).get("phone")).toEqual(fix)
+		expect(latestFixes(team, now + 1).size).toBe(0)
+	})
 })
 
 describe("guidance history", () => {

@@ -42,6 +42,10 @@ Test antimeridian-safe bounds and Nominatim bounding-box conversion without muta
 Check legacy `mapArea` reads as null, coordinate and zoom rounding, and rejection outside latitude, longitude and zoom ranges.
 Test accuracy, age, future-time and radius boundaries on both sides, including equality.
 Cover completeness without answers, missing places, legacy defaults and unchanged inputs.
+Cover 1-, 2- and 3-place distinct-phone coverage, incomplete coverage and overlapping circles where one phone
+reaches several places. Check a valid full assignment is found even when the first phone can hold every place.
+Test deterministic maximum coverage, ties favoring lower place numbers, inclusive radius edges and unchanged inputs.
+Schemas accept 1–3 places, reject 0 and 4, and require map guidance for 2 or 3, including absent legacy guidance.
 Test guidance bands on both sides of and at `r`, `3r` and `10r`; inside still solves without guidance.
 Cover initial great-circle cardinal bearings, north wraparound and date-line crossing.
 Verify WMM2025 declination at the fix (Svedala is about 5.5° east in October 2026), subtraction and integer wrapping.
@@ -57,6 +61,8 @@ Assert only successful solves publish live events; rejected and outside reports 
 Test backup answers and authorized solved-location earnings for teammate completion feedback.
 
 Test latest-fix replacement, team/phone isolation and expiry on reads and writes, including future-dated fixes.
+Check `fixAgeMs` uses the older of the fix timestamp and server receipt: 30 000 ms counts, 30 001 ms expires,
+and an old `at` expires despite a fresh `receivedAt`. Keep the 5-second push and 20-second fade constants explicit.
 Test separate UUID phone cookies across shared-login phones, stable reuse, malformed-cookie replacement
 and required cookie attributes.
 Assert the phone id never enters the session payload.
