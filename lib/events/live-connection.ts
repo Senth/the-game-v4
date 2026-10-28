@@ -1,3 +1,5 @@
+import type { Positions } from "@/lib/game/positions"
+
 export type LiveSource = Pick<EventSource, "readyState" | "close" | "onopen" | "onmessage" | "onerror">
 
 const CLOSED = 2
@@ -8,11 +10,13 @@ export function createLiveConnection<T>({
 	url,
 	fetcher,
 	onData,
+	onPositions,
 	createEventSource,
 }: {
 	url: string
 	fetcher: () => Promise<T>
 	onData: (data: T) => void
+	onPositions?: (data: Positions) => void
 	createEventSource: (url: string) => LiveSource
 }) {
 	let source: LiveSource | null = null
@@ -68,7 +72,21 @@ export function createLiveConnection<T>({
 		reconnectTimer = undefined
 		source?.close()
 		source = createEventSource(url)
-		source.onmessage = () => void refetch()
+		source.onmessage = (event) => {
+			if (stopped) return
+			if (event?.data) {
+				try {
+					const message = JSON.parse(event.data)
+					if (message.data !== undefined) {
+						onPositions?.(message.data)
+						return
+					}
+				} catch {
+					return
+				}
+			}
+			void refetch()
+		}
 		source.onopen = () => {
 			disconnected = false
 			stopPolling()

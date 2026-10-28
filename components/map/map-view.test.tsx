@@ -82,6 +82,7 @@ const fake = vi.hoisted(() => {
 		setDraggable = vi.fn(() => this)
 		remove = vi.fn()
 		constructor(public options: { element: HTMLElement; draggable: boolean }) {
+			options.element.className = `${options.element.className} maplibregl-marker`.trim()
 			Marker.instances.push(this)
 		}
 		on(name: string, callback: () => void) {
@@ -142,9 +143,21 @@ beforeEach(() => {
 			const attributes: Record<string, string> = {}
 			const element = {
 				className: "",
+				classList: {
+					toggle: (name: string, force: boolean): boolean => {
+						const classes = new Set(element.className.split(" ").filter(Boolean))
+						if (force) classes.add(name)
+						else classes.delete(name)
+						element.className = [...classes].join(" ")
+						return force
+					},
+				},
 				dataset: {},
 				textContent: "",
-				children: [] as { textContent: string }[],
+				children: [] as { textContent: string; className?: string }[],
+				get firstElementChild(): { textContent: string; className?: string } | undefined {
+					return element.children[0]
+				},
 				setAttribute: vi.fn((name: string, value: string) => (attributes[name] = value)),
 				getAttribute: vi.fn((name: string) => attributes[name] ?? null),
 				append: vi.fn((child: { textContent: string }) => element.children.push(child)),
@@ -153,7 +166,8 @@ beforeEach(() => {
 		},
 	})
 	vi.stubGlobal("getComputedStyle", () => ({
-		getPropertyValue: (key: string) => (key === "--color-head" ? "#bbdefb" : "#1c7dc8"),
+		getPropertyValue: (key: string) =>
+			key === "--color-head" ? "#bbdefb" : key === "--color-pace-ok" ? "#4ade80" : "#1c7dc8",
 	}))
 })
 
@@ -213,7 +227,7 @@ describe("MapView", () => {
 			expect.objectContaining({
 				features: [
 					expect.objectContaining({
-						properties: { number: 1 },
+						properties: { number: 1, held: false },
 						geometry: { type: "Polygon", coordinates: [circleRing(nextCircle, 90)] },
 					}),
 				],
@@ -227,22 +241,52 @@ describe("MapView", () => {
 			}),
 		)
 		expect(map.addLayer.mock.calls.map(([layer]) => layer.paint)).toEqual([
-			{ "fill-color": "#bbdefb", "fill-opacity": 0.2 },
-			{ "line-color": "#bbdefb", "line-width": 2.5 },
+			{ "fill-color": ["case", ["get", "held"], "#4ade80", "#bbdefb"], "fill-opacity": 0.2 },
+			{ "line-color": ["case", ["get", "held"], "#4ade80", "#bbdefb"], "line-width": 2.5 },
 			{ "fill-color": "#1c7dc8", "fill-opacity": 0.2 },
 			{ "line-color": "#1c7dc8", "line-width": 1 },
 		])
-		const ownDot = fake.Marker.instances.find((marker) => marker.options.element.className === "map-own-dot")
+		const ownDot = fake.Marker.instances.find((marker) => marker.options.element.className.includes("map-own-dot"))
 		render({ circles: [circle], dot })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(fake.Map.instances).toHaveLength(1)
-		expect(fake.Marker.instances).toHaveLength(1)
+		expect(fake.Marker.instances).toHaveLength(2)
 		expect(map.addSource).toHaveBeenCalledTimes(2)
 		render({})
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(map.sources.place?.setData).toHaveBeenLastCalledWith({ type: "FeatureCollection", features: [] })
 		expect(map.sources.accuracy?.setData).toHaveBeenLastCalledWith({ type: "FeatureCollection", features: [] })
 		expect(ownDot?.remove).toHaveBeenCalledOnce()
+	})
+
+	it("renders held and empty numbered badges and updates teammate labels, fading and expiry", () => {
+		const circles = [circle, { ...circle, number: 2, lat: 55.51, held: true }]
+		const phone = { name: "Keen <Otter>", lat: 55.52, lng: 13.21, ageMs: 19_999 }
+		const { map } = mount({ circles, teammates: [phone] })
+		map.fire("load")
+		const [empty, held, teammate] = fake.Marker.instances
+		expect(empty?.options.element.getAttribute("aria-label")).toBe("Place 1 · Empty")
+		expect(held?.options.element.getAttribute("aria-label")).toBe("Place 2 · Held")
+		expect(held?.options.element.dataset.held).toBe("true")
+		expect(empty?.setLngLat).toHaveBeenLastCalledWith(circleRing(circle, circle.radius, 4)[0])
+		expect([empty, held].map((marker) => marker?.options.element.children[0]?.textContent)).toEqual(["1", "2"])
+		expect(teammate?.options.element.className).toContain("map-teammate-dot")
+		for (const marker of [empty, held, teammate])
+			expect(marker?.options.element.className).toContain("maplibregl-marker")
+		expect(teammate?.options.element.children[0]?.textContent).toBe("Keen <Otter>")
+		expect(teammate?.options.draggable).toBe(false)
+		for (const ageMs of [20_000, 29_999]) {
+			render({ circles, teammates: [{ ...phone, ageMs }] })
+			for (const effect of hooks.effects.slice(1)) effect()
+			expect(teammate?.options.element.className).toContain("opacity-50")
+			expect(teammate?.options.element.className).toContain("maplibregl-marker")
+			expect(teammate?.options.element.children[0]?.className).toContain("motion-safe:animate-pulse")
+			expect(teammate?.options.element.children[0]?.textContent).toBe(`Keen <Otter> · ${Math.floor(ageMs / 1000)} s`)
+		}
+		render({ circles, teammates: [{ ...phone, ageMs: 30_000 }] })
+		for (const effect of hooks.effects.slice(1)) effect()
+		expect(teammate?.remove).toHaveBeenCalledOnce()
+		expect(map.fitBounds).not.toHaveBeenCalled()
 	})
 
 	it("saves rounded pin moves and clamped handle resizes only on release", () => {

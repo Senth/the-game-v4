@@ -55,3 +55,44 @@
 	border-radius: 50%;
 	background: var(--color-accent);
 }
+
+.map-place-badge {
+	width: calc(var(--spacing) * 6);
+	height: calc(var(--spacing) * 6);
+}
+
+.map-place-badge .map-pin {
+	border-width: 2px;
+}
+
+.map-place-badge[data-held="true"] .map-pin {
+	border-color: var(--color-pace-ok);
+	background: var(--color-pace-ok);
+	color: var(--color-z0);
+}
+
+.map-teammate-dot {
+	width: calc(var(--spacing) * 3);
+	height: calc(var(--spacing) * 3);
+	border: 2px solid var(--color-z0);
+	border-radius: 50%;
+	background: var(--color-link);
+}
+
+.map-teammate-name {
+	position: absolute;
+	top: calc(100% + var(--spacing));
+	left: 50%;
+	max-width: calc(var(--spacing) * 40);
+	width: max-content;
+	transform: translateX(-50%);
+	padding: 0 var(--spacing);
+	border-radius: var(--radius-md);
+	background: var(--color-z0);
+	color: var(--color-ink);
+	font-family: var(--font-cond);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	text-align: center;
+	overflow-wrap: anywhere;
+}

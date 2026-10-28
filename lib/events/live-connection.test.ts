@@ -4,7 +4,7 @@ import { createLiveConnection, type LiveSource } from "./live-connection"
 class FakeSource implements LiveSource {
 	readyState = 0
 	onopen: (() => void) | null = null
-	onmessage: (() => void) | null = null
+	onmessage: ((event?: MessageEvent) => void) | null = null
 	onerror: (() => void) | null = null
 	close = vi.fn(() => {
 		this.readyState = 2
@@ -30,10 +30,12 @@ function deferred<T>() {
 function setup(fetcher: () => Promise<number> = vi.fn(async () => 1)) {
 	const sources: FakeSource[] = []
 	const onData = vi.fn()
+	const onPositions = vi.fn()
 	const connection = createLiveConnection({
 		url: "/api/events?channel=board",
 		fetcher,
 		onData,
+		onPositions,
 		createEventSource: (url) => {
 			expect(url).toBe("/api/events?channel=board")
 			const source = new FakeSource()
@@ -42,7 +44,7 @@ function setup(fetcher: () => Promise<number> = vi.fn(async () => 1)) {
 		},
 	})
 	connection.start()
-	return { connection, sources, onData, fetcher, source: () => sources.at(-1) as FakeSource }
+	return { connection, sources, onData, onPositions, fetcher, source: () => sources.at(-1) as FakeSource }
 }
 
 beforeEach(() => {
@@ -54,6 +56,23 @@ afterEach(() => {
 })
 
 describe("createLiveConnection", () => {
+	it("routes positions payloads directly without a refetch and ignores late or invalid messages", async () => {
+		const { connection, source, onPositions, fetcher } = setup()
+		const data = {
+			places: [{ held: true }],
+			phones: [{ name: "Keen Otter", lat: 55, lng: 13, ageMs: 20_000, place: 1 }],
+		}
+		const message = { data: JSON.stringify({ channel: "positions:team", data }) } as MessageEvent
+		source().onmessage?.(message)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(onPositions).toHaveBeenCalledExactlyOnceWith(data)
+		expect(fetcher).not.toHaveBeenCalled()
+		source().onmessage?.({ data: "invalid" } as MessageEvent)
+		expect(fetcher).not.toHaveBeenCalled()
+		connection.stop()
+		source().onmessage?.(message)
+		expect(onPositions).toHaveBeenCalledOnce()
+	})
 	it("refetches on message", async () => {
 		const { source, onData } = setup()
 		source().open()

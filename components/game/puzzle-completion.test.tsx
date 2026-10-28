@@ -2,6 +2,7 @@ import type { EffectCallback, ReactElement } from "react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { dropPuzzlePiece, getGame, getSolvedLocation, getSolvedPuzzle } from "@/app/actions"
 import { type PlayerGame, playerGame } from "@/lib/domain/player-game"
+import type { Positions } from "@/lib/game/positions"
 import { buildFixture } from "@/scripts/fixture"
 import { GameScreen } from "./game-screen"
 import type { GameView } from "./game-view"
@@ -14,6 +15,9 @@ const hooks = vi.hoisted(() => ({
 	dirty: false,
 	game: null as PlayerGame | null,
 	effect: undefined as EffectCallback | undefined,
+	channels: [] as string[],
+	scope: undefined as string | undefined,
+	receivePositions: undefined as ((data: Positions) => void) | undefined,
 }))
 vi.mock("react", async (original) => ({
 	...(await original<typeof import("react")>()),
@@ -44,12 +48,23 @@ vi.mock("@/app/actions", () => ({
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("@/lib/events/use-live-state", () => ({
-	useLiveState: () => [
-		hooks.game,
-		(next: PlayerGame) => {
-			hooks.game = next
-		},
-	],
+	useLiveState: (
+		_fetcher: unknown,
+		channels: (state: PlayerGame) => string[],
+		_initial: PlayerGame,
+		options: { onPositions: (data: Positions) => void; scope: (state: PlayerGame) => string | undefined },
+	) => {
+		if (!hooks.game) throw new Error("Missing game")
+		hooks.channels = channels(hooks.game)
+		hooks.scope = options.scope(hooks.game)
+		hooks.receivePositions = options.onPositions
+		return [
+			hooks.game,
+			(next: PlayerGame) => {
+				hooks.game = next
+			},
+		]
+	},
 }))
 vi.mock("@/lib/events/use-finisher-notices", () => ({ useFinisherNotices: () => ({ notice: null }) }))
 vi.mock("./use-game-clock", () => ({ useGameClock: () => new Date("2026-10-15T18:00:00Z") }))
@@ -99,6 +114,48 @@ beforeEach(() => {
 	vi.mocked(getSolvedPuzzle).mockResolvedValue({ ids: ["a", "b", "c", "d"], pointsEarned: 7 })
 })
 afterEach(() => vi.useRealTimers())
+
+it("subscribes only on current map quests, scopes quest changes and clears positions on solve", () => {
+	if (!locationInitial.quest) throw new Error("Expected location fixture")
+	const quest = {
+		...locationInitial.quest,
+		location: { guidance: "map" as const, places: [{ lat: 55, lng: 13, radius: 40 }] },
+	}
+	hooks.game = { ...locationInitial, quest, phones: [{ name: "Bold Fox", you: true }] }
+	render()
+	expect(hooks.channels).toEqual([`positions:${base.teamId}`])
+	expect(hooks.scope).toBe(quest.id)
+	const data = { places: [{ held: true }], phones: [{ name: "Bold Fox", lat: 55, lng: 13, ageMs: 19_000, place: 1 }] }
+	hooks.receivePositions?.(data)
+	let view = render().props
+	if (view.preview) throw new Error("Expected live game")
+	expect(view.positions).toEqual(data)
+	expect(view.you).toBe("Bold Fox")
+	vi.advanceTimersByTime(1000)
+	view = render().props
+	if (view.preview) throw new Error("Expected live game")
+	expect(view.positions?.phones[0]?.ageMs).toBe(20_000)
+	vi.advanceTimersByTime(10_000)
+	view = render().props
+	if (view.preview) throw new Error("Expected live game")
+	expect(view.positions).toEqual({ places: [{ held: false }], phones: [] })
+	hooks.game = { ...locationInitial, quest: { ...quest, id: "next-map" } }
+	render()
+	expect(hooks.scope).toBe("next-map")
+	expect(render().props).toHaveProperty("positions", undefined)
+	hooks.game = { lifecycleState: "completed", teamId: base.teamId, score: 50, rank: 1, teamCount: 10, finishers: [] }
+	render()
+	expect(hooks.channels).toEqual([])
+	expect(hooks.scope).toBeUndefined()
+})
+
+it.each(["none", "warmer"] as const)("does not subscribe to positions for %s guidance", (guidance) => {
+	if (!locationInitial.quest) throw new Error("Expected location fixture")
+	hooks.game = { ...locationInitial, quest: { ...locationInitial.quest, location: { guidance } } }
+	render()
+	expect(hooks.channels).toEqual([])
+	expect(hooks.scope).toBeUndefined()
+})
 
 it.each(["next", "completed"])("holds a teammate's solved picture for 1.5 seconds before %s", async (destination) => {
 	render()

@@ -5,6 +5,7 @@ import type { PlayerFinisher } from "@/lib/domain/finishers"
 import type { PaceBand, PlayerQuest, RailArc, StripEntry } from "@/lib/domain/game"
 import type { Spot } from "@/lib/domain/schemas"
 import type { useFinisherNotices } from "@/lib/events/use-finisher-notices"
+import type { Positions } from "@/lib/game/positions"
 import { AnswerDock, type AnswerFeedback } from "./answer-dock"
 import { FinishRibbon } from "./finish-ribbon"
 import { GameHeader } from "./game-header"
@@ -40,6 +41,8 @@ type GameViewProps = {
 			onDecryptComplete: (hintId: string) => void
 			onPuzzleDrop?: (pieceId: string, target: Spot) => Promise<void>
 			locationStatus?: LocationStatus
+			positions?: Positions
+			you?: string
 			compass?: ReturnType<typeof useCompass>
 			onShareLocation?: () => void
 	  }
@@ -100,6 +103,8 @@ export function GameView(props: GameViewProps) {
 							quest={quest}
 							preview={!!props.preview}
 							position={live?.locationStatus?.position}
+							positions={live?.positions}
+							you={live?.you}
 							onPuzzleDrop={live?.onPuzzleDrop}
 							puzzleComplete={props.puzzleComplete}
 						/>
@@ -130,6 +135,9 @@ export function GameView(props: GameViewProps) {
 								hasAnswers={quest.hasAnswers === true}
 								guidanceEnabled={quest.location.guidance === "warmer"}
 								mapEnabled={quest.location.guidance === "map"}
+								placeCount={quest.location.guidance === "map" ? quest.location.places.length : 1}
+								positions={live.positions}
+								you={live.you}
 								answer={live.answer}
 								onAnswerChange={live.onAnswerChange}
 								onSubmit={live.onSubmit}
@@ -137,7 +145,11 @@ export function GameView(props: GameViewProps) {
 								feedback={live.feedback}
 							/>
 						) : (
-							<LocationDock preview hasAnswers={quest.hasAnswers === true} />
+							<LocationDock
+								preview
+								hasAnswers={quest.hasAnswers === true}
+								placeCount={quest.location.guidance === "map" ? quest.location.places.length : 1}
+							/>
 						)
 					) : live ? (
 						<AnswerDock

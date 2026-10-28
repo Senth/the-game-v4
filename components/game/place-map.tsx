@@ -4,31 +4,50 @@ import { useMemo, useState } from "react"
 import LazyMap from "@/components/map/lazy-map"
 import { boundsFor, circleRing } from "@/lib/domain/map"
 import type { Place } from "@/lib/domain/schemas"
+import type { Positions } from "@/lib/game/positions"
 
 type MapPlace = Pick<Place, "lat" | "lng" | "radius">
 type Position = { lat: number; lng: number; accuracy: number }
 
-export function PlaceMap({ place, position, preview }: { place: MapPlace; position?: Position; preview: boolean }) {
+export function PlaceMap({
+	places,
+	position,
+	positions,
+	you,
+	preview,
+}: {
+	places: MapPlace[]
+	position?: Position
+	positions?: Positions
+	you?: string
+	preview: boolean
+}) {
 	const [manual, setManual] = useState(false)
+	const ownPosition = preview ? undefined : position
 	const framing = useMemo(
 		() =>
 			manual
 				? null
 				: {
 						bounds: boundsFor([
-							...circleRing(place, place.radius),
-							...(position ? ([[position.lng, position.lat]] as [number, number][]) : []),
+							...places.flatMap((place) => circleRing(place, place.radius)),
+							...(ownPosition ? ([[ownPosition.lng, ownPosition.lat]] as [number, number][]) : []),
 						]),
 					},
-		[manual, place, position],
+		[manual, places, ownPosition],
 	)
 
 	return (
 		<div className="relative w-full">
 			<LazyMap
 				aspectRatio="4/3"
-				circles={[{ ...place, number: 1 }]}
-				dot={preview ? null : (position ?? null)}
+				circles={places.map((place, index) => ({
+					...place,
+					number: index + 1,
+					held: !preview && !!positions?.places[index]?.held,
+				}))}
+				dot={ownPosition ?? null}
+				teammates={preview ? [] : positions?.phones.filter((phone) => phone.name !== you)}
 				framing={framing}
 				interactive={!preview}
 				onMoveEnd={(_, moved) => {

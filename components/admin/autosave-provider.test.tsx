@@ -394,7 +394,7 @@ it("keeps mounted editor and preview geometry valid while removing and adding pl
 		if (location?.guidance !== "map") return null
 		const point = location.places[0]
 		if (!point) throw new Error("Missing preview place")
-		const tree = render(map, () => PlaceMap({ place: point, preview: true }))
+		const tree = render(map, () => PlaceMap({ places: [point], preview: true }))
 		return (tree.props.children[0] as ReactElement<MapViewProps>).props
 	}
 	const assertGeometry = (expected: typeof place) => {

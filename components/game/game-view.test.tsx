@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
+import type { MapViewProps } from "@/components/map/map-view"
 import type { PlayerQuest, RailArc } from "@/lib/domain/game"
 import { GameView } from "./game-view"
 import { Intel } from "./intel"
@@ -12,8 +13,12 @@ vi.mock("next/dynamic", async () => {
 	return { default: () => PlaceMap }
 })
 vi.mock("@/components/map/lazy-map", () => ({
-	default: ({ dot }: { dot: { lat: number; lng: number; accuracy: number } | null }) => (
-		<div data-own-position={dot ? `${dot.lat},${dot.lng},${dot.accuracy}` : undefined} />
+	default: ({ dot, circles, teammates }: MapViewProps) => (
+		<div
+			data-own-position={dot ? `${dot.lat},${dot.lng},${dot.accuracy}` : undefined}
+			data-circles={JSON.stringify(circles)}
+			data-teammates={JSON.stringify(teammates)}
+		/>
 	),
 }))
 
@@ -33,6 +38,43 @@ const quest: PlayerQuest = {
 const rail: RailArc[] = [{ arcId: "arc-one", segments: [{ questId: "quest-one", state: "current" }] }]
 
 describe("GameView preview", () => {
+	it.each([true, "team"] as const)(
+		"shows all empty numbered map places without positions or subscriptions in preview=%s",
+		(preview) => {
+			const eventSource = vi.fn()
+			vi.stubGlobal("EventSource", eventSource)
+			try {
+				const html = renderToStaticMarkup(
+					<GameView
+						timeLeftMs={0}
+						pace={null}
+						rail={rail}
+						quest={{
+							...quest,
+							location: {
+								guidance: "map",
+								places: [
+									{ lat: 55, lng: 13, radius: 40 },
+									{ lat: 55.1, lng: 13, radius: 40 },
+									{ lat: 55.2, lng: 13, radius: 40 },
+								],
+							},
+							hasAnswers: false,
+						}}
+						preview={preview}
+					/>,
+				)
+				expect(html.match(/&quot;held&quot;:false/g)).toHaveLength(3)
+				for (const number of [1, 2, 3]) expect(html).toContain(`&quot;number&quot;:${number}`)
+				expect(html.match(/· Empty/g)).toHaveLength(3)
+				expect(html).toContain('data-teammates="[]"')
+				expect(html).not.toContain("data-own-position=")
+				expect(eventSource).not.toHaveBeenCalled()
+			} finally {
+				vi.unstubAllGlobals()
+			}
+		},
+	)
 	it.each([true, "team"] as const)("keeps location preview=%s Off and hides codes without answers", (preview) => {
 		for (const hasAnswers of [true, false]) {
 			const html = renderToStaticMarkup(
