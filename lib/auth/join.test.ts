@@ -10,6 +10,10 @@ import { getSession, type SessionData, sessionOptions } from "./session"
 
 const session = vi.hoisted(() => ({ kind: "admin" as SessionData["kind"], id: "a1", save: vi.fn() }))
 
+vi.mock("next/headers", () => ({
+	cookies: async () => ({ get: () => undefined, set: vi.fn() }),
+}))
+
 vi.mock("./session", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./session")>()),
 	getSession: vi.fn(async () => session),

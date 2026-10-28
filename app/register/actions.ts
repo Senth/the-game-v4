@@ -1,6 +1,7 @@
 "use server"
 
 import { redirect } from "next/navigation"
+import { ensurePhoneCookie } from "@/lib/auth/phone"
 import { registerTeam } from "@/lib/auth/register"
 import { getSession } from "@/lib/auth/session"
 
@@ -23,6 +24,7 @@ export async function register(_prev: RegisterState, formData: FormData): Promis
 	const session = await getSession()
 	session.kind = "team"
 	session.id = result.team._id
+	await ensurePhoneCookie()
 	await session.save()
 	redirect("/")
 }

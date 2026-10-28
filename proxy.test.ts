@@ -7,6 +7,20 @@ import { proxy } from "./proxy"
 afterEach(() => vi.unstubAllEnvs())
 
 describe("phone identity in proxy", () => {
+	it.each([
+		"/_next/static/chunks/game.js",
+		"/_next/image?url=icon.svg&w=64&q=75",
+		"/assets/quest.png",
+		"/icon.svg",
+		"/favicon.ico",
+	])("never lets a stale static request for %s replace the phone cookie", async (path) => {
+		const seal = await sealData({ kind: "team", id: "team" }, sessionOptions())
+		const request = new NextRequest(`https://game.example${path}`, {
+			headers: { cookie: `${sessionOptions().cookieName}=${seal}` },
+		})
+		expect((await proxy(request)).cookies.getAll()).toEqual([])
+	})
+
 	it.each([undefined, "not-a-uuid"])("replaces %j and forwards cookie to the first render", async (phoneId) => {
 		vi.stubEnv("NODE_ENV", "production")
 		vi.stubEnv("SESSION_SECRET", "phone-test-secret-at-least-32-characters")

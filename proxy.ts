@@ -5,6 +5,14 @@ import { routeFor } from "@/lib/auth/routes"
 import { type SessionData, sessionOptions } from "@/lib/auth/session"
 
 export async function proxy(request: NextRequest) {
+	const pathname = request.nextUrl.pathname
+	if (
+		pathname.startsWith("/_next/") ||
+		pathname.startsWith("/assets/") ||
+		pathname === "/icon.svg" ||
+		pathname === "/favicon.ico"
+	)
+		return NextResponse.next()
 	const { cookieName, password, ttl } = sessionOptions()
 	const seal = request.cookies.get(cookieName)?.value
 	const data: Partial<SessionData> = seal
