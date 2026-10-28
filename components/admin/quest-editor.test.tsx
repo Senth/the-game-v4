@@ -212,7 +212,7 @@ it("renders fields in M2 order with helper text, desktop pairs and quiet removal
 		"File",
 		"Answers",
 		"Points",
-		"Place",
+		"Places",
 		"Puzzle",
 		"Admin notes",
 	]
@@ -225,7 +225,7 @@ it("renders fields in M2 order with helper text, desktop pairs and quiet removal
 	expect(view.html).toContain("Players get shuffled pieces, never the picture.")
 	expect(view.html).toContain("max-w-2xl")
 	expect(view.html.match(/lg:grid-cols-2 lg:gap-5/g)).toHaveLength(2)
-	expect(view.html.match(/<input/g)).toHaveLength(7)
+	expect(view.html.match(/<input/g)).toHaveLength(5)
 	expect(view.html).toMatch(/rows="5"[^>]*font-mono/)
 	expect(view.html).toMatch(/rows="1"[^>]*font-body/)
 	expect(view.html).toContain("mt-8 border-t border-z1")
@@ -332,7 +332,7 @@ it("allows location quests to omit answers and shows backup-code helper", () => 
 	})
 	expect(view.html).toContain("optional backup codes, arriving solves it")
 	expect(view.html).not.toContain("Needs an answer")
-	expect(view.html).toContain("Getting within the radius solves it. Players never see the coordinates.")
+	expect(view.html).toContain("A different teammate inside every circle at once solves it.")
 })
 
 it("uses unsaved location and puzzle values for mutual exclusion", () => {
@@ -348,7 +348,7 @@ it("uses unsaved location and puzzle values for mutual exclusion", () => {
 	}))
 	const withLocation = render({ quest: { ...defaults.quest, answers: [] } })
 	expect(withLocation.html).toContain("Puzzle mode is off while this quest has a place.")
-	expect(withLocation.html).toContain("Getting within the radius solves it. Players never see the coordinates.")
+	expect(withLocation.html).toContain("A different teammate inside every circle at once solves it.")
 	vi.mocked(useDraftValue).mockImplementation((target, value) =>
 		target.field === "puzzle" ? { rows: 4, cols: 4, showFull: false } : value,
 	)
@@ -619,9 +619,9 @@ it.each(["live", "ended"] as const)("shows removal only while live and keeps all
 		expect(view.remove).toBeUndefined()
 		expect(view.html).not.toContain("Remove quest")
 	}
-	expect(view.html.match(/<input/g)).toHaveLength(7)
+	expect(view.html.match(/<input/g)).toHaveLength(5)
 	expect(view.html.match(/<textarea/g)).toHaveLength(2)
-	expect(view.html).not.toMatch(/aria-label="Place coordinates"[^>]*disabled=""/)
+	expect(view.html).not.toMatch(/aria-label="Place 1 coordinates"[^>]*disabled=""/)
 	expect(view.html).not.toContain('readonly=""')
 })
 

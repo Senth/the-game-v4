@@ -648,17 +648,22 @@ export async function setSeasonField(seasonId: string, target: SeasonFieldTarget
 				if (target.field === "location") {
 					const next = parsed as Quest["location"]
 					if (next && quest.puzzle) throw new LocationEditError("Turn off puzzle mode to add a place.")
-					const before = quest.location?.places[0]
-					const after = next?.places[0]
-					const beforeGuidance = quest.location?.guidance ?? "none"
-					const afterGuidance = next?.guidance ?? "none"
-					if (
-						!!quest.location !== !!next ||
-						beforeGuidance !== afterGuidance ||
-						before?.lat !== after?.lat ||
-						before?.lng !== after?.lng ||
-						before?.radius !== after?.radius
-					) {
+					const before = quest.location
+					const changed =
+						(before?.guidance ?? "none") !== (next?.guidance ?? "none") ||
+						before?.places.length !== next?.places.length ||
+						(before?.places.some((place, index) => {
+							const following = next?.places[index]
+							return (
+								!following ||
+								place.id !== following.id ||
+								place.lat !== following.lat ||
+								place.lng !== following.lng ||
+								place.radius !== following.radius
+							)
+						}) ??
+							false)
+					if (changed) {
 						if (
 							await (await collections()).teams.countDocuments(
 								{ seasonId, progress: { $elemMatch: { questId: quest.id, solvedAt: { $exists: true } } } },

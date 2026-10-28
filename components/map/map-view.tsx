@@ -16,21 +16,22 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import "./map.css"
 
 type Coordinates = Pick<Place, "lat" | "lng">
-type Circle = Coordinates & { radius: number }
+type Circle = Coordinates & { number: number; radius: number }
 type Area = Coordinates & { zoom: number }
 type Framing = Area | { bounds: [[number, number], [number, number]]; maxZoom?: number }
 
 export type MapViewProps = {
 	aspectRatio?: "16/10" | "4/3"
-	circle?: Circle | null
+	circles?: Circle[]
 	dot?: (Coordinates & { accuracy: number }) | null
 	maxZoom?: number
 	minZoom?: number
 	edit?: {
-		onMove: (point: Coordinates) => void
-		onResize: (radius: number) => void
+		enabled?: boolean
+		onMove: (number: number, point: Coordinates) => void
+		onResize: (number: number, radius: number) => void
 		onCreate: (point: Coordinates) => void
-		onPreview?: (circle: Circle) => void
+		onPreview?: (number: number, circle: Circle) => void
 	} | null
 	framing?: Framing | null
 	interactive?: boolean
@@ -46,9 +47,20 @@ function polygon(center: Coordinates | null | undefined, radius: number): GeoJSO
 	}
 }
 
+function placePolygons(circles: Circle[]): GeoJSONSourceSpecification["data"] {
+	return {
+		type: "FeatureCollection",
+		features: circles.map(({ number, ...circle }) => ({
+			type: "Feature",
+			properties: { number },
+			geometry: { type: "Polygon", coordinates: [circleRing(circle, circle.radius)] },
+		})),
+	}
+}
+
 export default function MapView({
 	aspectRatio = "16/10",
-	circle,
+	circles = [],
 	dot,
 	edit,
 	framing,
@@ -59,32 +71,37 @@ export default function MapView({
 }: MapViewProps) {
 	const container = useRef<HTMLDivElement>(null)
 	const instance = useRef<LibreMap | null>(null)
-	const markers = useRef<{ pin?: Marker; edge?: Marker; dot?: Marker }>({})
+	const markers = useRef<{ places: Record<number, { pin?: Marker; edge?: Marker }>; dot?: Marker }>({ places: {} })
 	const ready = useRef(false)
-	const dragging = useRef<"pin" | "edge" | null>(null)
+	const dragging = useRef<{ number: number; key: "pin" | "edge" } | null>(null)
 
-	const preview = useEffectEvent((key: "pin" | "edge") => {
-		const marker = markers.current[key]
+	const preview = useEffectEvent((number: number, key: "pin" | "edge") => {
+		const marker = markers.current.places[number]?.[key]
 		const point = marker?.getLngLat()
-		if (!marker || !point || !circle || !interactive || !edit) return
+		const circle = circles.find((item) => item.number === number)
+		if (!marker || !point || !circle || !interactive || !edit || edit.enabled === false) return
 		const next =
 			key === "pin"
 				? { lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng), radius: circle.radius }
 				: { ...circle, radius: radiusFromHandle(circle, point) }
 		if (key === "edge") marker.getElement().dataset.radius = `${next.radius} m`
-		edit.onPreview?.(next)
+		edit.onPreview?.(number, { ...next, number })
 	})
 
-	const movePin = useEffectEvent(() => {
-		const point = markers.current.pin?.getLngLat()
-		if (point && interactive) edit?.onMove({ lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) })
+	const movePin = useEffectEvent((number: number) => {
+		const point = markers.current.places[number]?.pin?.getLngLat()
+		if (point && interactive && edit?.enabled !== false)
+			edit?.onMove(number, { lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) })
 	})
-	const resize = useEffectEvent(() => {
-		const point = markers.current.edge?.getLngLat()
-		if (point && circle && interactive) edit?.onResize(radiusFromHandle(circle, point))
+	const resize = useEffectEvent((number: number) => {
+		const point = markers.current.places[number]?.edge?.getLngLat()
+		const circle = circles.find((item) => item.number === number)
+		if (point && circle && interactive && edit?.enabled !== false)
+			edit?.onResize(number, radiusFromHandle(circle, point))
 	})
 	const create = useEffectEvent((point: Coordinates) => {
-		if (!circle && interactive) edit?.onCreate({ lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) })
+		if (interactive && edit && edit.enabled !== false)
+			edit.onCreate({ lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) })
 	})
 	const moved = useEffectEvent((manual: boolean) => {
 		const map = instance.current
@@ -95,55 +112,82 @@ export default function MapView({
 			manual,
 		)
 	})
-	const updateSources = useEffectEvent((nextCircle = circle, nextDot = dot, controls = edit, enabled = interactive) => {
-		const map = instance.current
-		if (!map || !ready.current) return
-		const place = map.getSource("place") as GeoJSONSource
-		const accuracy = map.getSource("accuracy") as GeoJSONSource
-		place.setData(polygon(nextCircle, nextCircle?.radius ?? 0))
-		accuracy.setData(polygon(nextDot, nextDot?.accuracy ?? 0))
-		const positions = { pin: nextCircle, edge: nextCircle && edgePoint(nextCircle, nextCircle.radius), dot: nextDot }
-		for (const key of ["pin", "edge", "dot"] as const) {
-			const position = positions[key]
-			if (!position || (key !== "dot" && !controls)) {
-				markers.current[key]?.remove()
-				delete markers.current[key]
-				continue
+	const updateSources = useEffectEvent(
+		(nextCircles = circles, nextDot = dot, controls = edit, enabled = interactive) => {
+			const map = instance.current
+			if (!map || !ready.current) return
+			const place = map.getSource("place") as GeoJSONSource
+			const accuracy = map.getSource("accuracy") as GeoJSONSource
+			place.setData(placePolygons(nextCircles))
+			accuracy.setData(polygon(nextDot, nextDot?.accuracy ?? 0))
+			const numbers = new Set(nextCircles.map(({ number }) => number))
+			for (const [number, pair] of Object.entries(markers.current.places)) {
+				if (controls && numbers.has(Number(number))) continue
+				pair.pin?.remove()
+				pair.edge?.remove()
+				delete markers.current.places[Number(number)]
 			}
-			let marker = markers.current[key]
-			if (!marker) {
-				const element = document.createElement("div")
-				element.className = key === "dot" ? "map-own-dot" : "map-drag-target"
-				element.setAttribute(
-					"aria-label",
-					key === "pin" ? "Move place" : key === "edge" ? "Resize radius" : "Your position",
-				)
-				if (key !== "dot") {
-					const visible = document.createElement("span")
-					visible.className = key === "pin" ? "map-pin" : "map-edge"
-					element.append(visible)
+			for (const circle of nextCircles) {
+				let pair = markers.current.places[circle.number]
+				if (!pair) {
+					pair = {}
+					markers.current.places[circle.number] = pair
 				}
-				marker = new Marker({ element, draggable: key !== "dot" && enabled })
-					.setLngLat([position.lng, position.lat])
-					.addTo(map)
-				if (key !== "dot") {
-					marker.on("dragstart", () => {
-						dragging.current = key
-					})
-					marker.on("drag", () => preview(key))
-					marker.on("dragend", () => {
-						dragging.current = null
-						if (key === "pin") movePin()
-						else resize()
-					})
+				for (const key of ["pin", "edge"] as const) {
+					if (!controls) {
+						pair[key]?.remove()
+						delete pair[key]
+						continue
+					}
+					const position = key === "pin" ? circle : edgePoint(circle, circle.radius)
+					let marker = pair[key]
+					if (!marker) {
+						const element = document.createElement("div")
+						element.className = "map-drag-target"
+						element.setAttribute(
+							"aria-label",
+							key === "pin" ? `Move place ${circle.number}` : `Resize place ${circle.number} radius`,
+						)
+						const visible = document.createElement("span")
+						visible.className = key === "pin" ? "map-pin" : "map-edge"
+						if (key === "pin") visible.textContent = String(circle.number)
+						element.append(visible)
+						marker = new Marker({ element, draggable: enabled && controls.enabled !== false })
+							.setLngLat([position.lng, position.lat])
+							.addTo(map)
+						marker.on("dragstart", () => {
+							dragging.current = { number: circle.number, key }
+						})
+						marker.on("drag", () => preview(circle.number, key))
+						marker.on("dragend", () => {
+							dragging.current = null
+							if (key === "pin") movePin(circle.number)
+							else resize(circle.number)
+						})
+						pair[key] = marker
+					}
+					marker.setDraggable(enabled && controls.enabled !== false)
+					if (dragging.current?.number !== circle.number || dragging.current.key !== key)
+						marker.setLngLat([position.lng, position.lat])
+					if (key === "edge") marker.getElement().dataset.radius = `${circle.radius} m`
 				}
-				markers.current[key] = marker
 			}
-			marker.setDraggable(key !== "dot" && enabled)
-			if (dragging.current !== key) marker.setLngLat([position.lng, position.lat])
-			if (key === "edge") marker.getElement().dataset.radius = `${nextCircle?.radius} m`
-		}
-	})
+			if (!nextDot) {
+				markers.current.dot?.remove()
+				delete markers.current.dot
+			} else {
+				let marker = markers.current.dot
+				if (!marker) {
+					const element = document.createElement("div")
+					element.className = "map-own-dot"
+					element.setAttribute("aria-label", "Your position")
+					marker = new Marker({ element, draggable: false }).setLngLat([nextDot.lng, nextDot.lat]).addTo(map)
+					markers.current.dot = marker
+				}
+				marker.setLngLat([nextDot.lng, nextDot.lat])
+			}
+		},
+	)
 	const frame = useEffectEvent((view = framing) => {
 		const map = instance.current
 		if (!map || !ready.current || !view) return
@@ -216,16 +260,20 @@ export default function MapView({
 		})
 		return () => {
 			ready.current = false
-			for (const marker of Object.values(markers.current)) marker.remove()
-			markers.current = {}
+			for (const pair of Object.values(markers.current.places)) {
+				pair.pin?.remove()
+				pair.edge?.remove()
+			}
+			markers.current.dot?.remove()
+			markers.current = { places: {} }
 			map.remove()
 			instance.current = null
 		}
 	}, [maxZoom, minZoom])
 
 	useEffect(() => {
-		updateSources(circle, dot, edit, interactive)
-	}, [circle, dot, edit, interactive])
+		updateSources(circles, dot, edit, interactive)
+	}, [circles, dot, edit, interactive])
 	useEffect(() => {
 		frame(framing)
 	}, [framing])

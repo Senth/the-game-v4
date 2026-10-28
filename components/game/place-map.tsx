@@ -27,7 +27,7 @@ export function PlaceMap({ place, position, preview }: { place: MapPlace; positi
 		<div className="relative w-full">
 			<LazyMap
 				aspectRatio="4/3"
-				circle={place}
+				circles={[{ ...place, number: 1 }]}
 				dot={preview ? null : (position ?? null)}
 				framing={framing}
 				interactive={!preview}

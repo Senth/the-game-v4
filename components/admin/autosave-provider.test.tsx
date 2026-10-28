@@ -349,7 +349,7 @@ it("refreshes idle place and puzzle fields from remote quest values", () => {
 	unmount(owner.state)
 })
 
-it("keeps mounted editor and preview geometry valid while clearing and retyping radius and coordinates", async () => {
+it("keeps mounted editor and preview geometry valid while removing and adding places", async () => {
 	const owner = provider()
 	const fixture = buildFixture(new Date())
 	const arc = fixture.season.arcs[0]
@@ -370,11 +370,22 @@ it("keeps mounted editor and preview geometry valid while clearing and retyping 
 				location: quest.location,
 				puzzle: null,
 				seasonRadius: 40,
+				mapArea: { lat: 55.2, lng: 13.2, zoom: 12 },
 				solvedTeams: 0,
 			}),
 		)
-	const input = (index: number) =>
-		field().props.children[1].props.children[index] as ReactElement<ComponentProps<"input">>
+	const findInputs = (node: ReactNode): ReactElement<ComponentProps<"input">>[] =>
+		Children.toArray(node).flatMap((child) => {
+			if (!isValidElement<{ children?: ReactNode }>(child)) return []
+			return child.type === "input"
+				? [child as ReactElement<ComponentProps<"input">>]
+				: findInputs(child.props.children)
+		})
+	const input = (index: number) => {
+		const found = findInputs(field())
+		if (!found[index]) throw new Error("Place input missing")
+		return found[index] as ReactElement<ComponentProps<"input">>
+	}
 	const previewGeometry = () => {
 		const view = render(preview, () => QuestPreview({ season, arcId: arc.id, quest, now: Date.now() })) as ReactElement<
 			ComponentProps<typeof GameView>
@@ -388,10 +399,14 @@ it("keeps mounted editor and preview geometry valid while clearing and retyping 
 	}
 	const assertGeometry = (expected: typeof place) => {
 		const geometry = previewGeometry()
-		expect(geometry?.circle).toEqual({ lat: expected.lat, lng: expected.lng, radius: expected.radius })
+		expect(geometry?.circles).toEqual([
+			expect.objectContaining({ lat: expected.lat, lng: expected.lng, radius: expected.radius, number: 1 }),
+		])
 		expect(geometry?.framing).toEqual({ bounds: boundsFor(circleRing(expected, expected.radius)) })
-		const editorMap = field().props.children[3]
-		expect(editorMap.props.children[0].props.children[0].props.circle).toEqual(expected)
+		const editorMap = field().props.children[4]
+		expect(editorMap.props.children[0].props.children[0].props.circles).toEqual([
+			expect.objectContaining({ lat: expected.lat, lng: expected.lng, radius: expected.radius, number: 1 }),
+		])
 	}
 	field()
 	assertGeometry(place)
@@ -420,11 +435,26 @@ it("keeps mounted editor and preview geometry valid while clearing and retyping 
 	assertGeometry({ ...place, lat: 55.2, lng: 13.2, radius: 90 })
 	input(0).props.onChange?.({ target: { value: "" } } as never)
 	expect(previewGeometry()).toBeNull()
-	input(0).props.onChange?.({ target: { value: "55.2," } } as never)
-	expect(previewGeometry()).toBeNull()
-	input(0).props.onChange?.({ target: { value: "55.2, 13.2" } } as never)
-	expect(input(0).props.value).toBe("55.2, 13.2")
-	expect(previewGeometry()).toBeNull()
+	const findButtons = (node: ReactNode): ReactElement<ComponentProps<"button">>[] =>
+		Children.toArray(node).flatMap((child) => {
+			if (!isValidElement<{ children?: ReactNode }>(child)) return []
+			return child.type === "button"
+				? [child as ReactElement<ComponentProps<"button">>]
+				: findButtons(child.props.children)
+		})
+	findButtons(field())
+		.find((button) => button.props.children === "+ Add place")
+		?.props.onClick?.({} as never)
+	findButtons(field())
+		.find((button) => button.props.children === "Map")
+		?.props.onClick?.({} as never)
+	const addedPlace = findInputs(field())[0]
+	if (!addedPlace) throw new Error("Added place input missing")
+	expect(addedPlace.props.value).toBe("55.2, 13.2")
+	addedPlace.props.onChange?.({ target: { value: "55.2," } } as never)
+	assertGeometry({ id: "", lat: 55.2, lng: 13.2, radius: 40 })
+	addedPlace.props.onChange?.({ target: { value: "55.3, 13.3" } } as never)
+	assertGeometry({ id: "", lat: 55.3, lng: 13.3, radius: 40 })
 	for (const state of [editor, preview, map, owner.state]) unmount(state)
 })
 

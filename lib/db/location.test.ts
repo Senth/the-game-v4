@@ -557,6 +557,23 @@ describe("location authoring", () => {
 		},
 	)
 
+	it("locks additions, removals and edits to every place after a solve", async () => {
+		const twoPlaces = mapLocation(2)
+		expect(await saveSeasonField("season", target, twoPlaces)).toEqual({ ok: true })
+		expect(await submitAnswer(team, quest.id, "backup", now)).toMatchObject({ correct: true })
+		for (const changed of [
+			mapLocation(3),
+			{ ...twoPlaces, places: twoPlaces.places.slice(0, 1) },
+			{ ...twoPlaces, places: twoPlaces.places.map((place, index) => (index ? { ...place, lat: 56 } : place)) },
+		]) {
+			expect(await saveSeasonField("season", target, changed)).toEqual({
+				ok: false,
+				error: "Locked: a team has found this place.",
+			})
+		}
+		expect((await getSeason("season"))?.arcs[0]?.quests[0]?.location).toEqual(twoPlaces)
+	})
+
 	it.each(["none", "map"] as const)(
 		"rejects puzzle and %s location together in either direction, including concurrent edits",
 		async (guidance) => {

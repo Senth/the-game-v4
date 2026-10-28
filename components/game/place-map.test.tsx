@@ -25,7 +25,7 @@ function view(props: Parameters<typeof PlaceMap>[0]) {
 function mapProps(children: ChildElement[]) {
 	return children[0]?.props as {
 		aspectRatio: string
-		circle: Pick<Place, "lat" | "lng" | "radius">
+		circles: (Pick<Place, "lat" | "lng" | "radius"> & { number: number })[]
 		dot?: { lat: number; lng: number; accuracy: number }
 		framing: unknown
 		interactive: boolean
@@ -42,7 +42,7 @@ describe("PlaceMap", () => {
 		let children = view({ place, preview: false })
 		let map = mapProps(children)
 		expect(map.aspectRatio).toBe("4/3")
-		expect(map.circle).toBe(place)
+		expect(map.circles).toEqual([{ ...place, number: 1 }])
 		expect(map.dot).toBeNull()
 		expect(map.framing).toBeTruthy()
 		expect(map.interactive).toBe(true)
@@ -61,7 +61,7 @@ describe("PlaceMap", () => {
 		const updatedPlace = { ...place, lat: 55.51, radius: 80 }
 		children = view({ place: updatedPlace, position: { lat: 55.502, lng: 13.202, accuracy: 20 }, preview: false })
 		let map = mapProps(children)
-		expect(map.circle).toBe(updatedPlace)
+		expect(map.circles).toEqual([{ ...updatedPlace, number: 1 }])
 		expect(map.framing).toBeNull()
 		const recenter = children.find((child) => child.type === "button")
 		expect(recenter?.props.children).toBe("Recenter")
