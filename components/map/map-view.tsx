@@ -274,7 +274,12 @@ export default function MapView({
 		})
 		instance.current = map
 		setInteraction()
-		map.on("click", (event) => create(event.lngLat))
+		map.on("click", (event) => {
+			const target = event.originalEvent?.target
+			if (target && "closest" in target && typeof target.closest === "function" && target.closest(".maplibregl-marker"))
+				return
+			create(event.lngLat)
+		})
 		map.on("moveend", (event) => moved(!!event.originalEvent))
 		map.on("load", () => {
 			for (const [id, token] of [

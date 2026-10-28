@@ -379,8 +379,12 @@ Previews never request location permission or show an own dot.
 
 The Place field shows an editor map for every guidance choice.
 With a place, frame its circle with padding. Without one, use `Season.mapArea`; with neither, show no map.
-Tapping the map adds a place only when the quest has none, using `newPlace` and the season radius.
-Dragging the pin moves the place; dragging its edge handle resizes the radius.
+Show one numbered row per place with coordinates, radius and a remove action; removing a place renumbers the remaining rows.
+Clearing a row's coordinates also removes that place. Tapping the map adds a place while fewer than three exist.
+"+ Add place" adds one at the map's current centre with the season radius, and is disabled at three places.
+Adding a second place switches guidance to Map; with two or more places, None and Warmer/colder are disabled.
+"◎ Use my position" creates place 1 when none exists, or moves the last place otherwise, preserving its radius.
+Dragging a pin moves its place; dragging its edge handle resizes the radius.
 Save once on release, writing the same whole `location` object through `saveSeasonField` as coordinate paste.
 Round coordinates to 6 decimals and radius to whole metres, clamped from 5 to 500.
 Guidance locks with the place. Locked maps remain visible but cannot edit it.

@@ -160,6 +160,7 @@ beforeEach(() => {
 				},
 				setAttribute: vi.fn((name: string, value: string) => (attributes[name] = value)),
 				getAttribute: vi.fn((name: string) => attributes[name] ?? null),
+				closest: (selector: string) => (element.className.split(" ").includes(selector.slice(1)) ? element : null),
 				append: vi.fn((child: { textContent: string }) => element.children.push(child)),
 			}
 			return element
@@ -372,6 +373,23 @@ describe("MapView", () => {
 		map.fire("click", { lngLat: { lat: 55.12345678, lng: 13.12345678 } })
 		expect(edit.onCreate).toHaveBeenCalledExactlyOnceWith({ lat: 55.123457, lng: 13.123457 })
 		expect(fake.Marker.instances).toHaveLength(0)
+	})
+
+	it("creates places from background clicks, not pin or edge-handle clicks", () => {
+		const edit = { onMove: vi.fn(), onResize: vi.fn(), onCreate: vi.fn() }
+		const { map } = mount({ circles: [circle], edit })
+		map.fire("load")
+		const [pin, edge] = fake.Marker.instances
+		const point = { lat: 55.6, lng: 13.3 }
+
+		map.fire("click", { lngLat: point, originalEvent: { target: pin?.options.element } })
+		expect(edit.onCreate).not.toHaveBeenCalled()
+
+		map.fire("click", { lngLat: point, originalEvent: { target: edge?.options.element } })
+		expect(edit.onCreate).not.toHaveBeenCalled()
+
+		map.fire("click", { lngLat: point, originalEvent: { target: { closest: () => null } } })
+		expect(edit.onCreate).toHaveBeenCalledExactlyOnceWith(point)
 	})
 
 	it("keeps numbered pins visible but disables their handles and map taps when locked", () => {
