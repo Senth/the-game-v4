@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { fixTtlMs, guidanceWindowMs } from "@/lib/domain/location"
-import { latestFixes, recordFix, recordGuidanceFix } from "./location-fixes"
+import { clearTeamFixes, latestFixes, recordFix, recordGuidanceFix, teamFixes } from "./location-fixes"
 
 describe("phone fixes", () => {
 	it("keeps only each phone's latest fix, isolated by team, without retaining caller references", () => {
@@ -44,6 +44,44 @@ describe("phone fixes", () => {
 		recordFix(team, "phone", fix, now)
 		expect(latestFixes(team, now).get("phone")).toEqual(fix)
 		expect(latestFixes(team, now + 1).size).toBe(0)
+	})
+
+	it("reads phone ids, copied fixes and the older timestamp age for one team", () => {
+		const now = Date.now()
+		const team = crypto.randomUUID()
+		const fix = { lat: 55, lng: 13, accuracy: 10, at: now - 1000 }
+		recordFix(team, "old", fix, now)
+		recordFix(team, "future", { ...fix, at: now + 1000 }, now)
+		recordFix("other", "other", fix, now)
+		expect(teamFixes(team, now + 100)).toEqual([
+			{ phoneId: "old", fix, ageMs: 1100 },
+			{ phoneId: "future", fix: { ...fix, at: now + 1000 }, ageMs: 100 },
+		])
+		const read = teamFixes(team, now)[0]
+		if (read) read.fix.lat = 0
+		expect(teamFixes(team, now)[0]?.fix.lat).toBe(55)
+		expect(teamFixes(team, now + fixTtlMs)).toHaveLength(1)
+		expect(teamFixes(team, now + fixTtlMs + 1)).toEqual([])
+	})
+
+	it("clears one team's latest fixes and every phone's guidance history only", () => {
+		const now = Date.now()
+		const team = crypto.randomUUID()
+		const other = crypto.randomUUID()
+		const fix = { lat: 55, lng: 13, accuracy: 10, at: now }
+		for (const id of [team, other]) {
+			for (const phone of ["one", "two"]) {
+				recordFix(id, phone, fix, now)
+				recordGuidanceFix(id, phone, "quest", fix, now)
+			}
+		}
+		clearTeamFixes(team)
+		expect(latestFixes(team, now).size).toBe(0)
+		expect(latestFixes(other, now).size).toBe(2)
+		for (const phone of ["one", "two"]) {
+			expect(recordGuidanceFix(team, phone, "quest", fix, now)).toEqual([])
+			expect(recordGuidanceFix(other, phone, "quest", fix, now)).toEqual([fix])
+		}
 	})
 })
 

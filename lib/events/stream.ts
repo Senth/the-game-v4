@@ -8,7 +8,7 @@ export function createEventStream(channels: string[], signal: AbortSignal): Read
 		start(controller) {
 			const send = (text: string) => controller.enqueue(encoder.encode(text))
 			send("retry: 5000\n\n")
-			const unsubscribe = subscribe(channels, ({ channel }) => send(`data: ${JSON.stringify({ channel })}\n\n`))
+			const unsubscribe = subscribe(channels, (event) => send(`data: ${JSON.stringify(event)}\n\n`))
 			const heartbeat = setInterval(() => send(": ping\n\n"), 25_000)
 			const close = () => {
 				stop()

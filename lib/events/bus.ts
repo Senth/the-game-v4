@@ -1,4 +1,4 @@
-export type Listener = (event: { channel: string }) => void
+export type Listener = (event: { channel: string; data?: unknown }) => void
 
 const cache = globalThis as typeof globalThis & { theGameBus?: Map<string, Set<Listener>> }
 cache.theGameBus ??= new Map()
@@ -7,6 +7,7 @@ const bus = cache.theGameBus
 export const boardChannel = "board"
 export const teamChannel = (id: string) => `team:${id}`
 export const seasonChannel = (id: string) => `season:${id}`
+export const positionsChannel = (id: string) => `positions:${id}`
 
 export function subscribe(channels: string[], listener: Listener): () => void {
 	for (const channel of channels) {
@@ -23,10 +24,10 @@ export function subscribe(channels: string[], listener: Listener): () => void {
 	}
 }
 
-export function publish(channel: string): void {
+export function publish(channel: string, data?: unknown): void {
 	for (const listener of [...(bus.get(channel) ?? [])]) {
 		try {
-			listener({ channel })
+			listener({ channel, ...(data === undefined ? {} : { data }) })
 		} catch (error) {
 			console.error(error)
 		}

@@ -5,11 +5,18 @@ type GuidanceHistory = { questId: string; fixes: { fix: Fix; receivedAt: number 
 const cache = globalThis as typeof globalThis & {
 	theGameLocationFixes?: Map<string, PhoneFix>
 	theGameGuidanceHistory?: Map<string, GuidanceHistory>
+	theGameLocationVersions?: Map<string, number>
 }
 cache.theGameLocationFixes ??= new Map()
 cache.theGameGuidanceHistory ??= new Map()
+cache.theGameLocationVersions ??= new Map()
 const fixes = cache.theGameLocationFixes
 const histories = cache.theGameGuidanceHistory
+const versions = cache.theGameLocationVersions
+
+export function teamFixesVersion(teamId: string): number {
+	return versions.get(teamId) ?? 0
+}
 
 function prune(now: number) {
 	for (const [key, { fix, receivedAt }] of fixes) {
@@ -25,10 +32,20 @@ export function recordFix(teamId: string, phoneId: string, fix: Fix, now = Date.
 }
 
 export function latestFixes(teamId: string, now = Date.now()): Map<string, Fix> {
+	return new Map(teamFixes(teamId, now).map(({ phoneId, fix }) => [phoneId, fix]))
+}
+
+export function teamFixes(teamId: string, now = Date.now()): { phoneId: string; fix: Fix; ageMs: number }[] {
 	prune(now)
-	return new Map(
-		[...fixes.values()].filter((entry) => entry.teamId === teamId).map(({ phoneId, fix }) => [phoneId, { ...fix }]),
-	)
+	return [...fixes.values()]
+		.filter((entry) => entry.teamId === teamId)
+		.map(({ phoneId, fix, receivedAt }) => ({ phoneId, fix: { ...fix }, ageMs: fixAgeMs(fix, receivedAt, now) }))
+}
+
+export function clearTeamFixes(teamId: string): void {
+	versions.set(teamId, teamFixesVersion(teamId) + 1)
+	for (const [key, entry] of fixes) if (entry.teamId === teamId) fixes.delete(key)
+	for (const key of histories.keys()) if (JSON.parse(key)[0] === teamId) histories.delete(key)
 }
 
 export function recordGuidanceFix(teamId: string, phoneId: string, questId: string, fix: Fix, now = Date.now()): Fix[] {

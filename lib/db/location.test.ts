@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
 
@@ -8,9 +8,10 @@ import { copyQuest } from "@/app/admin/copy-actions"
 import { requireAdmin, requireTeam } from "@/lib/auth/guards"
 import type { Location, Team } from "@/lib/domain/schemas"
 import { newQuest } from "@/lib/domain/season-tree"
-import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
+import { boardChannel, positionsChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
 import { getSolvedLocation, loadGame, reportPosition, submitAnswer } from "@/lib/game/game"
-import { latestFixes } from "@/lib/game/location-fixes"
+import { clearTeamFixes, latestFixes, recordGuidanceFix } from "@/lib/game/location-fixes"
+import { clearPositions } from "@/lib/game/positions"
 import { useTestDb } from "@/test/db"
 import { getDb } from "./client"
 import * as database from "./collections"
@@ -32,6 +33,8 @@ let team: Team
 
 beforeEach(async () => {
 	vi.restoreAllMocks()
+	vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })
+	vi.setSystemTime(now)
 	vi.mocked(requireAdmin).mockResolvedValue({ _id: "admin", name: "Admin", passwordHash: "x" })
 	const db = await collections()
 	await db.teams.deleteMany({})
@@ -59,8 +62,187 @@ beforeEach(async () => {
 	vi.mocked(requireTeam).mockImplementation(async () => (await teams.getTeam(team._id)) as Team)
 })
 
+afterEach(() => {
+	clearTeamFixes(team._id)
+	clearPositions(team._id)
+	vi.clearAllTimers()
+	vi.useRealTimers()
+})
+
+function mapLocation(count: number): Location {
+	return {
+		guidance: "map",
+		places: Array.from({ length: count }, (_, index) => ({
+			...place,
+			id: `place-${index}`,
+			lat: place.lat + index * 0.002,
+		})),
+	}
+}
+
 describe("location reports", () => {
-	it.each(["none", "warmer"] as const)(
+	it("rejects an in-flight old-quest report after a backup solve clears fixes", async () => {
+		await setSeasonField("season", target, mapLocation(2))
+		await reportPosition(team, "one", quest.id, fix, now)
+		const started = Promise.withResolvers<void>()
+		const resume = Promise.withResolvers<void>()
+		const original = teams.getTeam
+		vi.spyOn(teams, "getTeam").mockImplementationOnce(async (...args) => {
+			const current = await original(...args)
+			started.resolve()
+			await resume.promise
+			return current
+		})
+		const pending = reportPosition(team, "late", quest.id, fix, now)
+		await started.promise
+		try {
+			expect(await submitAnswer(team, quest.id, "backup", now)).toMatchObject({ correct: true })
+		} finally {
+			resume.resolve()
+		}
+		expect(await pending).toEqual({ status: "stop" })
+		expect(latestFixes(team._id, now.getTime()).size).toBe(0)
+	})
+
+	it.each([2, 3])(
+		"solves %s places once across concurrent completing phones with penalties and one finish",
+		async (count) => {
+			const location = mapLocation(count)
+			await setSeasonField("season", target, location)
+			await teams.revealHint(
+				team._id,
+				{ questId: quest.id, questIndex: 0 },
+				{
+					hintId: "deleted",
+					text: "Saved hint",
+					points: 7,
+					revealedAt: now,
+				},
+			)
+			const before = await teams.getTeam(team._id)
+			const channels = [teamChannel(team._id), seasonChannel("season"), boardChannel]
+			const events: string[] = []
+			const positions: unknown[] = []
+			const unsubscribe = subscribe([...channels, positionsChannel(team._id)], ({ channel, data }) => {
+				if (channel === positionsChannel(team._id)) positions.push(data)
+				else events.push(channel)
+			})
+			try {
+				expect(await reportPosition(team, "phone-0", quest.id, fix, now)).toEqual({ status: "outside" })
+				expect(await teams.getTeam(team._id)).toEqual(before)
+				expect(events).toEqual([])
+				const results = await Promise.all(
+					Array.from({ length: 8 }, (_, index) => {
+						const phone = (index % (count - 1)) + 1
+						return reportPosition(team, `phone-${phone}`, quest.id, { ...fix, ...location.places[phone] }, now)
+					}),
+				)
+				expect(results.filter(({ status }) => status === "solved")).toEqual([{ status: "solved", pointsEarned: 43 }])
+				expect(await teams.getTeam(team._id)).toMatchObject({ score: 63, questIndex: 1, completed: true })
+				expect((await getSeason("season"))?.finishers).toEqual([{ teamId: team._id, place: 1, points: 20, at: now }])
+				expect(events).toEqual(channels)
+				await vi.advanceTimersByTimeAsync(5000)
+				expect(positions.at(-1)).toEqual({ places: [], phones: [] })
+				expect(latestFixes(team._id, now.getTime()).size).toBe(0)
+				expect(recordGuidanceFix(team._id, "phone-0", quest.id, fix, now.getTime())).toEqual([])
+			} finally {
+				unsubscribe()
+			}
+		},
+	)
+
+	it("never solves incomplete, shared-phone or stale multi-place coverage", async () => {
+		const location = mapLocation(2)
+		await setSeasonField("season", target, location)
+		expect(await reportPosition(team, "one", quest.id, fix, now)).toEqual({ status: "outside" })
+		const second = { ...fix, ...location.places[1], at: fix.at + 1 }
+		expect(await reportPosition(team, "one", quest.id, second, new Date(fix.at + 1))).toEqual({ status: "outside" })
+		expect(await reportPosition(team, "two", quest.id, { ...fix, lat: 56 }, now)).toEqual({ status: "outside" })
+		const later = new Date(fix.at + 30_002)
+		expect(await reportPosition(team, "two", quest.id, { ...fix, at: later.getTime() }, later)).toEqual({
+			status: "outside",
+		})
+		expect(await teams.getTeam(team._id)).toEqual(team)
+		expect((await getSeason("season"))?.finishers).toEqual([])
+	})
+
+	it.each([2, 3])("retries hint races with %s-place coverage and preserves the latest penalty", async (count) => {
+		const location = mapLocation(count)
+		await setSeasonField("season", target, location)
+		for (let index = 0; index < count - 1; index++) {
+			await reportPosition(team, `phone-${index}`, quest.id, { ...fix, ...location.places[index] }, now)
+		}
+		const original = teams.solveCurrentQuest
+		vi.spyOn(teams, "solveCurrentQuest").mockImplementationOnce(async (...args) => {
+			await teams.revealHint(
+				team._id,
+				{ questId: quest.id, questIndex: 0 },
+				{
+					hintId: "new",
+					text: "Hint",
+					points: 8,
+					revealedAt: now,
+				},
+			)
+			return original(...args)
+		})
+		expect(await reportPosition(team, "last", quest.id, { ...fix, ...location.places[count - 1] }, now)).toEqual({
+			status: "solved",
+			pointsEarned: 42,
+		})
+		expect(await teams.getTeam(team._id)).toMatchObject({ score: 62 })
+		expect((await getSeason("season"))?.finishers).toHaveLength(1)
+	})
+
+	it.each(["move", "remove"])(
+		"rechecks full multi-place coverage when a place %s wins the solve race",
+		async (edit) => {
+			const location = mapLocation(2)
+			await setSeasonField("season", target, location)
+			await reportPosition(team, "one", quest.id, fix, now)
+			const original = teams.solveCurrentQuest
+			vi.spyOn(teams, "solveCurrentQuest").mockImplementationOnce(async (...args) => {
+				await setSeasonField(
+					"season",
+					target,
+					edit === "remove"
+						? null
+						: {
+								...location,
+								places: location.places.map((place, index) => (index ? { ...place, lat: 56 } : place)),
+							},
+				)
+				return original(...args)
+			})
+			expect(await reportPosition(team, "two", quest.id, { ...fix, ...location.places[1] }, now)).toEqual({
+				status: edit === "remove" ? "stop" : "outside",
+			})
+			expect(await teams.getTeam(team._id)).toEqual(team)
+			expect((await getSeason("season"))?.finishers).toEqual([])
+		},
+	)
+
+	it.each([1, 2, 3])(
+		"backup code solves %s places without coverage, clears fixes and history, and pushes empty positions",
+		async (count) => {
+			await setSeasonField("season", target, mapLocation(count))
+			await reportPosition(team, "one", quest.id, { ...fix, lat: 56 }, now)
+			const positions: unknown[] = []
+			const unsubscribe = subscribe([positionsChannel(team._id)], ({ data }) => positions.push(data))
+			try {
+				expect(await submitAnswer(team, quest.id, "backup", now)).toMatchObject({ correct: true, pointsEarned: 50 })
+				expect(latestFixes(team._id, now.getTime()).size).toBe(0)
+				expect(recordGuidanceFix(team._id, "one", quest.id, fix, now.getTime())).toEqual([])
+				await vi.advanceTimersByTimeAsync(5000)
+				expect(positions).toEqual([{ places: [], phones: [] }])
+				expect(await teams.getTeam(team._id)).toMatchObject({ score: 70, completed: true })
+			} finally {
+				unsubscribe()
+			}
+		},
+	)
+
+	it.each(["none", "warmer", "map"] as const)(
 		"solves once across phones and retries with %s guidance, stored hint penalties, one bonus and all live channels",
 		async (guidance) => {
 			await setSeasonField("season", target, { ...location, guidance })
@@ -93,6 +275,8 @@ describe("location reports", () => {
 				})
 				expect((await getSeason("season"))?.finishers).toEqual([{ teamId: team._id, place: 1, points: 20, at: now }])
 				expect(events).toEqual(channels)
+				expect(latestFixes(team._id, now.getTime()).size).toBe(0)
+				expect(recordGuidanceFix(team._id, "phone-0", quest.id, fix, now.getTime())).toEqual([])
 				expect(await actions.getSolvedLocation(quest.id)).toEqual({ pointsEarned: 43 })
 				await setSeasonField("season", { ...target, field: "points" }, 100)
 				expect(await getSolvedLocation(team, quest.id)).toEqual({ pointsEarned: 43 })
