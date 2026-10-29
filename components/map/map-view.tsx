@@ -26,6 +26,7 @@ type Framing = Area | { bounds: [[number, number], [number, number]]; maxZoom?: 
 
 export type MapViewProps = {
 	aspectRatio?: "16/10" | "4/3"
+	fill?: boolean
 	circles?: Circle[]
 	dot?: (Coordinates & { accuracy: number }) | null
 	teammates?: Teammate[]
@@ -78,6 +79,7 @@ function phonePolygons(phones: LivePhone[]): GeoJSONSourceSpecification["data"] 
 
 export default function MapView({
 	aspectRatio = "16/10",
+	fill = false,
 	circles = [],
 	dot,
 	teammates = [],
@@ -421,7 +423,7 @@ export default function MapView({
 	return (
 		<div
 			ref={container}
-			className={`game-map ${aspectRatio === "4/3" ? "aspect-[4/3]" : "aspect-[16/10]"} w-full overflow-hidden rounded-md bg-z1`}
+			className={`game-map ${fill ? "h-full min-h-0 w-full" : `${aspectRatio === "4/3" ? "aspect-[4/3]" : "aspect-[16/10]"} w-full rounded-md`} overflow-hidden bg-z1`}
 		/>
 	)
 }

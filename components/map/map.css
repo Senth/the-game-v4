@@ -119,11 +119,11 @@
 
 .map-phone-label {
 	position: absolute;
-	top: calc(100% + var(--spacing));
-	left: 50%;
+	top: 50%;
+	left: calc(100% - var(--spacing));
 	width: max-content;
 	max-width: calc(var(--spacing) * 40);
-	transform: translateX(-50%);
+	transform: translateY(-50%);
 	padding: 0 var(--spacing);
 	border-radius: var(--radius-md);
 	color: var(--color-ink);

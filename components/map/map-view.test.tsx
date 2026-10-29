@@ -253,6 +253,13 @@ describe("MapView", () => {
 		expect(map.touchZoomRotate.disableRotation).toHaveBeenCalled()
 		expect(map.keyboard.disableRotation).toHaveBeenCalled()
 	})
+	it("fills its parent only when requested", () => {
+		const placeholder = renderToStaticMarkup(<LazyMap fill />)
+		expect(placeholder).toContain("h-full min-h-0 w-full")
+		const { html } = mount({ fill: true })
+		expect(html).toContain("h-full min-h-0 w-full overflow-hidden bg-z1")
+		expect(html).not.toContain("aspect-[16/10]")
+	})
 
 	it("loads the latest props, updates sources and markers in place, and removes absent geometry", () => {
 		const { map } = mount({ circles: [circle], dot })

@@ -20,7 +20,7 @@ export function AdminFrame({
 	children: ReactNode
 }) {
 	return (
-		<div className="flex min-h-dvh flex-col lg:h-dvh">
+		<div className="flex min-h-dvh flex-col has-[.live-map-canvas]:h-dvh lg:h-dvh">
 			<AutosaveHeader className="hidden h-14 shrink-0 items-center gap-4 border-b px-4 font-cond text-sm lg:flex">
 				<h1 className="min-w-0 truncate font-head text-lg text-head">{title}</h1>
 				{status}
@@ -33,7 +33,9 @@ export function AdminFrame({
 			<div className="lg:hidden">{phoneHeader}</div>
 			<div className="flex min-h-0 flex-1">
 				<aside className="hidden w-72 shrink-0 overflow-y-auto border-r border-z1 lg:block">{menu}</aside>
-				<main className="min-w-0 flex-1 lg:overflow-y-auto">{children}</main>
+				<main className="min-w-0 flex-1 lg:overflow-y-auto has-[.live-map-canvas]:min-h-0 has-[.live-map-canvas]:overflow-hidden">
+					{children}
+				</main>
 				{preview && (
 					<aside className="hidden w-92 shrink-0 overflow-y-auto border-l border-z1 px-5 pt-6 lg:block">
 						{preview}
