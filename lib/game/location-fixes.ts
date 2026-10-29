@@ -42,6 +42,22 @@ export function teamFixes(teamId: string, now = Date.now()): { phoneId: string; 
 		.map(({ phoneId, fix, receivedAt }) => ({ phoneId, fix: { ...fix }, ageMs: fixAgeMs(fix, receivedAt, now) }))
 }
 
+export function fixesForTeams(
+	teamIds: string[],
+	now = Date.now(),
+): { teamId: string; phoneId: string; fix: Fix; expiresInMs: number }[] {
+	prune(now)
+	const ids = new Set(teamIds)
+	return [...fixes.values()]
+		.filter(({ teamId }) => ids.has(teamId))
+		.map(({ teamId, phoneId, fix, receivedAt }) => ({
+			teamId,
+			phoneId,
+			fix: { ...fix },
+			expiresInMs: fixTtlMs - fixAgeMs(fix, receivedAt, now),
+		}))
+}
+
 export function clearTeamFixes(teamId: string): void {
 	versions.set(teamId, teamFixesVersion(teamId) + 1)
 	for (const [key, entry] of fixes) if (entry.teamId === teamId) fixes.delete(key)

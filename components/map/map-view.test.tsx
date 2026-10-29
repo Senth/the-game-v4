@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import type { EffectCallback } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -109,6 +110,25 @@ vi.mock("next/dynamic", () => ({
 	},
 }))
 
+type FakeElement = {
+	className: string
+	style: Record<string, string>
+	dataset: Record<string, string>
+	textContent: string
+	children: FakeElement[]
+	parent?: FakeElement
+	listeners: Record<string, () => void>
+	classList: { toggle: (name: string, force: boolean) => boolean }
+	firstElementChild: FakeElement | undefined
+	setAttribute: (name: string, value: string) => void
+	getAttribute: (name: string) => string | null
+	getBoundingClientRect: () => { left: number; right: number; width: number }
+	closest: (selector: string) => FakeElement | null
+	append: (...children: FakeElement[]) => void
+	addEventListener: (name: string, callback: () => void) => void
+	click: () => void
+}
+
 const circle = { number: 1, lat: 55.5, lng: 13.2, radius: 40 }
 const dot = { lat: 55.501, lng: 13.201, accuracy: 80 }
 const framing = {
@@ -144,7 +164,7 @@ beforeEach(() => {
 	vi.stubGlobal("document", {
 		createElement: () => {
 			const attributes: Record<string, string> = {}
-			const element = {
+			const element: FakeElement = {
 				className: "",
 				style: {},
 				classList: {
@@ -158,14 +178,37 @@ beforeEach(() => {
 				},
 				dataset: {},
 				textContent: "",
-				children: [] as { textContent: string; className?: string }[],
-				get firstElementChild(): { textContent: string; className?: string } | undefined {
+				children: [],
+				listeners: {},
+				get firstElementChild(): FakeElement | undefined {
 					return element.children[0]
 				},
-				setAttribute: vi.fn((name: string, value: string) => (attributes[name] = value)),
-				getAttribute: vi.fn((name: string) => attributes[name] ?? null),
+				setAttribute: (name, value) => {
+					attributes[name] = value
+				},
+				getAttribute: (name) => attributes[name] ?? null,
+				getBoundingClientRect: () => {
+					if (element.className.includes("map-phone-label")) return { left: 40, right: 140, width: 100 }
+					if (element.className.includes("map-phone-marker")) return { left: 0, right: 44, width: 44 }
+					return { left: 0, right: 0, width: 0 }
+				},
 				closest: (selector: string) => (element.className.split(" ").includes(selector.slice(1)) ? element : null),
-				append: vi.fn((child: { textContent: string }) => element.children.push(child)),
+				append: (...children) => {
+					for (const child of children) {
+						child.parent = element
+						element.children.push(child)
+					}
+				},
+				addEventListener: (name, callback) => {
+					element.listeners[name] = callback
+				},
+				click: () => {
+					let current: FakeElement | undefined = element
+					while (current) {
+						current.listeners.click?.()
+						current = current.parent
+					}
+				},
 			}
 			return element
 		},
@@ -217,6 +260,13 @@ describe("MapView", () => {
 		expect(map.touchZoomRotate.disableRotation).toHaveBeenCalled()
 		expect(map.keyboard.disableRotation).toHaveBeenCalled()
 	})
+	it("fills its parent only when requested", () => {
+		const placeholder = renderToStaticMarkup(<LazyMap fill />)
+		expect(placeholder).toContain("h-full min-h-0 w-full")
+		const { html } = mount({ fill: true })
+		expect(html).toContain("h-full min-h-0 w-full overflow-hidden bg-z1")
+		expect(html).not.toContain("aspect-[16/10]")
+	})
 
 	it("loads the latest props, updates sources and markers in place, and removes absent geometry", () => {
 		const { map } = mount({ circles: [circle], dot })
@@ -227,7 +277,7 @@ describe("MapView", () => {
 		render(next)
 		for (const effect of hooks.effects.slice(1)) effect()
 		map.fire("load")
-		expect(map.addSource).toHaveBeenCalledTimes(2)
+		expect(map.addSource).toHaveBeenCalledTimes(3)
 		expect(map.sources.place?.setData).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				features: [
@@ -250,18 +300,103 @@ describe("MapView", () => {
 			{ "line-color": ["case", ["get", "held"], "#4ade80", "#bbdefb"], "line-width": 2.5 },
 			{ "fill-color": "#1c7dc8", "fill-opacity": 0.2 },
 			{ "line-color": "#1c7dc8", "line-width": 1 },
+			{ "fill-color": ["get", "color"], "fill-opacity": 0.2 },
+			{ "line-color": ["get", "color"], "line-width": 1 },
 		])
 		const ownDot = fake.Marker.instances.find((marker) => marker.options.element.className.includes("map-own-dot"))
 		render({ circles: [circle], dot })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(fake.Map.instances).toHaveLength(1)
 		expect(fake.Marker.instances).toHaveLength(2)
-		expect(map.addSource).toHaveBeenCalledTimes(2)
+		expect(map.addSource).toHaveBeenCalledTimes(3)
 		render({})
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(map.sources.place?.setData).toHaveBeenLastCalledWith({ type: "FeatureCollection", features: [] })
 		expect(map.sources.accuracy?.setData).toHaveBeenLastCalledWith({ type: "FeatureCollection", features: [] })
 		expect(ownDot?.remove).toHaveBeenCalledOnce()
+	})
+
+	it("renders selectable phone markers and colored accuracy rings, updating and removing by id", () => {
+		const first = {
+			id: "phone-1",
+			lat: 55.52,
+			lng: 13.21,
+			accuracy: 42,
+			color: "hsl(120 75% 72%)",
+			team: "Ninjas",
+			name: "Keen Otter",
+		}
+		const onPhoneSelect = vi.fn()
+		const { map } = mount({ phones: [first], onPhoneSelect })
+		map.fire("load")
+		const marker = fake.Marker.instances[0]
+		const element = marker?.getElement() as unknown as FakeElement
+		const [dot, label] = element.children
+		expect(map.sources.phones?.setData).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				features: [
+					expect.objectContaining({
+						properties: { color: first.color },
+						geometry: { type: "Polygon", coordinates: [circleRing(first, first.accuracy)] },
+					}),
+				],
+			}),
+		)
+		expect(map.addLayer.mock.calls.map(([layer]) => layer)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ id: "phones-fill", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.2 } }),
+				expect.objectContaining({ id: "phones-line", paint: { "line-color": ["get", "color"], "line-width": 1 } }),
+			]),
+		)
+		expect(element.getAttribute("aria-label")).toBe("Ninjas · Keen Otter")
+		expect(dot?.style.backgroundColor).toBe(first.color)
+		expect(label?.children.map((child) => child.textContent)).toEqual(["Ninjas", " · Keen Otter"])
+		expect(label?.children[0]?.style.color).toBe(first.color)
+		dot?.click()
+		label?.click()
+		expect(onPhoneSelect).toHaveBeenNthCalledWith(1, first.id)
+		expect(onPhoneSelect).toHaveBeenNthCalledWith(2, first.id)
+
+		const next = { ...first, lat: 55.53, lng: 13.22, accuracy: 80 }
+		render({ phones: [next], onPhoneSelect })
+		for (const effect of hooks.effects.slice(1)) effect()
+		expect(fake.Map.instances).toHaveLength(1)
+		expect(fake.Marker.instances).toHaveLength(1)
+		expect(marker?.setLngLat).toHaveBeenLastCalledWith([next.lng, next.lat])
+		expect(map.sources.phones?.setData).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				features: [
+					expect.objectContaining({ geometry: { type: "Polygon", coordinates: [circleRing(next, next.accuracy)] } }),
+				],
+			}),
+		)
+		render({ phones: [] })
+		for (const effect of hooks.effects.slice(1)) effect()
+		expect(marker?.remove).toHaveBeenCalledOnce()
+	})
+
+	it("keeps multiple phone marker roots positioned by MapLibre", () => {
+		const phones = [
+			{ id: "phone-1", lat: 55.52, lng: 13.21, accuracy: 42, color: "red", team: "Ninjas", name: "Brave Otter" },
+			{ id: "phone-2", lat: 55.53, lng: 13.22, accuracy: 35, color: "blue", team: "Rävarna", name: "Swift Lynx" },
+		]
+		const { map } = mount({ phones })
+		map.fire("load")
+
+		const markers = fake.Marker.instances
+		expect(markers).toHaveLength(2)
+		expect(markers.map(({ position }) => [position.lng, position.lat])).toEqual(
+			phones.map(({ lng, lat }) => [lng, lat]),
+		)
+		for (const marker of markers) {
+			expect(marker.options.element.className).toContain("maplibregl-marker")
+			expect(marker.options.element.className).toContain("map-phone-marker")
+		}
+		const markerRule = readFileSync(new URL("./map.css", import.meta.url), "utf8").match(
+			/\.map-phone-marker\s*\{([^}]*)\}/,
+		)?.[1]
+		expect(markerRule).toBeDefined()
+		expect(markerRule).not.toMatch(/position\s*:\s*relative/)
 	})
 
 	it("renders held and empty numbered badges and updates teammate labels, fading and expiry", () => {
@@ -440,6 +575,8 @@ describe("MapView", () => {
 		expect(onMoveEnd).not.toHaveBeenCalled()
 		map.fire("load")
 		expect(map.fitBounds).toHaveBeenLastCalledWith(framing.bounds, { padding: 44, maxZoom: 18, duration: 0 })
+		map.fire("resize")
+		expect(map.fitBounds).toHaveBeenCalledOnce()
 		render({ framing: { lat: 55, lng: 13, zoom: 12 }, onMoveEnd })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(map.jumpTo).toHaveBeenLastCalledWith({ center: [13, 55], zoom: 12 })
@@ -450,6 +587,33 @@ describe("MapView", () => {
 		render({ framing: { ...framing, maxZoom: 17 } })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(map.fitBounds).toHaveBeenLastCalledWith(framing.bounds, { padding: 44, maxZoom: 17, duration: 0 })
+	})
+
+	it("reserves rendered phone-label space and refits bounds on resize only while automatic framing is active", () => {
+		const phone = {
+			id: "phone-1",
+			lat: 55.52,
+			lng: 13.21,
+			accuracy: 42,
+			color: "red",
+			team: "Ninjas",
+			name: "Keen Otter",
+		}
+		const { map } = mount({ phones: [phone], framing, refitBoundsOnResize: true })
+		map.fire("load")
+		expect(map.fitBounds).toHaveBeenLastCalledWith(framing.bounds, {
+			padding: { top: 44, right: 162, bottom: 44, left: 44 },
+			maxZoom: 18,
+			duration: 0,
+		})
+
+		map.fire("resize")
+		expect(map.fitBounds).toHaveBeenCalledTimes(2)
+
+		render({ phones: [phone], framing: null, refitBoundsOnResize: true })
+		for (const effect of hooks.effects.slice(1)) effect()
+		map.fire("resize")
+		expect(map.fitBounds).toHaveBeenCalledTimes(2)
 	})
 
 	it("disables preview interactions and cleans up all markers and the map", () => {

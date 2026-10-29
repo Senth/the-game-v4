@@ -10,6 +10,7 @@ export function SeasonTabs({ seasonId }: { seasonId: string }) {
 			{[
 				{ title: "Quests", segment: null },
 				{ title: "Teams", segment: "teams" },
+				{ title: "Map", segment: "map" },
 				{ title: "Settings", segment: "settings" },
 			].map((tab) => (
 				<Link
@@ -32,6 +33,7 @@ export function SeasonMenuLinks({ seasonId, teamCount }: { seasonId: string; tea
 			{[
 				{ title: "Season settings", segment: "settings" },
 				{ title: "Teams", segment: "teams" },
+				{ title: "Map", segment: "map" },
 			].map((entry) => (
 				<li key={entry.segment}>
 					<Link

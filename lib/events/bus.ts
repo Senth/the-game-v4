@@ -8,6 +8,7 @@ export const boardChannel = "board"
 export const teamChannel = (id: string) => `team:${id}`
 export const seasonChannel = (id: string) => `season:${id}`
 export const positionsChannel = (id: string) => `positions:${id}`
+export const livePositionsChannel = (seasonId: string) => `live-positions:${seasonId}`
 
 export function subscribe(channels: string[], listener: Listener): () => void {
 	for (const channel of channels) {

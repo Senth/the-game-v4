@@ -323,7 +323,24 @@ A multi-place report that does not complete coverage returns exactly `{status: "
 Every map quest, including one with a single place, shows the same team's phone positions and names through
 the [positions channel](#live-events). Pushes go out at most every `positionsPushMs = 5_000` per team.
 Dots fade from `fadeStartMs = 20_000` until the 30-second lifetime ends. No position history is sent or stored.
-Admins have no access to positions until #87. Reports publish the ordinary game-change channels only on a solve.
+Reports publish ordinary game-change channels only on a solve.
+Accepted reports also publish throttled `live-positions:<seasonId>` events for admins.
+
+#### Game master live map
+
+Admins load live phones only while `seasonStatus` is `live`; otherwise the response is exactly `{live: false}`.
+Live responses contain `live: true`, `mapArea`, every season team's `{id, name}` sorted by name, and reporting phones.
+Phone entries whitelist `{id, teamId, name, lat, lng, accuracy, expiresInMs}`; `id` is the phone record id.
+Join fixes and phone records by team and phone identity. Exclude missing records and teams outside the season.
+Never expose phone UUIDs, fix timestamps, receipt times, record timestamps or team secrets.
+Expiry is `30_000 − max(now − fix.at, now − receivedAt)`, computed on the server, independent of phone and admin clocks.
+Fixes expire just past 30 seconds. No position history is persisted.
+Accepted fixes publish `live-positions:<seasonId>` on the leading edge, then at most once per second.
+Always send the last trailing update.
+Solves retain ordinary channels and request a throttled update after clearing fixes.
+Rough, stale and stop reports request no updates.
+Team colors use name-sorted indexes: hue is `index × 360 / count`, with 75% saturation and 72% lightness.
+Above ten teams, odd indexes use 78% lightness. Colors stay stable while the sorted team set stays unchanged.
 
 #### Warmer/colder guidance
 
@@ -551,7 +568,8 @@ Only the reporting phone's outside response on a warmer quest may include the re
 Positions pushes carry only `{places: [{held}], phones: [{name, lat, lng, ageMs, place?}]}`.
 Each `held` is a boolean; optional `place` is the 1-based place that phone holds in the same coverage assignment.
 Only the team's own sessions receive these pushes. They contain no phone ids, place ids, team ids, timestamps
-or history. Admins, including previews, have no positions access until #87.
+or history. Admins, including previews, cannot subscribe to this player positions channel.
+Admin live-map positions and cross-team phone locations never reach players; own-team map pushes above remain unchanged.
 The player finisher list exposes only team id, name, place and points, never claim times or other season fields.
 
 A puzzle quest's player view omits `assetPath` and exposes this shape:
@@ -575,15 +593,17 @@ They log teammates into that team's own `/`, never standings, board or admin JSO
 ## Live events
 
 Use an in-process event bus in one app container, with SSE rather than WebSockets.
-Streams send a heartbeat every 25 seconds. Refetch on game-change events; positions events carry their payload
-directly without refetching. Poll every 5 seconds only while disconnected, then switch back to SSE when connected.
-Game-change updates from teammates and live controls should arrive within 1 second; positions pushes are limited
-to once per 5 seconds per team.
+Streams send a heartbeat every 25 seconds. Refetch on game-change and admin live-positions events.
+Player positions events carry their payload directly without refetching.
+Poll every 5 seconds only while disconnected, then switch back to SSE when connected.
+Game-change updates from teammates and live controls should arrive within 1 second.
+Player positions pushes are limited to once per 5 seconds per team.
 
 | Channel | Triggers and readers |
 | --- | --- |
 | `team:<id>` | Correct solve, puzzle drop, finish, first hint reveal, team changes and structural edits; its sessions and admin preview |
-| `positions:<teamId>` | Current map-quest fixes, coverage changes and expiry, at most every 5 s per team; only that team's sessions, never admins until #87 |
+| `positions:<teamId>` | Map-quest fixes, coverage and expiry, at most every 5 s per team; only that team's sessions, never admins |
+| `live-positions:<seasonId>` | Accepted fixes and solve cleanup, at most once per second per season; admins only, refetch through guarded `getLivePhones` |
 | `season:<id>` | Content, settings, timing, structure or teams change; solve, finish and reveal update admin stats and standings |
 | `board` | Running-season changes, timing changes, solves, finishes, reveals and team changes; public TV standings |
 
@@ -592,8 +612,10 @@ A session whose team or admin no longer exists reads only `board`.
 `getGame`, `submitAnswer`, `revealHint` and puzzle operations use authorized data.
 Successful game mutations publish to all three channels after writes, except unsolved puzzle drops, which publish only `team:<id>`.
 Puzzle solves publish all three channels. Wrong answers and repeated hint reveals are no-ops.
-Location reports publish all three game-change channels only on a solve. Accepted map-quest fixes and expiry
-also push the whitelisted positions payload while the season is running; other reports publish nothing.
+Location reports publish all three game-change channels only on a solve.
+Accepted fixes also request throttled admin live-positions events.
+Accepted map-quest fixes and expiry push the whitelisted player positions payload while the season runs.
+Rejected reports request no events.
 Channel access must not expose another team's private data or admin-only content.
 
 ## Assets, migration and deployment

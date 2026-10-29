@@ -59,3 +59,14 @@ it("keeps the preview beside the flexible middle pane only on desktop", () => {
 	expect(html).toContain("border-l border-z1 px-5 pt-6 lg:block")
 	expect(html.indexOf("Preview slot")).toBeGreaterThan(html.indexOf("Middle pane"))
 })
+
+it("constrains the frame only when a live map fills the pane", () => {
+	const html = renderToStaticMarkup(
+		<AdminFrame title="Season" menu={null} phoneHeader={null}>
+			<div className="live-map-canvas">Map</div>
+		</AdminFrame>,
+	)
+	expect(html).toContain("has-[.live-map-canvas]:h-dvh")
+	expect(html).toContain("has-[.live-map-canvas]:min-h-0")
+	expect(html).toContain("has-[.live-map-canvas]:overflow-hidden")
+})

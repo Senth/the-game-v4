@@ -20,16 +20,21 @@ import "./map.css"
 type Coordinates = Pick<Place, "lat" | "lng">
 type Circle = Coordinates & { number: number; radius: number; held?: boolean }
 type Teammate = Coordinates & { name: string; ageMs: number }
+type LivePhone = Coordinates & { id: string; accuracy: number; color: string; team: string; name: string }
 type Area = Coordinates & { zoom: number }
 type Framing = Area | { bounds: [[number, number], [number, number]]; maxZoom?: number }
 
 export type MapViewProps = {
 	aspectRatio?: "16/10" | "4/3"
+	fill?: boolean
 	circles?: Circle[]
 	dot?: (Coordinates & { accuracy: number }) | null
 	teammates?: Teammate[]
+	phones?: LivePhone[]
+	onPhoneSelect?: (id: string) => void
 	maxZoom?: number
 	minZoom?: number
+	refitBoundsOnResize?: boolean
 	edit?: {
 		enabled?: boolean
 		onMove: (number: number, point: Coordinates) => void
@@ -62,16 +67,31 @@ function placePolygons(circles: Circle[]): GeoJSONSourceSpecification["data"] {
 	}
 }
 
+function phonePolygons(phones: LivePhone[]): GeoJSONSourceSpecification["data"] {
+	return {
+		type: "FeatureCollection",
+		features: phones.map(({ lat, lng, accuracy, color }) => ({
+			type: "Feature",
+			properties: { color },
+			geometry: { type: "Polygon", coordinates: [circleRing({ lat, lng }, accuracy)] },
+		})),
+	}
+}
+
 export default function MapView({
 	aspectRatio = "16/10",
+	fill = false,
 	circles = [],
 	dot,
 	teammates = [],
+	phones = [],
+	onPhoneSelect,
 	edit,
 	framing,
 	interactive = true,
 	maxZoom,
 	minZoom,
+	refitBoundsOnResize = false,
 	onMoveEnd,
 }: MapViewProps) {
 	const container = useRef<HTMLDivElement>(null)
@@ -79,8 +99,9 @@ export default function MapView({
 	const markers = useRef<{
 		places: Record<number, { pin?: Marker; edge?: Marker }>
 		teammates: Map<string, Marker>
+		phones: Map<string, Marker>
 		dot?: Marker
-	}>({ places: {}, teammates: new Map() })
+	}>({ places: {}, teammates: new Map(), phones: new Map() })
 	const ready = useRef(false)
 	const dragging = useRef<{ number: number; key: "pin" | "edge" } | null>(null)
 
@@ -121,14 +142,24 @@ export default function MapView({
 			manual,
 		)
 	})
+	const selectPhone = useEffectEvent((id: string) => onPhoneSelect?.(id))
 	const updateSources = useEffectEvent(
-		(nextCircles = circles, nextDot = dot, controls = edit, enabled = interactive, nextTeammates = teammates) => {
+		(
+			nextCircles = circles,
+			nextDot = dot,
+			controls = edit,
+			enabled = interactive,
+			nextTeammates = teammates,
+			nextPhones = phones,
+		) => {
 			const map = instance.current
 			if (!map || !ready.current) return
 			const place = map.getSource("place") as GeoJSONSource
 			const accuracy = map.getSource("accuracy") as GeoJSONSource
+			const phoneAccuracy = map.getSource("phones") as GeoJSONSource
 			place.setData(placePolygons(nextCircles))
 			accuracy.setData(polygon(nextDot, nextDot?.accuracy ?? 0))
+			phoneAccuracy.setData(phonePolygons(nextPhones))
 			const numbers = new Set(nextCircles.map(({ number }) => number))
 			for (const [number, pair] of Object.entries(markers.current.places)) {
 				if (numbers.has(Number(number))) continue
@@ -232,13 +263,68 @@ export default function MapView({
 				label.textContent = `${phone.name}${fading ? ` · ${Math.floor(phone.ageMs / 1000)} s` : ""}`
 				marker.setLngLat([phone.lng, phone.lat])
 			}
+			const phoneIds = new Set(nextPhones.map(({ id }) => id))
+			for (const [id, marker] of markers.current.phones) {
+				if (phoneIds.has(id)) continue
+				marker.remove()
+				markers.current.phones.delete(id)
+			}
+			for (const phone of nextPhones) {
+				let marker = markers.current.phones.get(phone.id)
+				if (!marker) {
+					const button = document.createElement("button")
+					const dot = document.createElement("span")
+					const label = document.createElement("span")
+					const team = document.createElement("span")
+					const name = document.createElement("span")
+					button.type = "button"
+					button.className = "map-phone-marker"
+					dot.className = "map-phone-dot"
+					label.className = "map-phone-label bg-z0/85"
+					team.className = "map-phone-team"
+					name.className = "map-phone-name"
+					label.append(team, name)
+					button.append(dot, label)
+					button.addEventListener("click", () => selectPhone(phone.id))
+					marker = new Marker({ element: button, draggable: false }).setLngLat([phone.lng, phone.lat]).addTo(map)
+					markers.current.phones.set(phone.id, marker)
+				}
+				const button = marker.getElement() as HTMLButtonElement
+				button.setAttribute("aria-label", `${phone.team} · ${phone.name}`)
+				const dot = button.children[0] as HTMLSpanElement
+				const label = button.children[1] as HTMLSpanElement
+				const team = label.children[0] as HTMLSpanElement
+				const name = label.children[1] as HTMLSpanElement
+				dot.style.backgroundColor = phone.color
+				team.textContent = phone.team
+				team.style.color = phone.color
+				name.textContent = ` · ${phone.name}`
+				marker.setLngLat([phone.lng, phone.lat])
+			}
 		},
 	)
 	const frame = useEffectEvent((view = framing) => {
 		const map = instance.current
 		if (!map || !ready.current || !view) return
-		if ("bounds" in view) map.fitBounds(view.bounds, { padding: 44, maxZoom: view.maxZoom ?? 18, duration: 0 })
-		else map.jumpTo({ center: [view.lng, view.lat], zoom: view.zoom })
+		if ("bounds" in view) {
+			const rightLabelExtent = Math.ceil(
+				Math.max(
+					0,
+					...Array.from(markers.current.phones.values(), (marker) => {
+						const element = marker.getElement()
+						const label = element.children[1]
+						if (!label) return 0
+						const markerBounds = element.getBoundingClientRect()
+						return label.getBoundingClientRect().right - markerBounds.left - markerBounds.width / 2
+					}),
+				),
+			)
+			const padding = rightLabelExtent ? { top: 44, right: 44 + rightLabelExtent, bottom: 44, left: 44 } : 44
+			map.fitBounds(view.bounds, { padding, maxZoom: view.maxZoom ?? 18, duration: 0 })
+		} else map.jumpTo({ center: [view.lng, view.lat], zoom: view.zoom })
+	})
+	const refitAfterResize = useEffectEvent(() => {
+		if (refitBoundsOnResize && framing && "bounds" in framing) frame(framing)
 	})
 	const setInteraction = useEffectEvent((enabled = interactive) => {
 		const map = instance.current
@@ -283,6 +369,7 @@ export default function MapView({
 			create(event.lngLat)
 		})
 		map.on("moveend", (event) => moved(!!event.originalEvent))
+		map.on("resize", () => refitAfterResize())
 		map.on("load", () => {
 			for (const [id, token] of [
 				["place", "head"],
@@ -310,6 +397,20 @@ export default function MapView({
 					paint: { "line-color": paintColor, "line-width": id === "place" ? 2.5 : 1 },
 				})
 			}
+			map.addSource("phones", { type: "geojson", data: phonePolygons([]) })
+			const phoneColor: ExpressionSpecification = ["get", "color"]
+			map.addLayer({
+				id: "phones-fill",
+				type: "fill",
+				source: "phones",
+				paint: { "fill-color": phoneColor, "fill-opacity": 0.2 },
+			})
+			map.addLayer({
+				id: "phones-line",
+				type: "line",
+				source: "phones",
+				paint: { "line-color": phoneColor, "line-width": 1 },
+			})
 			ready.current = true
 			updateSources()
 			frame()
@@ -322,15 +423,16 @@ export default function MapView({
 			}
 			markers.current.dot?.remove()
 			for (const marker of markers.current.teammates.values()) marker.remove()
-			markers.current = { places: {}, teammates: new Map() }
+			for (const marker of markers.current.phones.values()) marker.remove()
+			markers.current = { places: {}, teammates: new Map(), phones: new Map() }
 			map.remove()
 			instance.current = null
 		}
 	}, [maxZoom, minZoom])
 
 	useEffect(() => {
-		updateSources(circles, dot, edit, interactive, teammates)
-	}, [circles, dot, edit, interactive, teammates])
+		updateSources(circles, dot, edit, interactive, teammates, phones)
+	}, [circles, dot, edit, interactive, teammates, phones])
 	useEffect(() => {
 		frame(framing)
 	}, [framing])
@@ -341,7 +443,7 @@ export default function MapView({
 	return (
 		<div
 			ref={container}
-			className={`game-map ${aspectRatio === "4/3" ? "aspect-[4/3]" : "aspect-[16/10]"} w-full overflow-hidden rounded-md bg-z1`}
+			className={`game-map ${fill ? "h-full min-h-0 w-full" : `${aspectRatio === "4/3" ? "aspect-[4/3]" : "aspect-[16/10]"} w-full rounded-md`} overflow-hidden bg-z1`}
 		/>
 	)
 }

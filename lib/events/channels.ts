@@ -2,7 +2,7 @@ import type { SessionData } from "@/lib/auth/session"
 import type { Team } from "@/lib/domain/schemas"
 import { boardChannel, positionsChannel, seasonChannel, teamChannel } from "./bus"
 
-const wellFormed = /^(?:board|(?:team|season|positions):[\w-]+)$/
+const wellFormed = /^(?:board|(?:team|season|positions|live-positions):[\w-]+)$/
 
 export function allowedChannels(
 	session: SessionData | null,
