@@ -34,6 +34,7 @@ export type MapViewProps = {
 	onPhoneSelect?: (id: string) => void
 	maxZoom?: number
 	minZoom?: number
+	refitBoundsOnResize?: boolean
 	edit?: {
 		enabled?: boolean
 		onMove: (number: number, point: Coordinates) => void
@@ -90,6 +91,7 @@ export default function MapView({
 	interactive = true,
 	maxZoom,
 	minZoom,
+	refitBoundsOnResize = false,
 	onMoveEnd,
 }: MapViewProps) {
 	const container = useRef<HTMLDivElement>(null)
@@ -304,8 +306,25 @@ export default function MapView({
 	const frame = useEffectEvent((view = framing) => {
 		const map = instance.current
 		if (!map || !ready.current || !view) return
-		if ("bounds" in view) map.fitBounds(view.bounds, { padding: 44, maxZoom: view.maxZoom ?? 18, duration: 0 })
-		else map.jumpTo({ center: [view.lng, view.lat], zoom: view.zoom })
+		if ("bounds" in view) {
+			const rightLabelExtent = Math.ceil(
+				Math.max(
+					0,
+					...Array.from(markers.current.phones.values(), (marker) => {
+						const element = marker.getElement()
+						const label = element.children[1]
+						if (!label) return 0
+						const markerBounds = element.getBoundingClientRect()
+						return label.getBoundingClientRect().right - markerBounds.left - markerBounds.width / 2
+					}),
+				),
+			)
+			const padding = rightLabelExtent ? { top: 44, right: 44 + rightLabelExtent, bottom: 44, left: 44 } : 44
+			map.fitBounds(view.bounds, { padding, maxZoom: view.maxZoom ?? 18, duration: 0 })
+		} else map.jumpTo({ center: [view.lng, view.lat], zoom: view.zoom })
+	})
+	const refitAfterResize = useEffectEvent(() => {
+		if (refitBoundsOnResize && framing && "bounds" in framing) frame(framing)
 	})
 	const setInteraction = useEffectEvent((enabled = interactive) => {
 		const map = instance.current
@@ -350,6 +369,7 @@ export default function MapView({
 			create(event.lngLat)
 		})
 		map.on("moveend", (event) => moved(!!event.originalEvent))
+		map.on("resize", () => refitAfterResize())
 		map.on("load", () => {
 			for (const [id, token] of [
 				["place", "head"],

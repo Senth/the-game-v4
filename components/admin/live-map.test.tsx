@@ -144,6 +144,7 @@ describe("LiveMap", () => {
 		expect(render()).toContain("1 phone · 1 of 3 teams")
 		expect(render()).toContain("Only phones on a location quest report")
 		expect(hooks.mapProps?.fill).toBe(true)
+		expect(hooks.mapProps?.refitBoundsOnResize).toBe(true)
 		expect(hooks.mapProps?.phones).toEqual([
 			expect.objectContaining({
 				id: first.id,

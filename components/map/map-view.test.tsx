@@ -122,6 +122,7 @@ type FakeElement = {
 	firstElementChild: FakeElement | undefined
 	setAttribute: (name: string, value: string) => void
 	getAttribute: (name: string) => string | null
+	getBoundingClientRect: () => { left: number; right: number; width: number }
 	closest: (selector: string) => FakeElement | null
 	append: (...children: FakeElement[]) => void
 	addEventListener: (name: string, callback: () => void) => void
@@ -186,6 +187,11 @@ beforeEach(() => {
 					attributes[name] = value
 				},
 				getAttribute: (name) => attributes[name] ?? null,
+				getBoundingClientRect: () => {
+					if (element.className.includes("map-phone-label")) return { left: 40, right: 140, width: 100 }
+					if (element.className.includes("map-phone-marker")) return { left: 0, right: 44, width: 44 }
+					return { left: 0, right: 0, width: 0 }
+				},
 				closest: (selector: string) => (element.className.split(" ").includes(selector.slice(1)) ? element : null),
 				append: (...children) => {
 					for (const child of children) {
@@ -569,6 +575,8 @@ describe("MapView", () => {
 		expect(onMoveEnd).not.toHaveBeenCalled()
 		map.fire("load")
 		expect(map.fitBounds).toHaveBeenLastCalledWith(framing.bounds, { padding: 44, maxZoom: 18, duration: 0 })
+		map.fire("resize")
+		expect(map.fitBounds).toHaveBeenCalledOnce()
 		render({ framing: { lat: 55, lng: 13, zoom: 12 }, onMoveEnd })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(map.jumpTo).toHaveBeenLastCalledWith({ center: [13, 55], zoom: 12 })
@@ -579,6 +587,33 @@ describe("MapView", () => {
 		render({ framing: { ...framing, maxZoom: 17 } })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(map.fitBounds).toHaveBeenLastCalledWith(framing.bounds, { padding: 44, maxZoom: 17, duration: 0 })
+	})
+
+	it("reserves rendered phone-label space and refits bounds on resize only while automatic framing is active", () => {
+		const phone = {
+			id: "phone-1",
+			lat: 55.52,
+			lng: 13.21,
+			accuracy: 42,
+			color: "red",
+			team: "Ninjas",
+			name: "Keen Otter",
+		}
+		const { map } = mount({ phones: [phone], framing, refitBoundsOnResize: true })
+		map.fire("load")
+		expect(map.fitBounds).toHaveBeenLastCalledWith(framing.bounds, {
+			padding: { top: 44, right: 162, bottom: 44, left: 44 },
+			maxZoom: 18,
+			duration: 0,
+		})
+
+		map.fire("resize")
+		expect(map.fitBounds).toHaveBeenCalledTimes(2)
+
+		render({ phones: [phone], framing: null, refitBoundsOnResize: true })
+		for (const effect of hooks.effects.slice(1)) effect()
+		map.fire("resize")
+		expect(map.fitBounds).toHaveBeenCalledTimes(2)
 	})
 
 	it("disables preview interactions and cleans up all markers and the map", () => {

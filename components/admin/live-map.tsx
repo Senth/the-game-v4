@@ -106,6 +106,7 @@ export function LiveMap({ seasonId }: { seasonId: string }) {
 								fill
 								phones={mapPhones}
 								framing={framing}
+								refitBoundsOnResize
 								onMoveEnd={(_, moved) => {
 									if (moved) setManual(true)
 								}}
