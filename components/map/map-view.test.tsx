@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import type { EffectCallback } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -366,6 +367,30 @@ describe("MapView", () => {
 		render({ phones: [] })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(marker?.remove).toHaveBeenCalledOnce()
+	})
+
+	it("keeps multiple phone marker roots positioned by MapLibre", () => {
+		const phones = [
+			{ id: "phone-1", lat: 55.52, lng: 13.21, accuracy: 42, color: "red", team: "Ninjas", name: "Brave Otter" },
+			{ id: "phone-2", lat: 55.53, lng: 13.22, accuracy: 35, color: "blue", team: "Rävarna", name: "Swift Lynx" },
+		]
+		const { map } = mount({ phones })
+		map.fire("load")
+
+		const markers = fake.Marker.instances
+		expect(markers).toHaveLength(2)
+		expect(markers.map(({ position }) => [position.lng, position.lat])).toEqual(
+			phones.map(({ lng, lat }) => [lng, lat]),
+		)
+		for (const marker of markers) {
+			expect(marker.options.element.className).toContain("maplibregl-marker")
+			expect(marker.options.element.className).toContain("map-phone-marker")
+		}
+		const markerRule = readFileSync(new URL("./map.css", import.meta.url), "utf8").match(
+			/\.map-phone-marker\s*\{([^}]*)\}/,
+		)?.[1]
+		expect(markerRule).toBeDefined()
+		expect(markerRule).not.toMatch(/position\s*:\s*relative/)
 	})
 
 	it("renders held and empty numbered badges and updates teammate labels, fading and expiry", () => {

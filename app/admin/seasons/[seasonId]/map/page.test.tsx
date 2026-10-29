@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { LiveMap } from "@/components/admin/live-map"
 import { requireAdmin } from "@/lib/auth/guards"
 import { getSeason } from "@/lib/db/seasons"
@@ -15,6 +15,10 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	vi.mocked(requireAdmin).mockResolvedValue({ _id: "admin", name: "admin", passwordHash: "hash" })
 	vi.mocked(getSeason).mockResolvedValue(season)
+})
+
+afterEach(() => {
+	vi.useRealTimers()
 })
 
 it("guards before reading season data", async () => {
@@ -40,4 +44,25 @@ it("renders Map heading and live map for the guarded season", async () => {
 	)
 	expect(liveMap.type).toBe(LiveMap)
 	expect(liveMap.props).toEqual({ seasonId: season._id })
+})
+
+it("resets map state at scheduled start and end without an SSE event", async () => {
+	const start = new Date("2026-10-11T18:00:00Z")
+	const end = new Date("2026-10-11T18:10:00Z")
+	vi.mocked(getSeason).mockResolvedValue({ ...season, start, end })
+	vi.useFakeTimers()
+	vi.setSystemTime(start.getTime() - 1)
+	const upcomingPage = await MapPage(props)
+	const upcomingMap = upcomingPage.props.children[1]
+	expect(upcomingMap.key).toBe("upcoming")
+
+	vi.setSystemTime(start)
+	const livePage = await MapPage(props)
+	const liveMap = livePage.props.children[1]
+	expect(liveMap.key).toBe("live")
+
+	vi.setSystemTime(end)
+	const endedPage = await MapPage(props)
+	const endedMap = endedPage.props.children[1]
+	expect(endedMap.key).toBe("ended")
 })
