@@ -57,7 +57,8 @@ Test reports against isolated MongoDB, including malformed fixes and wrong, hidd
 Reject reports outside running play, after completion and from another team.
 Test concurrent phones, retries and races with hint reveals and place edits.
 Assert exactly one solve, score award and finisher claim, using stored hint penalties.
-Assert only successful solves publish live events; rejected and outside reports leave team state unchanged.
+Assert only solves publish ordinary game-change channels; accepted fixes also publish throttled admin live-positions events.
+Rejected and outside reports leave team state unchanged.
 Test backup answers and authorized solved-location earnings for teammate completion feedback.
 
 Test latest-fix replacement, team/phone isolation and expiry on reads and writes, including future-dated fixes.
@@ -103,6 +104,26 @@ Use no live tiles or geocoding in unit, component or browser tests.
 Cover puzzle exclusion, optional answers, draft previews, header autosave and retry.
 Test New place radius helpers and range errors.
 Keep these cases in unit and component tests. Add no browser flows.
+
+### Game master live map
+
+Use [PROJECT.md's live-map rules](PROJECT.md#game-master-live-map) for payloads, expiry, throttling and colors.
+Store tests cover multi-team reads, team isolation, copied fixes and exact 30-second expiry boundaries.
+Check `expiresInMs` against both fix timestamps and server receipt times, including future phone clocks.
+Isolated MongoDB tests join nicknames by team and phone, excluding orphan fixes and teams outside the season.
+Assert all season teams appear name-sorted, even without phones; whitelist teams, map area and phone payloads.
+Reject phone UUIDs, timestamps and team secrets from JSON.
+Before start, after end and without start, return exactly `{live: false}`.
+Action tests reject anonymous and team sessions before database or store reads; admins receive the payload.
+Channel and events-route tests restrict `live-positions:<seasonId>` to admins.
+Reject teams, deleted sessions, anonymous sessions and malformed names.
+Keep `positions:<teamId>` access unchanged: owning team only, never another team, anonymous sessions or admins.
+Report tests cover accepted inside and outside fixes, rejected fixes, stop reports and unchanged solve channels.
+Fake timers prove leading publication, one-second per-season throttling and the final trailing update.
+Check season isolation and timer cleanup.
+Assert reports write no position history and leave MongoDB collections unchanged unless they solve.
+Pure tests cover distinct, evenly spaced hues for 2, 10 and 20 teams, lightness alternation above ten and stable output.
+Add no browser flow; existing core-loop smoke test remains unchanged.
 
 ### Phone names and storage
 

@@ -7,6 +7,10 @@ export async function listTeamPhones(teamId: string): Promise<Phone[]> {
 	return (await collections()).phones.find({ teamId }).toArray()
 }
 
+export async function listPhonesForTeams(teamIds: string[]): Promise<Phone[]> {
+	return (await collections()).phones.find({ teamId: { $in: teamIds } }).toArray()
+}
+
 export async function ensurePhone(
 	teamId: string,
 	phoneId: string,

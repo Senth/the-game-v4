@@ -110,6 +110,19 @@ describe("GET /api/events", () => {
 		await expectStream(["board"])
 	})
 
+	it("permits live positions only for an existing admin, never team or anonymous sessions", async () => {
+		const channel = `live-positions:${seasonId}`
+		expect((await request([channel])).status).toBe(403)
+		for (const id of [teamId, otherTeamId, deletedTeamId]) {
+			await login({ kind: "team", id })
+			expect((await request([channel])).status).toBe(403)
+		}
+		await login({ kind: "admin", id: deletedAdminId })
+		expect((await request([channel])).status).toBe(403)
+		await login({ kind: "admin", id: adminId })
+		await expectStream([channel])
+	})
+
 	it("allows an admin another team's channel and a season channel", async () => {
 		await login({ kind: "admin", id: adminId })
 		await expectStream([`team:${otherTeamId}`])

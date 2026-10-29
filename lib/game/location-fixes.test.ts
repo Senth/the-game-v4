@@ -1,8 +1,29 @@
 import { describe, expect, it } from "vitest"
 import { fixTtlMs, guidanceWindowMs } from "@/lib/domain/location"
-import { clearTeamFixes, latestFixes, recordFix, recordGuidanceFix, teamFixes } from "./location-fixes"
+import { clearTeamFixes, fixesForTeams, latestFixes, recordFix, recordGuidanceFix, teamFixes } from "./location-fixes"
 
 describe("phone fixes", () => {
+	it("reads selected teams with server-clock expiry and copied fixes, pruning just past 30 seconds", () => {
+		const now = Date.now()
+		const first = crypto.randomUUID()
+		const second = crypto.randomUUID()
+		const fix = { lat: 55, lng: 13, accuracy: 10, at: now - 1000 }
+		recordFix(first, "shared", fix, now)
+		recordFix(second, "shared", { ...fix, at: now + 30_000 }, now)
+		recordFix("outside", "shared", fix, now)
+		expect(fixesForTeams([first, second], now + 100)).toEqual([
+			{ teamId: first, phoneId: "shared", fix, expiresInMs: 28_900 },
+			{ teamId: second, phoneId: "shared", fix: { ...fix, at: now + 30_000 }, expiresInMs: 29_900 },
+		])
+		expect(fixesForTeams([], now)).toEqual([])
+		const read = fixesForTeams([first], now)[0]
+		if (read) read.fix.lat = 0
+		expect(fixesForTeams([first], now + 29_000)).toEqual([{ teamId: first, phoneId: "shared", fix, expiresInMs: 0 }])
+		expect(fixesForTeams([first], now + 29_001)).toEqual([])
+		expect(fixesForTeams([second], now + 30_000)[0]?.expiresInMs).toBe(0)
+		expect(fixesForTeams([first, second], now + 30_001)).toEqual([])
+	})
+
 	it("keeps only each phone's latest fix, isolated by team, without retaining caller references", () => {
 		const now = Date.now()
 		const team = crypto.randomUUID()

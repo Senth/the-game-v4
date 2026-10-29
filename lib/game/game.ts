@@ -38,6 +38,7 @@ import {
 import { dropPiece, isSolved, pieceIds, randomSpread } from "@/lib/domain/puzzle"
 import { type Season, Spot, type Team } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
+import { publishLivePositions } from "@/lib/events/live-positions"
 import { clearTeamFixes, latestFixes, recordFix, recordGuidanceFix, teamFixesVersion } from "./location-fixes"
 import { clearPositions, schedulePositions } from "./positions"
 
@@ -272,6 +273,7 @@ export async function reportPosition(
 		const status = evaluateFix(found.quest.location, fix, now.getTime())
 		if (status === "rough" || status === "stale") return { status }
 		recordFix(current._id, phoneId, fix, now.getTime())
+		publishLivePositions(season._id)
 		const previous = recordGuidanceFix(current._id, phoneId, questId, fix, now.getTime())
 		const covered =
 			found.quest.location.places.length > 1
@@ -302,6 +304,7 @@ export async function reportPosition(
 			if (found.quest.location.guidance === "map") clearPositions(current._id)
 			if (questIndex + 1 === questOrder.length) await claimFinish(season._id, current._id, now)
 			publishTeamChange(current._id, season._id)
+			publishLivePositions(season._id)
 			return { status: "solved", pointsEarned }
 		}
 		const fresh = await getTeam(team._id)
@@ -343,6 +346,7 @@ export async function submitAnswer(
 			if (quest.location) {
 				clearTeamFixes(current._id)
 				if (quest.location.guidance === "map") clearPositions(current._id)
+				publishLivePositions(season._id)
 			}
 			if (questIndex + 1 === questOrder.length) await claimFinish(season._id, current._id, now)
 			publishTeamChange(current._id, season._id)

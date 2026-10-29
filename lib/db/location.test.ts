@@ -8,7 +8,14 @@ import { copyQuest } from "@/app/admin/copy-actions"
 import { requireAdmin, requireTeam } from "@/lib/auth/guards"
 import type { Location, Team } from "@/lib/domain/schemas"
 import { newQuest } from "@/lib/domain/season-tree"
-import { boardChannel, positionsChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
+import {
+	boardChannel,
+	livePositionsChannel,
+	positionsChannel,
+	seasonChannel,
+	subscribe,
+	teamChannel,
+} from "@/lib/events/bus"
 import { getSolvedLocation, loadGame, reportPosition, submitAnswer } from "@/lib/game/game"
 import { clearTeamFixes, latestFixes, recordGuidanceFix } from "@/lib/game/location-fixes"
 import { clearPositions } from "@/lib/game/positions"
@@ -62,9 +69,10 @@ beforeEach(async () => {
 	vi.mocked(requireTeam).mockImplementation(async () => (await teams.getTeam(team._id)) as Team)
 })
 
-afterEach(() => {
+afterEach(async () => {
 	clearTeamFixes(team._id)
 	clearPositions(team._id)
+	await vi.advanceTimersByTimeAsync(2000)
 	vi.clearAllTimers()
 	vi.useRealTimers()
 })
@@ -81,6 +89,52 @@ function mapLocation(count: number): Location {
 }
 
 describe("location reports", () => {
+	it("publishes accepted inside and outside fixes through the season throttle without persisting positions", async () => {
+		await setSeasonField("season", target, mapLocation(2))
+		const db = await getDb()
+		const names = (await db.listCollections().toArray()).map(({ name }) => name).sort()
+		const before = await Promise.all(names.map((name) => db.collection(name).find({}).toArray()))
+		const ordinary = [teamChannel(team._id), seasonChannel("season"), boardChannel]
+		const channel = livePositionsChannel("season")
+		const events: string[] = []
+		const unsubscribe = subscribe([...ordinary, channel], ({ channel }) => events.push(channel))
+		try {
+			expect(await reportPosition(team, "one", quest.id, { ...fix, lat: 56 }, now)).toEqual({ status: "outside" })
+			expect(events).toEqual([channel])
+			await vi.advanceTimersByTimeAsync(100)
+			expect(await reportPosition(team, "one", quest.id, { ...fix, at: fix.at + 100 }, new Date(fix.at + 100))).toEqual(
+				{ status: "outside" },
+			)
+			expect(events).toEqual([channel])
+			await vi.advanceTimersByTimeAsync(899)
+			expect(events).toEqual([channel])
+			await vi.advanceTimersByTimeAsync(1)
+			expect(events).toEqual([channel, channel])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(events).toEqual([channel, channel])
+			expect(await Promise.all(names.map((name) => db.collection(name).find({}).toArray()))).toEqual(before)
+			expect((await db.listCollections().toArray()).map(({ name }) => name).sort()).toEqual(names)
+		} finally {
+			unsubscribe()
+		}
+	})
+
+	it("retains solve channels and sends a trailing live update after fixes are cleared", async () => {
+		const channels = [teamChannel(team._id), seasonChannel("season"), boardChannel]
+		const channel = livePositionsChannel("season")
+		const events: string[] = []
+		const unsubscribe = subscribe([...channels, channel], ({ channel }) => events.push(channel))
+		try {
+			expect(await reportPosition(team, "one", quest.id, fix, now)).toEqual({ status: "solved", pointsEarned: 50 })
+			expect(events).toEqual([channel, ...channels])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(events).toEqual([channel, ...channels, channel])
+			expect(latestFixes(team._id, Date.now()).size).toBe(0)
+		} finally {
+			unsubscribe()
+		}
+	})
+
 	it("rejects an in-flight old-quest report after a backup solve clears fixes", async () => {
 		await setSeasonField("season", target, mapLocation(2))
 		await reportPosition(team, "one", quest.id, fix, now)
@@ -295,7 +349,7 @@ describe("location reports", () => {
 		},
 	)
 
-	it("returns only phone-local guidance without writes, events or guidance in game data", async () => {
+	it("returns only phone-local guidance without writes, game-change events or guidance in game data", async () => {
 		await setSeasonField("season", target, { ...location, guidance: "warmer" })
 		const before = await teams.getTeam(team._id)
 		const events: string[] = []
@@ -396,16 +450,17 @@ describe("location reports", () => {
 		["stale", { ...fix, at: fix.at - 30_001 }],
 		["stale", { ...fix, at: fix.at + 30_001 }],
 		["outside", { ...fix, lat: 56 }],
-	] as const)("%s fixes never write or publish", async (status, report) => {
+	] as const)("%s fixes never write or publish game-change channels", async (status, report) => {
 		const before = await teams.getTeam(team._id)
 		const events: string[] = []
-		const unsubscribe = subscribe([teamChannel(team._id), seasonChannel("season"), boardChannel], ({ channel }) =>
-			events.push(channel),
+		const unsubscribe = subscribe(
+			[teamChannel(team._id), seasonChannel("season"), boardChannel, livePositionsChannel("season")],
+			({ channel }) => events.push(channel),
 		)
 		try {
 			expect(await reportPosition(team, "phone", quest.id, report, now)).toEqual({ status })
 			expect(await teams.getTeam(team._id)).toEqual(before)
-			expect(events).toEqual([])
+			expect(events).toEqual(status === "outside" ? [livePositionsChannel("season")] : [])
 			expect(latestFixes(team._id, now.getTime()).get("phone")).toEqual(status === "outside" ? report : undefined)
 		} finally {
 			unsubscribe()
@@ -421,11 +476,21 @@ describe("location reports", () => {
 			if (state === "deleted") await (await collections()).teams.deleteOne({ _id: team._id })
 			if (state === "hidden") await setSeasonField("season", { ...target, field: "hidden" }, true)
 			const before = await teams.getTeam(team._id)
-			expect(await reportPosition(team, "phone", state === "not-current" ? "elsewhere" : quest.id, fix, now)).toEqual({
-				status: "stop",
-			})
-			expect(await teams.getTeam(team._id)).toEqual(before)
-			expect(latestFixes(team._id, now.getTime()).size).toBe(0)
+			const events: string[] = []
+			const unsubscribe = subscribe([livePositionsChannel("season")], ({ channel }) => events.push(channel))
+			try {
+				expect(await reportPosition(team, "phone", state === "not-current" ? "elsewhere" : quest.id, fix, now)).toEqual(
+					{
+						status: "stop",
+					},
+				)
+				expect(await teams.getTeam(team._id)).toEqual(before)
+				expect(latestFixes(team._id, now.getTime()).size).toBe(0)
+				await vi.advanceTimersByTimeAsync(1000)
+				expect(events).toEqual([])
+			} finally {
+				unsubscribe()
+			}
 		},
 	)
 
