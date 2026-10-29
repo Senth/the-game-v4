@@ -94,6 +94,16 @@ describe("GET /api/events", () => {
 		expect((await request([`team:${otherTeamId}`])).status).toBe(403)
 	})
 
+	it("allows only the owning team to subscribe to positions, never admins", async () => {
+		expect((await request([`positions:${teamId}`])).status).toBe(403)
+		await login({ kind: "team", id: otherTeamId })
+		expect((await request([`positions:${teamId}`])).status).toBe(403)
+		await login({ kind: "admin", id: adminId })
+		expect((await request(["board", `positions:${teamId}`])).status).toBe(403)
+		await login({ kind: "team", id: teamId })
+		await expectStream([`positions:${teamId}`, `team:${teamId}`, "board"])
+	})
+
 	it("rejects a deleted team's channel but allows board", async () => {
 		await login({ kind: "team", id: deletedTeamId })
 		expect((await request([`team:${deletedTeamId}`])).status).toBe(403)

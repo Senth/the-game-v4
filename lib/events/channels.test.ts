@@ -10,7 +10,7 @@ describe("allowedChannels", () => {
 	it.each([
 		["anonymous", null, null, ["board"]],
 		["a team without its record", teamSession, null, ["board"]],
-		["a team with a season", teamSession, seasoned, ["team:t1", "board", "season:s1"]],
+		["a team with a season", teamSession, seasoned, ["team:t1", "board", "season:s1", "positions:t1"]],
 		["an admin", admin, null, "any"],
 	] as const)("gives %s %o", (_, session, team, expected) => {
 		expect(allowedChannels(session, team)).toEqual(expected)
@@ -27,6 +27,11 @@ describe("authorizeChannels", () => {
 		["anonymous team", ["team:t1"], anonymous, false],
 		["anonymous season", ["season:s1"], anonymous, false],
 		["team own channels", ["team:t1", "season:s1", "board"], seasonTeam, true],
+		["team own positions", ["positions:t1"], seasonTeam, true],
+		["another team's positions", ["positions:t2"], seasonTeam, false],
+		["anonymous positions", ["positions:t1"], anonymous, false],
+		["admin positions", ["positions:t1"], anyChannel, false],
+		["admin positions alongside board", ["board", "positions:t1"], anyChannel, false],
 		["another team's channel", ["team:t1", "team:t2"], seasonTeam, false],
 		["another season's channel", ["season:s2"], seasonTeam, false],
 		["admin any team and season", ["team:t2", "season:s9", "board"], anyChannel, true],

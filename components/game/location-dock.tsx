@@ -1,6 +1,7 @@
 "use client"
 
 import { type ComponentProps, useEffect, useRef } from "react"
+import type { Positions } from "@/lib/game/positions"
 import { AnswerDock } from "./answer-dock"
 import type { useCompass } from "./use-compass"
 import type { LocationStatus } from "./use-location-reporter"
@@ -11,6 +12,9 @@ type LocationDockProps = ComponentProps<typeof AnswerDock> & {
 	accuracy?: number
 	guidanceEnabled?: boolean
 	mapEnabled?: boolean
+	placeCount?: number
+	positions?: Positions
+	you?: string
 	guidance?: LocationStatus["guidance"]
 	compass?: ReturnType<typeof useCompass>
 	pointsEarned?: number
@@ -53,6 +57,12 @@ export function LocationDock(props: LocationDockProps) {
 	const previousRotation = useRef<Rotation | null>(null)
 	const state = props.preview ? "off" : (props.state ?? "off")
 	const found = !props.preview && props.pointsEarned !== undefined
+	const coverage = !found && (props.placeCount ?? 1) > 1
+	const places = Array.from({ length: props.placeCount ?? 1 }, (_, index) => {
+		const held = !props.preview && !!props.positions?.places[index]?.held
+		const name = held ? props.positions?.phones.find((phone) => phone.place === index + 1)?.name : undefined
+		return { number: index + 1, held, label: name ? (name === props.you ? "You" : name) : "Empty" }
+	})
 	const warning = state === "rough" || state === "blocked" || state === "unavailable"
 	const pulse = !found && (state === "on" || state === "rough")
 	const codes = props.hasAnswers
@@ -155,8 +165,14 @@ export function LocationDock(props: LocationDockProps) {
 							aria-hidden="true"
 							className={`size-2.5 shrink-0 rounded-full ${found || state === "on" ? "bg-pace-ok" : warning ? "bg-warn" : "bg-muted"} ${pulse ? "motion-safe:animate-pulse" : ""}`}
 						/>
-						<span className={`text-sm ${found ? "text-pace-ok" : warning ? "text-warn" : "text-head"}`}>
-							{found ? `Found it · ${(props.pointsEarned ?? 0) >= 0 ? "+" : ""}${props.pointsEarned}p` : labels[state]}
+						<span
+							className={`text-sm ${coverage && state === "on" ? "font-bold " : ""}${found ? "text-pace-ok" : warning ? "text-warn" : "text-head"}`}
+						>
+							{found
+								? `Found it · ${(props.pointsEarned ?? 0) >= 0 ? "+" : ""}${props.pointsEarned}p`
+								: coverage && state === "on"
+									? `${places.filter((place) => place.held).length} of ${places.length} places held`
+									: labels[state]}
 						</span>
 						{!found && !props.preview && props.accuracy !== undefined && (
 							<span className={`ml-auto text-xs ${state === "rough" ? "text-warn" : "text-muted"}`}>
@@ -164,12 +180,26 @@ export function LocationDock(props: LocationDockProps) {
 							</span>
 						)}
 					</div>
-					<p className="mt-1.5 ml-5 font-cond text-xs leading-relaxed text-muted">
+					{coverage && (
+						<div className={`mt-2.5 grid min-w-0 ${places.length === 2 ? "grid-cols-2" : "grid-cols-3"} gap-2`}>
+							{places.map((place) => (
+								<div key={place.number} className="min-w-0">
+									<div aria-hidden="true" className={`h-1 rounded-full ${place.held ? "bg-pace-ok" : "bg-z2/60"}`} />
+									<p className={`mt-1 break-words font-cond text-xs ${place.held ? "text-ink" : "text-muted"}`}>
+										{place.number} · {place.label}
+									</p>
+								</div>
+							))}
+						</div>
+					)}
+					<p className={`${coverage ? "mt-2" : "mt-1.5 ml-5"} font-cond text-xs leading-relaxed text-muted`}>
 						{found
 							? "Next quest in a moment."
-							: state === "on" && props.mapEnabled
-								? "Walk into the circle. Arriving solves the quest. Keep this screen open and unlocked."
-								: helpers[state]}
+							: coverage && state === "on"
+								? "Each circle needs a different teammate inside it at the same time. Keep this screen open and unlocked."
+								: state === "on" && props.mapEnabled
+									? "Walk into the circle. Arriving solves the quest. Keep this screen open and unlocked."
+									: helpers[state]}
 					</p>
 				</div>
 			)}

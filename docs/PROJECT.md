@@ -19,7 +19,7 @@ Use pnpm, Biome, `tsc --noEmit`, Vitest and Playwright. MongoDB 8 uses the offic
 | Arc | Authored group of quests, called a theme in v3 |
 | Quest | Puzzle with player content, accepted answers, points and hints |
 | Puzzle quest | Image quest solved by assembling rectangular pieces; see [puzzle quests](#puzzle-quests) |
-| Location quest | Quest solved when a teammate reaches its place; typed answers are optional backup codes |
+| Location quest | Quest solved when distinct teammates hold its places at once; typed answers are optional backup codes |
 | Hint | Revealable help for one quest, with a points penalty |
 | Team | Shared player identity belonging to a season, with its own quest order and progress |
 | Admin | Game-master account allowed to author and control seasons |
@@ -58,7 +58,7 @@ New seasons have no default quest points. A missing `defaultQuestPoints` reads a
 | --- | --- |
 | `Arc` | `id: string`, `title: string`, `shuffleQuests: boolean`, `quests: Quest[]` |
 | `Quest` | `id: string`, `displayTitle: string`, `internalTitle: string`, `content: string`, `assetPath: string \| null`, `answers: string[]`, `points: number \| null`, `adminNotes: string`, `hints: Hint[]` |
-| `Quest.location` | `{guidance: "none" \| "warmer" \| "map", places: Place[]} \| null`; absent reads as null; absent guidance reads as `"none"`; exactly one place until #85 |
+| `Quest.location` | `{guidance: "none" \| "warmer" \| "map", places: Place[]} \| null`; absent reads as null; absent guidance reads as `"none"`; 1–3 places, with `"map"` required for 2 or 3 |
 | `Place` | `id: string`, `lat: number`, `lng: number`, `radius: number` in metres |
 | `Hint` | `id: string`, `text: string`, `points: number` |
 
@@ -291,13 +291,14 @@ Team puzzle state never copies.
 `Quest.location` is `{guidance: "none" | "warmer" | "map", places: Place[]} | null`; absent reads as null.
 New places start with `guidance: "none"`. Absent guidance and legacy data keep unguided behavior.
 Each place is `{id: string, lat: number, lng: number, radius: number}`.
-Exactly one place is supported until #85. Puzzle and location exclude each other.
+Locations have 1 to 3 places. Two or three places require `guidance: "map"`.
+Puzzle and location exclude each other.
 The server rejects setting either while the other is set.
 
 `Season.placeRadius` is a whole number from 5 to 500 metres, default 40.
 Absent reads as 40; no migration is needed. A new place copies the season's value.
 Changing the season value never edits existing places.
-Guidance, place coordinates and radius lock once any team has `solvedAt` on the quest.
+Guidance, place count, coordinates and radius lock once any team has `solvedAt` on the quest.
 Answers remain editable.
 
 While a location quest is current and the game screen is open, each phone reports fixes as
@@ -305,10 +306,24 @@ While a location quest is current and the game screen is open, each phone report
 Accept accuracy of at most 50 metres. Reject fixes older than 30 seconds or more than 30 seconds in the future.
 An accepted fix is inside when its haversine distance to the place is at most the place radius.
 Exact accuracy, time and distance boundaries count as accepted and inside.
-The server keeps each phone's latest accepted fix in memory for 30 seconds, keyed by team and phone id.
-Nothing is persisted. Any teammate arriving inside solves through `solveCurrentQuest`, with the normal
-hint penalties, finisher claim and live events. Reports never write team state except through that solve path.
-Reports publish live events only on a solve.
+The server keeps each phone's latest accepted fix in memory, keyed by team and phone id.
+Its age is `max(now - fix.at, now - receivedAt)`; it counts while its age is at most `fixTtlMs = 30_000`.
+An old timestamp expires even when received recently; a future timestamp never extends the receipt lifetime.
+Nothing is persisted.
+
+A single place keeps the any-teammate-inside solve rule. With 2 or 3 places, each place must have a different
+phone from the same team inside at once, using only fresh accepted fixes. Try every distinct-phone assignment,
+choose the one holding the most places, and break ties in favor of lower place numbers. One phone inside
+overlapping circles can hold only one. A typed backup code still solves without coverage.
+Complete coverage solves through `solveCurrentQuest`, with the normal hint penalties, finisher claim and live events.
+Reports never write team state except through that solve path. A solve, including a backup-code solve, clears
+the team's latest fixes and warmer/colder history and pushes empty positions.
+A multi-place report that does not complete coverage returns exactly `{status: "outside"}`.
+
+Every map quest, including one with a single place, shows the same team's phone positions and names through
+the [positions channel](#live-events). Pushes go out at most every `positionsPushMs = 5_000` per team.
+Dots fade from `fadeStartMs = 20_000` until the 30-second lifetime ends. No position history is sent or stored.
+Admins have no access to positions until #87. Reports publish the ordinary game-change channels only on a solve.
 
 #### Warmer/colder guidance
 
@@ -364,8 +379,12 @@ Previews never request location permission or show an own dot.
 
 The Place field shows an editor map for every guidance choice.
 With a place, frame its circle with padding. Without one, use `Season.mapArea`; with neither, show no map.
-Tapping the map adds a place only when the quest has none, using `newPlace` and the season radius.
-Dragging the pin moves the place; dragging its edge handle resizes the radius.
+Show one numbered row per place with coordinates, radius and a remove action; removing a place renumbers the remaining rows.
+Clearing a row's coordinates also removes that place. Tapping the map adds a place while fewer than three exist.
+"+ Add place" adds one at the map's current centre with the season radius, and is disabled at three places.
+Adding a second place switches guidance to Map; with two or more places, None and Warmer/colder are disabled.
+"◎ Use my position" creates place 1 when none exists, or moves the last place otherwise, preserving its radius.
+Dragging a pin moves its place; dragging its edge handle resizes the radius.
 Save once on release, writing the same whole `location` object through `saveSeasonField` as coordinate paste.
 Round coordinates to 6 decimals and radius to whole metres, clamped from 5 to 500.
 Guidance locks with the place. Locked maps remain visible but cannot edit it.
@@ -529,6 +548,10 @@ Only a `"map"` quest adds `location: {guidance: "map", places: [{lat, lng, radiu
 Build every location response by whitelist. Place ids and distance never reach players.
 Internal titles, admin notes, answers and unrevealed hint text remain excluded for every guidance choice.
 Only the reporting phone's outside response on a warmer quest may include the report guidance object defined above.
+Positions pushes carry only `{places: [{held}], phones: [{name, lat, lng, ageMs, place?}]}`.
+Each `held` is a boolean; optional `place` is the 1-based place that phone holds in the same coverage assignment.
+Only the team's own sessions receive these pushes. They contain no phone ids, place ids, team ids, timestamps
+or history. Admins, including previews, have no positions access until #87.
 The player finisher list exposes only team id, name, place and points, never claim times or other season fields.
 
 A puzzle quest's player view omits `assetPath` and exposes this shape:
@@ -552,12 +575,15 @@ They log teammates into that team's own `/`, never standings, board or admin JSO
 ## Live events
 
 Use an in-process event bus in one app container, with SSE rather than WebSockets.
-Streams send a heartbeat every 25 seconds. Refetch on events; poll every 5 seconds only while disconnected,
-then switch back to SSE when connected. UI updates from teammates and live controls should arrive within 1 second.
+Streams send a heartbeat every 25 seconds. Refetch on game-change events; positions events carry their payload
+directly without refetching. Poll every 5 seconds only while disconnected, then switch back to SSE when connected.
+Game-change updates from teammates and live controls should arrive within 1 second; positions pushes are limited
+to once per 5 seconds per team.
 
 | Channel | Triggers and readers |
 | --- | --- |
 | `team:<id>` | Correct solve, puzzle drop, finish, first hint reveal, team changes and structural edits; its sessions and admin preview |
+| `positions:<teamId>` | Current map-quest fixes, coverage changes and expiry, at most every 5 s per team; only that team's sessions, never admins until #87 |
 | `season:<id>` | Content, settings, timing, structure or teams change; solve, finish and reveal update admin stats and standings |
 | `board` | Running-season changes, timing changes, solves, finishes, reveals and team changes; public TV standings |
 
@@ -566,7 +592,8 @@ A session whose team or admin no longer exists reads only `board`.
 `getGame`, `submitAnswer`, `revealHint` and puzzle operations use authorized data.
 Successful game mutations publish to all three channels after writes, except unsolved puzzle drops, which publish only `team:<id>`.
 Puzzle solves publish all three channels. Wrong answers and repeated hint reveals are no-ops.
-Location reports publish all three channels only on a solve; other reports publish nothing.
+Location reports publish all three game-change channels only on a solve. Accepted map-quest fixes and expiry
+also push the whitelisted positions payload while the season is running; other reports publish nothing.
 Channel access must not expose another team's private data or admin-only content.
 
 ## Assets, migration and deployment

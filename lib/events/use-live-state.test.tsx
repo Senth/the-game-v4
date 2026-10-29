@@ -4,13 +4,16 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useLiveState } from "./use-live-state"
 
-const hooks = vi.hoisted(() => ({ effects: [] as EffectCallback[] }))
+const hooks = vi.hoisted(() => ({ effects: [] as EffectCallback[], dependencies: [] as unknown[][] }))
 
 vi.mock("react", async (importOriginal) => {
 	const react = await importOriginal<typeof import("react")>()
 	return {
 		...react,
-		useEffect: (effect: EffectCallback) => hooks.effects.push(effect),
+		useEffect: (effect: EffectCallback, dependencies: unknown[]) => {
+			hooks.effects.push(effect)
+			hooks.dependencies.push(dependencies)
+		},
 		useEffectEvent: (callback: unknown) => callback,
 	}
 })
@@ -24,7 +27,7 @@ let cleanups: (() => void)[] = []
 let source = {
 	readyState: 1,
 	onopen: null as (() => void) | null,
-	onmessage: null as (() => void) | null,
+	onmessage: null as ((event?: MessageEvent) => void) | null,
 	onerror: null as (() => void) | null,
 	close: vi.fn(),
 }
@@ -38,6 +41,7 @@ beforeEach(() => {
 	vi.useFakeTimers()
 	vi.clearAllMocks()
 	hooks.effects.length = 0
+	hooks.dependencies.length = 0
 	source = { readyState: 1, onopen: null, onmessage: null, onerror: null, close: vi.fn() }
 	vi.stubGlobal(
 		"EventSource",
@@ -57,6 +61,33 @@ afterEach(() => {
 })
 
 describe("useLiveState", () => {
+	it("replaces the same team connection when the quest scope changes and routes payloads to its handler", () => {
+		const onPositions = vi.fn()
+		function Scoped({ quest }: { quest: string }) {
+			useLiveState(
+				async () => quest,
+				() => ["positions:team", "team:team"],
+				quest,
+				{ onPositions, scope: () => quest },
+			)
+			return null
+		}
+		renderToStaticMarkup(<Scoped quest="first" />)
+		const stop = hooks.effects[0]?.()
+		const first = source
+		expect(hooks.dependencies[0]).toEqual(["positions:team,team:team", "first"])
+		const data = { places: [], phones: [] }
+		first.onmessage?.({ data: JSON.stringify({ channel: "positions:team", data }) } as never)
+		expect(onPositions).toHaveBeenCalledExactlyOnceWith(data)
+		renderToStaticMarkup(<Scoped quest="second" />)
+		expect(hooks.dependencies[1]).toEqual(["positions:team,team:team", "second"])
+		if (stop) stop()
+		expect(first.close).toHaveBeenCalledOnce()
+		source = { readyState: 1, onopen: null, onmessage: null, onerror: null, close: vi.fn() }
+		const nextStop = hooks.effects[1]?.()
+		if (nextStop) cleanups.push(nextStop)
+		expect(EventSource).toHaveBeenCalledTimes(2)
+	})
 	it("does not connect or poll when channel list is empty", () => {
 		const setInterval = vi.spyOn(globalThis, "setInterval")
 		mount([])

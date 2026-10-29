@@ -37,6 +37,17 @@ describe("createEventStream", () => {
 		await reader.cancel()
 	})
 
+	it("sends positions data intact without changing ordinary channel events", async () => {
+		const reader = createEventStream(["positions:a", "team:a"], new AbortController().signal).getReader()
+		await next(reader)
+		const data = { places: [{ held: false }], phones: [] }
+		publish("positions:a", data)
+		expect(await next(reader)).toBe(`data: ${JSON.stringify({ channel: "positions:a", data })}\n\n`)
+		publish("team:a")
+		expect(await next(reader)).toBe('data: {"channel":"team:a"}\n\n')
+		await reader.cancel()
+	})
+
 	it("unsubscribes and stops the heartbeat on abort", async () => {
 		vi.useFakeTimers()
 		const abort = new AbortController()

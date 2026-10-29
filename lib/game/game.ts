@@ -26,7 +26,7 @@ import {
 	maxAnswerLength,
 	scoreForSolve,
 } from "@/lib/domain/game"
-import { distanceMeters, evaluateFix, type Fix, guidanceFor } from "@/lib/domain/location"
+import { distanceMeters, evaluateFix, type Fix, guidanceFor, placeCoverage } from "@/lib/domain/location"
 import {
 	type PlayerGame,
 	type PlayerStandings,
@@ -38,7 +38,8 @@ import {
 import { dropPiece, isSolved, pieceIds, randomSpread } from "@/lib/domain/puzzle"
 import { type Season, Spot, type Team } from "@/lib/domain/schemas"
 import { boardChannel, publish, seasonChannel, teamChannel } from "@/lib/events/bus"
-import { recordFix, recordGuidanceFix } from "./location-fixes"
+import { clearTeamFixes, latestFixes, recordFix, recordGuidanceFix, teamFixesVersion } from "./location-fixes"
+import { clearPositions, schedulePositions } from "./positions"
 
 export type SubmitResult =
 	| { ok: false; reason: "invalid" | "not-running" | "stale" }
@@ -260,8 +261,10 @@ export async function reportPosition(
 	fix: Fix,
 	now = new Date(),
 ): Promise<PositionResult> {
+	const version = teamFixesVersion(team._id)
 	for (let attempt = 0; attempt <= solveRetries; attempt++) {
 		const [season, current] = await Promise.all([getSeason(team.seasonId), getTeam(team._id)])
+		if (version !== teamFixesVersion(team._id)) return { status: "stop" }
 		if (!season || !current || current.seasonId !== team.seasonId || lifecycleState(season, current, now) !== "running")
 			return { status: "stop" }
 		const found = currentQuest(season, current)
@@ -270,14 +273,19 @@ export async function reportPosition(
 		if (status === "rough" || status === "stale") return { status }
 		recordFix(current._id, phoneId, fix, now.getTime())
 		const previous = recordGuidanceFix(current._id, phoneId, questId, fix, now.getTime())
-		if (status === "outside") {
+		const covered =
+			found.quest.location.places.length > 1
+				? placeCoverage(found.quest.location.places, latestFixes(current._id, now.getTime())).complete
+				: status === "inside"
+		if (!covered) {
+			if (found.quest.location.guidance === "map") await schedulePositions(current._id)
 			const place = found.quest.location.places[0]
 			const guidance = guidanceFor(
 				found.quest.location,
 				fix,
 				place ? previous.map((earlier) => distanceMeters(earlier, place)) : [],
 			)
-			return { status, ...(guidance ? { guidance } : {}) }
+			return { status: "outside", ...(guidance ? { guidance } : {}) }
 		}
 		const { questIndex, questOrder } = current
 		const hintsRevealed = found.progress?.hintsRevealed ?? []
@@ -290,6 +298,8 @@ export async function reportPosition(
 			location: found.quest.location,
 		}
 		if (await solveCurrentQuest(current._id, expected, now, pointsEarned)) {
+			clearTeamFixes(current._id)
+			if (found.quest.location.guidance === "map") clearPositions(current._id)
 			if (questIndex + 1 === questOrder.length) await claimFinish(season._id, current._id, now)
 			publishTeamChange(current._id, season._id)
 			return { status: "solved", pointsEarned }
@@ -330,6 +340,10 @@ export async function submitAnswer(
 		const pointsEarned = scoreForSolve(quest, { hintsRevealed })
 		const expected = { questIndex, questId, orderLength: questOrder.length, hintCount: hintsRevealed.length }
 		if (await solveCurrentQuest(current._id, expected, now, pointsEarned)) {
+			if (quest.location) {
+				clearTeamFixes(current._id)
+				if (quest.location.guidance === "map") clearPositions(current._id)
+			}
 			if (questIndex + 1 === questOrder.length) await claimFinish(season._id, current._id, now)
 			publishTeamChange(current._id, season._id)
 			return {

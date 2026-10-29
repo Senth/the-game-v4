@@ -23,11 +23,11 @@ Use `pace-ok` for success and `accent` for your team.
 | `field` | Inputs and textareas |
 | `ink` | Body copy and ordinary names |
 | `muted` | Labels, rank, helper copy and secondary values |
-| `link` | Navigation, secondary actions and reveal affordances |
+| `link` | Navigation, secondary actions, reveal affordances and teammate map dots |
 | `head` | Headings and emphasized points |
 | `accent` | Primary action, current quest, focus and own-team tint |
 | `warn` | Wrong answers, hint penalties and missing-field warnings |
-| `pace-ok` | On-pace/ahead state, solved segments, correct-answer feedback, finish flags and bonus earnings |
+| `pace-ok` | On-pace/ahead state, solved segments, correct-answer feedback, held places, finish flags and bonus earnings |
 | `pace-1` | First behind band |
 | `pace-2` | Second behind band |
 | `pace-3` | Last behind band, destructive controls and their borders |
@@ -77,7 +77,8 @@ Hints, the answer dock and standings links do nothing, and previews never reques
 
 ### Maps
 
-Maps use the navy style built from the tokens. The place circle is `head`; the own dot is `accent`.
+Maps use the navy style built from the tokens. An empty place circle is `head` and a held one `pace-ok`.
+The own dot is `accent`. Teammate dots are `link` with `ink` name labels, fading from 20 s to 30 s.
 Attribution stays visible, expanded and `muted`.
 On touch, one finger scrolls the page and two move the map; one finger still drags the pin and handle.
 Size the map's own container, because MapLibre's CSS overrides Tailwind's `absolute inset-0`.

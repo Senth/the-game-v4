@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { rankTeams } from "@/lib/domain/game"
-import { Admin, Puzzle, PuzzleState, Season, Team } from "@/lib/domain/schemas"
+import { Admin, Puzzle, PuzzleState, Quest, Season, Team } from "@/lib/domain/schemas"
 import { hintPenalty } from "@/lib/domain/scoring"
 import { buildFixture } from "./fixture"
 
@@ -123,9 +123,10 @@ describe("buildFixture", () => {
 		expect(state.spots.filter((spot) => !("cell" in spot))).toHaveLength(8)
 	})
 
-	it("adds Next stop as an unsolved thirteenth quest without changing standings", () => {
+	it("adds both unsolved location quests without changing standings", () => {
 		const locationQuest = quests.get("svedala-station")
-		if (!locationQuest) throw new Error("fixture")
+		const threeCorners = quests.get("three-corners")
+		if (!locationQuest || !threeCorners) throw new Error("fixture")
 		expect(season.placeRadius).toBe(40)
 		expect(locationQuest).toMatchObject({
 			internalTitle: "Svedala station",
@@ -140,11 +141,32 @@ describe("buildFixture", () => {
 				places: [{ id: "svedala-station-place", lat: 55.50682, lng: 13.23289, radius: 40 }],
 			},
 		})
-		expect(authored).toHaveLength(13)
+		expect(() => Quest.parse(threeCorners)).not.toThrow()
+		expect(threeCorners).toMatchObject({
+			internalTitle: "Three corners",
+			displayTitle: "Three corners",
+			content:
+				"The old town was laid out from three stones. Stand on all three at once and the town will tell you where to go next.\n\nSplit up. Each circle needs one of you inside it.",
+			assetPath: null,
+			answers: [],
+			points: 25,
+			hints: [],
+			location: {
+				guidance: "map",
+				places: [
+					{ id: "three-corners-place-1", lat: 55.5074, lng: 13.2346, radius: 35 },
+					{ id: "three-corners-place-2", lat: 55.50793, lng: 13.235, radius: 38 },
+					{ id: "three-corners-place-3", lat: 55.50728, lng: 13.23548, radius: 40 },
+				],
+			},
+		})
+		expect(authored).toHaveLength(14)
 		for (const team of teams) {
-			expect(team.questOrder).toHaveLength(13)
+			expect(team.questOrder).toHaveLength(14)
 			expect(team.questOrder).toContain(locationQuest.id)
 			expect(team.progress.find((entry) => entry.questId === locationQuest.id)?.solvedAt).toBeUndefined()
+			expect(team.questOrder.indexOf(threeCorners.id)).toBe(team.questOrder.indexOf(locationQuest.id) + 1)
+			expect(team.progress.find((entry) => entry.questId === threeCorners.id)?.solvedAt).toBeUndefined()
 		}
 		expect(teams.map((team) => [team.name, team.questIndex, team.score])).toEqual(standings)
 
@@ -152,6 +174,7 @@ describe("buildFixture", () => {
 		if (!ninjas) throw new Error("fixture")
 		expect(ninjas.questOrder[ninjas.questIndex]).toBe("backwards-log")
 		expect(ninjas.questOrder[ninjas.questIndex + 1]).toBe(locationQuest.id)
+		expect(ninjas.questOrder[ninjas.questIndex + 2]).toBe(threeCorners.id)
 	})
 
 	it("describes Backwards log as the G2 mock does", () => {

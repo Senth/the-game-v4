@@ -210,7 +210,7 @@ describe("Season", () => {
 describe("Location", () => {
 	const place = { id: "p1", lat: 55.5079, lng: 13.2353, radius: 40 }
 
-	it.each(["none", "warmer", "map"] as const)("accepts exactly one place with guidance %s", (guidance) => {
+	it.each(["none", "warmer", "map"] as const)("accepts one place with guidance %s", (guidance) => {
 		expect(Location.parse({ guidance, places: [place] })).toEqual({ guidance, places: [place] })
 		expect(Location.safeParse({ guidance: "none", places: [] }).success).toBe(false)
 		expect(Location.safeParse({ guidance: "none", places: [place, { ...place, id: "p2" }] }).success).toBe(false)
@@ -219,6 +219,19 @@ describe("Location", () => {
 			guidance: "none",
 			places: [place],
 		})
+	})
+
+	it.each([2, 3])("accepts %s places only with map guidance", (count) => {
+		const places = Array.from({ length: count }, (_, index) => ({ ...place, id: `p${index + 1}` }))
+		expect(Location.parse({ guidance: "map", places })).toEqual({ guidance: "map", places })
+		for (const guidance of ["none", "warmer", undefined]) {
+			expect(Location.safeParse({ guidance, places }).success).toBe(false)
+		}
+	})
+
+	it.each([0, 4])("rejects %s places even with map guidance", (count) => {
+		const places = Array.from({ length: count }, (_, index) => ({ ...place, id: `p${index + 1}` }))
+		expect(Location.safeParse({ guidance: "map", places }).success).toBe(false)
 	})
 
 	it("reads absent legacy guidance as none without changing stored input", () => {

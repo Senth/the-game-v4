@@ -5,6 +5,88 @@ import { LocationDock, nextRotation } from "./location-dock"
 const live = { answer: "", onAnswerChange: vi.fn(), onSubmit: vi.fn(), pending: false, feedback: null }
 
 describe("LocationDock", () => {
+	it.each([2, 3])(
+		"keeps %i-place coverage visible in every location state without changing permission help",
+		(placeCount) => {
+			const positions = {
+				places: [{ held: true }, { held: true }, { held: false }],
+				phones: [
+					{ name: "Keen Otter", lat: 55, lng: 13, ageMs: 100, place: 1 },
+					{ name: "Bold Fox", lat: 55, lng: 13, ageMs: 100, place: 2 },
+				],
+			}
+			for (const [state, label, helper, button] of [
+				["off", "Location off", "Share your location so the game can tell.", "Share location"],
+				[
+					"on",
+					`2 of ${placeCount} places held`,
+					"Each circle needs a different teammate inside it at the same time. Keep this screen open and unlocked.",
+					null,
+				],
+				["rough", "GPS too rough", "Step out into the open", null],
+				["blocked", "Location blocked", "Permissions › Location › Allow.", "Reload"],
+				["unavailable", "Location unavailable", "This browser can&#x27;t share location.", null],
+			] as const) {
+				const html = renderToStaticMarkup(
+					<LocationDock
+						{...live}
+						state={state}
+						placeCount={placeCount}
+						positions={positions}
+						you="Bold Fox"
+						hasAnswers={false}
+					/>,
+				)
+				expect(html).toContain(label)
+				expect(html).toContain(helper)
+				expect(html).toContain("1 · Keen Otter")
+				expect(html).toContain("2 · You")
+				expect(html.includes("3 · Empty")).toBe(placeCount === 3)
+				expect(html).toContain(`grid-cols-${placeCount}`)
+				expect(html.match(/h-1 rounded-full bg-pace-ok/g)).toHaveLength(2)
+				if (button) expect(html).toContain(`>${button}</button>`)
+				else expect(html).not.toContain("<button")
+			}
+			const preview = renderToStaticMarkup(
+				<LocationDock preview placeCount={placeCount} positions={positions} hasAnswers={false} />,
+			)
+			expect(preview.match(/· Empty/g)).toHaveLength(placeCount)
+			expect(preview).not.toContain("Keen Otter")
+			expect(preview).not.toContain("bg-pace-ok")
+			expect(preview).toMatch(/<button[^>]*disabled=""[^>]*>Share location<\/button>/)
+			const found = renderToStaticMarkup(
+				<LocationDock
+					{...live}
+					state="on"
+					placeCount={placeCount}
+					positions={positions}
+					hasAnswers={false}
+					pointsEarned={25}
+				/>,
+			)
+			expect(found).toContain("Found it · +25p")
+			expect(found).not.toContain("grid-cols-")
+		},
+	)
+
+	it("wraps long coverage names inside shrinkable meter columns", () => {
+		const html = renderToStaticMarkup(
+			<LocationDock
+				{...live}
+				state="on"
+				placeCount={3}
+				positions={{
+					places: [{ held: true }],
+					phones: [{ name: "TwentyCharacterNameAB", lat: 55, lng: 13, ageMs: 0, place: 1 }],
+				}}
+				hasAnswers={false}
+			/>,
+		)
+		expect(html).toContain("grid min-w-0 grid-cols-3 gap-2")
+		expect(html).toContain('class="min-w-0"')
+		expect(html).toContain("break-words font-cond text-xs")
+		expect(html).toContain("1 of 3 places held")
+	})
 	it.each([
 		["off", "Location off", "Arriving at the place solves this quest.", "Share location"],
 		["on", "Location on", "Walk to the place. Arriving solves the quest.", null],

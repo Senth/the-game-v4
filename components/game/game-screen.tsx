@@ -12,10 +12,12 @@ import {
 	submitAnswer,
 } from "@/app/actions"
 import { paceFromCounts, paceLabel } from "@/lib/domain/game"
+import { fixTtlMs } from "@/lib/domain/location"
 import type { PlayerGame, PlayerPhone } from "@/lib/domain/player-game"
 import type { Spot } from "@/lib/domain/schemas"
 import { useFinisherNotices } from "@/lib/events/use-finisher-notices"
 import { useLiveState } from "@/lib/events/use-live-state"
+import type { Positions } from "@/lib/game/positions"
 import type { AnswerFeedback } from "./answer-dock"
 import { gameTransitions } from "./game-transitions"
 import { GameView } from "./game-view"
@@ -38,14 +40,28 @@ export function GameScreen({
 	qr?: ReactNode
 }) {
 	const router = useRouter()
-	const [game, setGame] = useLiveState(
+	const [positions, setPositions] = useState<{ data: Positions; questId: string; receivedAt: number } | null>(null)
+	const [game, setGame] = useLiveState<PlayerGame>(
 		async () => {
 			const next = await getGame()
 			if (next.lifecycleState === "waiting" || next.lifecycleState === "countdown") router.refresh()
 			return next
 		},
-		channels,
+		(current) =>
+			current.lifecycleState === "running" && current.quest?.location?.guidance === "map"
+				? [...channels, `positions:${current.teamId}`]
+				: channels,
 		initial,
+		{
+			onPositions: (data) => {
+				if (game.lifecycleState === "running" && game.quest?.location?.guidance === "map")
+					setPositions({ data, questId: game.quest.id, receivedAt: Date.now() })
+			},
+			scope: (current) =>
+				current.lifecycleState === "running" && current.quest?.location?.guidance === "map"
+					? current.quest.id
+					: undefined,
+		},
 	)
 	const updatePhones = useCallback(
 		(phones: PlayerPhone[]) => setGame((current) => ("phones" in current ? { ...current, phones } : current)),
@@ -91,6 +107,7 @@ export function GameScreen({
 		const changes = gameTransitions(previous, game)
 		setPrevious(game)
 		if (changes.questChanged) {
+			setPositions(null)
 			if (
 				previous.lifecycleState === "running" &&
 				(previous.quest?.puzzle || previous.quest?.location) &&
@@ -205,6 +222,16 @@ export function GameScreen({
 	if (shown.lifecycleState !== "running")
 		return <LifecycleScreen game={shown} now={now} qr={qr} savePhoneName={saveName} />
 	const quest = shown.quest
+	const currentPositions = !completion && positions?.questId === quest?.id ? positions : null
+	const phones = currentPositions?.data.phones
+		.map((phone) => ({ ...phone, ageMs: phone.ageMs + Math.max(0, Date.now() - currentPositions.receivedAt) }))
+		.filter((phone) => phone.ageMs < fixTtlMs)
+	const livePositions = currentPositions && {
+		phones: phones ?? [],
+		places: currentPositions.data.places.map(({ held }, index) => ({
+			held: held && !!phones?.some((phone) => phone.place === index + 1),
+		})),
+	}
 	const solvedQuest =
 		completion?.solved?.ids && quest?.puzzle
 			? {
@@ -228,6 +255,8 @@ export function GameScreen({
 			puzzleComplete={quest?.puzzle ? completion?.solved?.pointsEarned : undefined}
 			locationComplete={quest?.location ? completion?.solved?.pointsEarned : undefined}
 			locationStatus={location}
+			positions={livePositions ?? undefined}
+			you={shown.phones.find((phone) => phone.you)?.name}
 			compass={compass}
 			onShareLocation={() => {
 				compass.request()

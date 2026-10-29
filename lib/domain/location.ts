@@ -4,11 +4,17 @@ import type { Location, Place, Season } from "./schemas"
 export const defaultPlaceRadius = 40
 export const maxFixAccuracy = 50
 export const fixTtlMs = 30_000
+export const positionsPushMs = 5_000
+export const fadeStartMs = 20_000
 export const guidanceWindowMs = 60_000
 export const trendMinMeters = 25
 
 type Coordinates = Pick<Place, "lat" | "lng">
 export type Fix = Coordinates & { accuracy: number; at: number }
+
+export function fixAgeMs(fix: Fix, receivedAt: number, now: number): number {
+	return Math.max(now - fix.at, now - receivedAt)
+}
 
 export function parseCoordinates(input: string): Coordinates {
 	const match = input.trim().match(/^([+-]?\d+(?:\.\d+)?)\s*°?(?:\s*,\s*|\s+)([+-]?\d+(?:\.\d+)?)\s*°?$/)
@@ -26,6 +32,44 @@ export function distanceMeters(from: Coordinates, to: Coordinates): number {
 		Math.sin(((to.lat - from.lat) * radians) / 2) ** 2 +
 		Math.cos(from.lat * radians) * Math.cos(to.lat * radians) * Math.sin(((to.lng - from.lng) * radians) / 2) ** 2
 	return 2 * 6371000 * Math.asin(Math.sqrt(Math.min(1, Math.max(0, a))))
+}
+
+export function placeCoverage(
+	places: readonly Place[],
+	fixes: ReadonlyMap<string, Fix>,
+): { held: (string | null)[]; complete: boolean } {
+	const candidates = places.map((place) =>
+		[...fixes]
+			.filter(([, fix]) => distanceMeters(place, fix) <= place.radius)
+			.map(([phone]) => phone)
+			.sort(),
+	)
+	const held: (string | null)[] = places.map(() => null)
+	let best = [...held]
+	let bestCount = 0
+	let bestPriority = 0
+	const used = new Set<string>()
+	function assign(index: number, count: number, priority: number): void {
+		if (index === places.length) {
+			if (count > bestCount || (count === bestCount && priority > bestPriority)) {
+				best = [...held]
+				bestCount = count
+				bestPriority = priority
+			}
+			return
+		}
+		for (const phone of candidates[index] ?? []) {
+			if (used.has(phone)) continue
+			held[index] = phone
+			used.add(phone)
+			assign(index + 1, count + 1, priority + 2 ** (places.length - index - 1))
+			used.delete(phone)
+		}
+		held[index] = null
+		assign(index + 1, count, priority)
+	}
+	assign(0, 0, 0)
+	return { held: best, complete: bestCount === places.length }
 }
 
 export function bearingDegrees(from: Coordinates, to: Coordinates): number {

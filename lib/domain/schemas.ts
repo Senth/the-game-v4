@@ -35,10 +35,12 @@ export const Place = z.object({
 })
 export type Place = z.infer<typeof Place>
 
-export const Location = z.object({
-	guidance: z.enum(["none", "warmer", "map"]).default("none"),
-	places: z.array(Place).length(1),
-})
+export const Location = z
+	.object({
+		guidance: z.enum(["none", "warmer", "map"]).default("none"),
+		places: z.array(Place).min(1).max(3),
+	})
+	.refine(({ guidance, places }) => places.length === 1 || guidance === "map", "Several places require map guidance")
 export type Location = z.infer<typeof Location>
 
 export const PuzzleState = z

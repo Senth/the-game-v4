@@ -157,7 +157,7 @@ describe("playerGame", () => {
 		expect(game.quest?.hints.map((hint) => hint.revealed)).toEqual([true, false, false])
 		expect(game).toMatchObject({
 			solved: 5,
-			total: 13,
+			total: 14,
 			score: ninjas.score,
 			start,
 			end,
@@ -180,7 +180,7 @@ describe("playerGame", () => {
 				{ questId: "skipped", hintsRevealed: [], pointsEarned: 0 },
 			],
 		}
-		expect(playerGame(season, team, teams, now)).toMatchObject({ solved: 4, total: 12 })
+		expect(playerGame(season, team, teams, now)).toMatchObject({ solved: 4, total: 13 })
 	})
 
 	it("returns a null quest and pace for a running team with an empty order", () => {
@@ -360,7 +360,7 @@ describe("playerStandings", () => {
 	it("returns counts, timing and all rows with only your current quest while running", () => {
 		const standings = playerStandings(season, ninjas, teams, now)
 		if (standings.lifecycleState !== "running") throw new Error(standings.lifecycleState)
-		expect(standings.you).toEqual({ name: ninjas.name, score: ninjas.score, solved: 5, total: 13 })
+		expect(standings.you).toEqual({ name: ninjas.name, score: ninjas.score, solved: 5, total: 14 })
 		expect(standings.start).toEqual(start)
 		expect(standings.end).toEqual(end)
 		expect(standings.rows).toHaveLength(10)
@@ -378,7 +378,7 @@ describe("playerStandings", () => {
 			const standings = playerStandings(season, team, teams, end)
 			expect(standings).toMatchObject({
 				lifecycleState: state,
-				you: { name: ninjas.name, score: ninjas.score, solved: 5, total: 13, rank: 7, teamCount: 10 },
+				you: { name: ninjas.name, score: ninjas.score, solved: 5, total: 14, rank: 7, teamCount: 10 },
 			})
 			if (standings.lifecycleState !== "completed" && standings.lifecycleState !== "ended")
 				throw new Error(standings.lifecycleState)
@@ -405,7 +405,7 @@ describe("playerStandings", () => {
 		)
 		const standings = playerStandings(season, ninjas, tied, end)
 		if (standings.lifecycleState !== "ended") throw new Error(standings.lifecycleState)
-		expect(standings.you).toMatchObject({ rank: 6, teamCount: 10, solved: 5, total: 13 })
+		expect(standings.you).toMatchObject({ rank: 6, teamCount: 10, solved: 5, total: 14 })
 		expect(standings.rows.find((row) => row.id === "team-lagom")).toMatchObject({ rank: 6, solved: 6, total: 6 })
 	})
 

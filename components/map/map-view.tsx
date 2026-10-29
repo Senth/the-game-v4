@@ -1,6 +1,7 @@
 "use client"
 
 import {
+	type ExpressionSpecification,
 	type GeoJSONSource,
 	type GeoJSONSourceSpecification,
 	Map as LibreMap,
@@ -9,6 +10,7 @@ import {
 	setWorkerUrl,
 } from "maplibre-gl"
 import { useEffect, useEffectEvent, useRef } from "react"
+import { fadeStartMs, fixTtlMs } from "@/lib/domain/location"
 import { circleRing, edgePoint, radiusFromHandle, roundCoordinate } from "@/lib/domain/map"
 import type { Place } from "@/lib/domain/schemas"
 import navy from "@/public/map/navy.json"
@@ -16,21 +18,24 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import "./map.css"
 
 type Coordinates = Pick<Place, "lat" | "lng">
-type Circle = Coordinates & { radius: number }
+type Circle = Coordinates & { number: number; radius: number; held?: boolean }
+type Teammate = Coordinates & { name: string; ageMs: number }
 type Area = Coordinates & { zoom: number }
 type Framing = Area | { bounds: [[number, number], [number, number]]; maxZoom?: number }
 
 export type MapViewProps = {
 	aspectRatio?: "16/10" | "4/3"
-	circle?: Circle | null
+	circles?: Circle[]
 	dot?: (Coordinates & { accuracy: number }) | null
+	teammates?: Teammate[]
 	maxZoom?: number
 	minZoom?: number
 	edit?: {
-		onMove: (point: Coordinates) => void
-		onResize: (radius: number) => void
+		enabled?: boolean
+		onMove: (number: number, point: Coordinates) => void
+		onResize: (number: number, radius: number) => void
 		onCreate: (point: Coordinates) => void
-		onPreview?: (circle: Circle) => void
+		onPreview?: (number: number, circle: Circle) => void
 	} | null
 	framing?: Framing | null
 	interactive?: boolean
@@ -46,10 +51,22 @@ function polygon(center: Coordinates | null | undefined, radius: number): GeoJSO
 	}
 }
 
+function placePolygons(circles: Circle[]): GeoJSONSourceSpecification["data"] {
+	return {
+		type: "FeatureCollection",
+		features: circles.map(({ number, held, ...circle }) => ({
+			type: "Feature",
+			properties: { number, held: !!held },
+			geometry: { type: "Polygon", coordinates: [circleRing(circle, circle.radius)] },
+		})),
+	}
+}
+
 export default function MapView({
 	aspectRatio = "16/10",
-	circle,
+	circles = [],
 	dot,
+	teammates = [],
 	edit,
 	framing,
 	interactive = true,
@@ -59,32 +76,41 @@ export default function MapView({
 }: MapViewProps) {
 	const container = useRef<HTMLDivElement>(null)
 	const instance = useRef<LibreMap | null>(null)
-	const markers = useRef<{ pin?: Marker; edge?: Marker; dot?: Marker }>({})
+	const markers = useRef<{
+		places: Record<number, { pin?: Marker; edge?: Marker }>
+		teammates: Map<string, Marker>
+		dot?: Marker
+	}>({ places: {}, teammates: new Map() })
 	const ready = useRef(false)
-	const dragging = useRef<"pin" | "edge" | null>(null)
+	const dragging = useRef<{ number: number; key: "pin" | "edge" } | null>(null)
 
-	const preview = useEffectEvent((key: "pin" | "edge") => {
-		const marker = markers.current[key]
+	const preview = useEffectEvent((number: number, key: "pin" | "edge") => {
+		const marker = markers.current.places[number]?.[key]
 		const point = marker?.getLngLat()
-		if (!marker || !point || !circle || !interactive || !edit) return
+		const circle = circles.find((item) => item.number === number)
+		if (!marker || !point || !circle || !interactive || !edit || edit.enabled === false) return
 		const next =
 			key === "pin"
 				? { lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng), radius: circle.radius }
 				: { ...circle, radius: radiusFromHandle(circle, point) }
 		if (key === "edge") marker.getElement().dataset.radius = `${next.radius} m`
-		edit.onPreview?.(next)
+		edit.onPreview?.(number, { ...next, number })
 	})
 
-	const movePin = useEffectEvent(() => {
-		const point = markers.current.pin?.getLngLat()
-		if (point && interactive) edit?.onMove({ lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) })
+	const movePin = useEffectEvent((number: number) => {
+		const point = markers.current.places[number]?.pin?.getLngLat()
+		if (point && interactive && edit?.enabled !== false)
+			edit?.onMove(number, { lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) })
 	})
-	const resize = useEffectEvent(() => {
-		const point = markers.current.edge?.getLngLat()
-		if (point && circle && interactive) edit?.onResize(radiusFromHandle(circle, point))
+	const resize = useEffectEvent((number: number) => {
+		const point = markers.current.places[number]?.edge?.getLngLat()
+		const circle = circles.find((item) => item.number === number)
+		if (point && circle && interactive && edit?.enabled !== false)
+			edit?.onResize(number, radiusFromHandle(circle, point))
 	})
 	const create = useEffectEvent((point: Coordinates) => {
-		if (!circle && interactive) edit?.onCreate({ lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) })
+		if (interactive && edit && edit.enabled !== false)
+			edit.onCreate({ lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) })
 	})
 	const moved = useEffectEvent((manual: boolean) => {
 		const map = instance.current
@@ -95,55 +121,119 @@ export default function MapView({
 			manual,
 		)
 	})
-	const updateSources = useEffectEvent((nextCircle = circle, nextDot = dot, controls = edit, enabled = interactive) => {
-		const map = instance.current
-		if (!map || !ready.current) return
-		const place = map.getSource("place") as GeoJSONSource
-		const accuracy = map.getSource("accuracy") as GeoJSONSource
-		place.setData(polygon(nextCircle, nextCircle?.radius ?? 0))
-		accuracy.setData(polygon(nextDot, nextDot?.accuracy ?? 0))
-		const positions = { pin: nextCircle, edge: nextCircle && edgePoint(nextCircle, nextCircle.radius), dot: nextDot }
-		for (const key of ["pin", "edge", "dot"] as const) {
-			const position = positions[key]
-			if (!position || (key !== "dot" && !controls)) {
-				markers.current[key]?.remove()
-				delete markers.current[key]
-				continue
+	const updateSources = useEffectEvent(
+		(nextCircles = circles, nextDot = dot, controls = edit, enabled = interactive, nextTeammates = teammates) => {
+			const map = instance.current
+			if (!map || !ready.current) return
+			const place = map.getSource("place") as GeoJSONSource
+			const accuracy = map.getSource("accuracy") as GeoJSONSource
+			place.setData(placePolygons(nextCircles))
+			accuracy.setData(polygon(nextDot, nextDot?.accuracy ?? 0))
+			const numbers = new Set(nextCircles.map(({ number }) => number))
+			for (const [number, pair] of Object.entries(markers.current.places)) {
+				if (numbers.has(Number(number))) continue
+				pair.pin?.remove()
+				pair.edge?.remove()
+				delete markers.current.places[Number(number)]
 			}
-			let marker = markers.current[key]
-			if (!marker) {
-				const element = document.createElement("div")
-				element.className = key === "dot" ? "map-own-dot" : "map-drag-target"
-				element.setAttribute(
-					"aria-label",
-					key === "pin" ? "Move place" : key === "edge" ? "Resize radius" : "Your position",
-				)
-				if (key !== "dot") {
-					const visible = document.createElement("span")
-					visible.className = key === "pin" ? "map-pin" : "map-edge"
+			for (const circle of nextCircles) {
+				let pair = markers.current.places[circle.number]
+				if (!pair) {
+					pair = {}
+					markers.current.places[circle.number] = pair
+				}
+				for (const key of ["pin", "edge"] as const) {
+					if (!controls && key === "edge") {
+						pair[key]?.remove()
+						delete pair[key]
+						continue
+					}
+					let position: Coordinates = key === "pin" ? circle : edgePoint(circle, circle.radius)
+					if (!controls) {
+						const [lng, lat] = circleRing(circle, circle.radius, 4)[0] ?? [circle.lng, circle.lat]
+						position = { lng, lat }
+					}
+					let marker = pair[key]
+					if (!marker) {
+						const element = document.createElement("div")
+						const visible = document.createElement("span")
+						visible.className = key === "pin" ? "map-pin" : "map-edge"
+						if (key === "pin") visible.textContent = String(circle.number)
+						element.append(visible)
+						marker = new Marker({ element, draggable: enabled && !!controls && controls.enabled !== false })
+							.setLngLat([position.lng, position.lat])
+							.addTo(map)
+						marker.on("dragstart", () => {
+							dragging.current = { number: circle.number, key }
+						})
+						marker.on("drag", () => preview(circle.number, key))
+						marker.on("dragend", () => {
+							dragging.current = null
+							if (key === "pin") movePin(circle.number)
+							else resize(circle.number)
+						})
+						pair[key] = marker
+					}
+					const element = marker.getElement()
+					element.classList.toggle("map-drag-target", !!controls)
+					element.classList.toggle("map-place-badge", !controls)
+					element.dataset.held = String(!!circle.held)
+					element.setAttribute(
+						"aria-label",
+						controls
+							? key === "pin"
+								? `Move place ${circle.number}`
+								: `Resize place ${circle.number} radius`
+							: `Place ${circle.number} · ${circle.held ? "Held" : "Empty"}`,
+					)
+					marker.setDraggable(enabled && !!controls && controls.enabled !== false)
+					if (dragging.current?.number !== circle.number || dragging.current.key !== key)
+						marker.setLngLat([position.lng, position.lat])
+					if (key === "edge") marker.getElement().dataset.radius = `${circle.radius} m`
+				}
+			}
+			if (!nextDot) {
+				markers.current.dot?.remove()
+				delete markers.current.dot
+			} else {
+				let marker = markers.current.dot
+				if (!marker) {
+					const element = document.createElement("div")
+					element.className = "map-own-dot"
+					element.setAttribute("aria-label", "Your position")
+					marker = new Marker({ element, draggable: false }).setLngLat([nextDot.lng, nextDot.lat]).addTo(map)
+					markers.current.dot = marker
+				}
+				marker.setLngLat([nextDot.lng, nextDot.lat])
+			}
+			const fresh = nextTeammates.filter((phone) => phone.ageMs < fixTtlMs)
+			const names = new Set(fresh.map((phone) => phone.name))
+			for (const [name, marker] of markers.current.teammates) {
+				if (names.has(name)) continue
+				marker.remove()
+				markers.current.teammates.delete(name)
+			}
+			for (const phone of fresh) {
+				let marker = markers.current.teammates.get(phone.name)
+				if (!marker) {
+					const element = document.createElement("div")
+					const visible = document.createElement("div")
+					visible.className = "map-teammate-dot"
+					visible.append(document.createElement("span"))
 					element.append(visible)
+					marker = new Marker({ element, draggable: false }).setLngLat([phone.lng, phone.lat]).addTo(map)
+					markers.current.teammates.set(phone.name, marker)
 				}
-				marker = new Marker({ element, draggable: key !== "dot" && enabled })
-					.setLngLat([position.lng, position.lat])
-					.addTo(map)
-				if (key !== "dot") {
-					marker.on("dragstart", () => {
-						dragging.current = key
-					})
-					marker.on("drag", () => preview(key))
-					marker.on("dragend", () => {
-						dragging.current = null
-						if (key === "pin") movePin()
-						else resize()
-					})
-				}
-				markers.current[key] = marker
+				const fading = phone.ageMs >= fadeStartMs
+				const visible = marker.getElement().firstElementChild as HTMLElement
+				visible.classList.toggle("opacity-50", fading)
+				const label = visible.firstElementChild as HTMLElement
+				label.className = `map-teammate-name${fading ? " motion-safe:animate-pulse" : ""}`
+				label.textContent = `${phone.name}${fading ? ` · ${Math.floor(phone.ageMs / 1000)} s` : ""}`
+				marker.setLngLat([phone.lng, phone.lat])
 			}
-			marker.setDraggable(key !== "dot" && enabled)
-			if (dragging.current !== key) marker.setLngLat([position.lng, position.lat])
-			if (key === "edge") marker.getElement().dataset.radius = `${nextCircle?.radius} m`
-		}
-	})
+		},
+	)
 	const frame = useEffectEvent((view = framing) => {
 		const map = instance.current
 		if (!map || !ready.current || !view) return
@@ -186,7 +276,12 @@ export default function MapView({
 		})
 		instance.current = map
 		setInteraction()
-		map.on("click", (event) => create(event.lngLat))
+		map.on("click", (event) => {
+			const target = event.originalEvent?.target
+			if (target && "closest" in target && typeof target.closest === "function" && target.closest(".maplibregl-marker"))
+				return
+			create(event.lngLat)
+		})
 		map.on("moveend", (event) => moved(!!event.originalEvent))
 		map.on("load", () => {
 			for (const [id, token] of [
@@ -197,17 +292,22 @@ export default function MapView({
 				const color = getComputedStyle(container.current as HTMLDivElement)
 					.getPropertyValue(`--color-${token}`)
 					.trim()
+				const heldColor = getComputedStyle(container.current as HTMLDivElement)
+					.getPropertyValue("--color-pace-ok")
+					.trim()
+				const paintColor: string | ExpressionSpecification =
+					id === "place" ? ["case", ["get", "held"], heldColor, color] : color
 				map.addLayer({
 					id: `${id}-fill`,
 					type: "fill",
 					source: id,
-					paint: { "fill-color": color, "fill-opacity": 0.2 },
+					paint: { "fill-color": paintColor, "fill-opacity": 0.2 },
 				})
 				map.addLayer({
 					id: `${id}-line`,
 					type: "line",
 					source: id,
-					paint: { "line-color": color, "line-width": id === "place" ? 2.5 : 1 },
+					paint: { "line-color": paintColor, "line-width": id === "place" ? 2.5 : 1 },
 				})
 			}
 			ready.current = true
@@ -216,16 +316,21 @@ export default function MapView({
 		})
 		return () => {
 			ready.current = false
-			for (const marker of Object.values(markers.current)) marker.remove()
-			markers.current = {}
+			for (const pair of Object.values(markers.current.places)) {
+				pair.pin?.remove()
+				pair.edge?.remove()
+			}
+			markers.current.dot?.remove()
+			for (const marker of markers.current.teammates.values()) marker.remove()
+			markers.current = { places: {}, teammates: new Map() }
 			map.remove()
 			instance.current = null
 		}
 	}, [maxZoom, minZoom])
 
 	useEffect(() => {
-		updateSources(circle, dot, edit, interactive)
-	}, [circle, dot, edit, interactive])
+		updateSources(circles, dot, edit, interactive, teammates)
+	}, [circles, dot, edit, interactive, teammates])
 	useEffect(() => {
 		frame(framing)
 	}, [framing])

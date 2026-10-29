@@ -44,7 +44,7 @@ it("updates idle Ninjas pace text and color from elapsed server time without eve
 	cleanup = hooks.effects[0]?.()
 	vi.setSystemTime(now + 7_200_000)
 	await vi.advanceTimersByTimeAsync(10 * 60_000)
-	expect(view()).toContain('text-pace-3">4 behind pace')
+	expect(view()).toContain('text-pace-3">5 behind pace')
 	await vi.advanceTimersByTimeAsync((season.end?.getTime() ?? now) - now - 10 * 60_000)
 	const html = view()
 	expect(html).toContain('text-muted">Game ended')
