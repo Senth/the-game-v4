@@ -109,6 +109,24 @@ vi.mock("next/dynamic", () => ({
 	},
 }))
 
+type FakeElement = {
+	className: string
+	style: Record<string, string>
+	dataset: Record<string, string>
+	textContent: string
+	children: FakeElement[]
+	parent?: FakeElement
+	listeners: Record<string, () => void>
+	classList: { toggle: (name: string, force: boolean) => boolean }
+	firstElementChild: FakeElement | undefined
+	setAttribute: (name: string, value: string) => void
+	getAttribute: (name: string) => string | null
+	closest: (selector: string) => FakeElement | null
+	append: (...children: FakeElement[]) => void
+	addEventListener: (name: string, callback: () => void) => void
+	click: () => void
+}
+
 const circle = { number: 1, lat: 55.5, lng: 13.2, radius: 40 }
 const dot = { lat: 55.501, lng: 13.201, accuracy: 80 }
 const framing = {
@@ -144,7 +162,7 @@ beforeEach(() => {
 	vi.stubGlobal("document", {
 		createElement: () => {
 			const attributes: Record<string, string> = {}
-			const element = {
+			const element: FakeElement = {
 				className: "",
 				style: {},
 				classList: {
@@ -158,14 +176,32 @@ beforeEach(() => {
 				},
 				dataset: {},
 				textContent: "",
-				children: [] as { textContent: string; className?: string }[],
-				get firstElementChild(): { textContent: string; className?: string } | undefined {
+				children: [],
+				listeners: {},
+				get firstElementChild(): FakeElement | undefined {
 					return element.children[0]
 				},
-				setAttribute: vi.fn((name: string, value: string) => (attributes[name] = value)),
-				getAttribute: vi.fn((name: string) => attributes[name] ?? null),
+				setAttribute: (name, value) => {
+					attributes[name] = value
+				},
+				getAttribute: (name) => attributes[name] ?? null,
 				closest: (selector: string) => (element.className.split(" ").includes(selector.slice(1)) ? element : null),
-				append: vi.fn((child: { textContent: string }) => element.children.push(child)),
+				append: (...children) => {
+					for (const child of children) {
+						child.parent = element
+						element.children.push(child)
+					}
+				},
+				addEventListener: (name, callback) => {
+					element.listeners[name] = callback
+				},
+				click: () => {
+					let current: FakeElement | undefined = element
+					while (current) {
+						current.listeners.click?.()
+						current = current.parent
+					}
+				},
 			}
 			return element
 		},
@@ -227,7 +263,7 @@ describe("MapView", () => {
 		render(next)
 		for (const effect of hooks.effects.slice(1)) effect()
 		map.fire("load")
-		expect(map.addSource).toHaveBeenCalledTimes(2)
+		expect(map.addSource).toHaveBeenCalledTimes(3)
 		expect(map.sources.place?.setData).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				features: [
@@ -250,18 +286,79 @@ describe("MapView", () => {
 			{ "line-color": ["case", ["get", "held"], "#4ade80", "#bbdefb"], "line-width": 2.5 },
 			{ "fill-color": "#1c7dc8", "fill-opacity": 0.2 },
 			{ "line-color": "#1c7dc8", "line-width": 1 },
+			{ "fill-color": ["get", "color"], "fill-opacity": 0.2 },
+			{ "line-color": ["get", "color"], "line-width": 1 },
 		])
 		const ownDot = fake.Marker.instances.find((marker) => marker.options.element.className.includes("map-own-dot"))
 		render({ circles: [circle], dot })
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(fake.Map.instances).toHaveLength(1)
 		expect(fake.Marker.instances).toHaveLength(2)
-		expect(map.addSource).toHaveBeenCalledTimes(2)
+		expect(map.addSource).toHaveBeenCalledTimes(3)
 		render({})
 		for (const effect of hooks.effects.slice(1)) effect()
 		expect(map.sources.place?.setData).toHaveBeenLastCalledWith({ type: "FeatureCollection", features: [] })
 		expect(map.sources.accuracy?.setData).toHaveBeenLastCalledWith({ type: "FeatureCollection", features: [] })
 		expect(ownDot?.remove).toHaveBeenCalledOnce()
+	})
+
+	it("renders selectable phone markers and colored accuracy rings, updating and removing by id", () => {
+		const first = {
+			id: "phone-1",
+			lat: 55.52,
+			lng: 13.21,
+			accuracy: 42,
+			color: "hsl(120 75% 72%)",
+			team: "Ninjas",
+			name: "Keen Otter",
+		}
+		const onPhoneSelect = vi.fn()
+		const { map } = mount({ phones: [first], onPhoneSelect })
+		map.fire("load")
+		const marker = fake.Marker.instances[0]
+		const element = marker?.getElement() as unknown as FakeElement
+		const [dot, label] = element.children
+		expect(map.sources.phones?.setData).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				features: [
+					expect.objectContaining({
+						properties: { color: first.color },
+						geometry: { type: "Polygon", coordinates: [circleRing(first, first.accuracy)] },
+					}),
+				],
+			}),
+		)
+		expect(map.addLayer.mock.calls.map(([layer]) => layer)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ id: "phones-fill", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.2 } }),
+				expect.objectContaining({ id: "phones-line", paint: { "line-color": ["get", "color"], "line-width": 1 } }),
+			]),
+		)
+		expect(element.getAttribute("aria-label")).toBe("Ninjas · Keen Otter")
+		expect(dot?.style.backgroundColor).toBe(first.color)
+		expect(label?.children.map((child) => child.textContent)).toEqual(["Ninjas", " · Keen Otter"])
+		expect(label?.children[0]?.style.color).toBe(first.color)
+		dot?.click()
+		label?.click()
+		expect(onPhoneSelect).toHaveBeenNthCalledWith(1, first.id)
+		expect(onPhoneSelect).toHaveBeenNthCalledWith(2, first.id)
+
+		const next = { ...first, lat: 55.53, lng: 13.22, accuracy: 80 }
+		render({ phones: [next], onPhoneSelect })
+		for (const effect of hooks.effects.slice(1)) effect()
+		expect(fake.Map.instances).toHaveLength(1)
+		expect(fake.Marker.instances).toHaveLength(1)
+		expect(marker?.setLngLat).toHaveBeenLastCalledWith([next.lng, next.lat])
+		expect(map.sources.phones?.setData).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				features: [
+					expect.objectContaining({ geometry: { type: "Polygon", coordinates: [circleRing(next, next.accuracy)] } }),
+				],
+			}),
+		)
+		render({ phones: [] })
+		for (const effect of hooks.effects.slice(1)) effect()
+		expect(marker?.remove).toHaveBeenCalledOnce()
 	})
 
 	it("renders held and empty numbered badges and updates teammate labels, fading and expiry", () => {
