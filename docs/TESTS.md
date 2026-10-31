@@ -182,6 +182,7 @@ It seeds only an empty database, then starts `next dev`.
 Seed accounts are `admin / admin` and `Ninjas / ninjas`. Other teams use their lowercased name as password.
 Never deploy those passwords. The seed copies the Backwards log image to `ASSETS_DIR`, default `.tmp/assets`.
 Start and end follow seed time, so the season is running with registration open and Ninjas is mid-game.
+Backwards log has `drop: { fullMinutes: 10, dropMinutes: 20, floor: 5 }`; Ninjas' `reachedAt` is seed time minus 15 minutes.
 Cipher Night has `finisherBonuses: [50, 20]` and no finishers.
 "Gather the pieces" uses a 4 × 4 puzzle, no answers and `showFull: false`, keeping its points and hints.
 Commit a landscape PNG under 300 KB in `scripts/fixture/`, such as a drawn keeper's chart.

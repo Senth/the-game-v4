@@ -50,6 +50,7 @@ const arcs: Arc[] = [
 					displayTitle: "The keeper's last log",
 					assetPath: backwardsLogAsset,
 					adminNotes: "The image is the last page of the log.",
+					drop: { fullMinutes: 10, dropMinutes: 20, floor: 5 },
 				},
 			),
 			quest(
@@ -489,6 +490,7 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 			seasonId: season._id,
 			questOrder,
 			questIndex: solved,
+			...(_id === "team-ninjas" ? { reachedAt: new Date(now.getTime() - 15 * minute) } : {}),
 			score: progress.reduce((sum, entry) => sum + entry.pointsEarned, 0),
 			completed: false,
 			progress,
