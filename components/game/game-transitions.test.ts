@@ -15,6 +15,8 @@ const running: Extract<PlayerGame, { lifecycleState: "running" }> = {
 		content: "Read the log.",
 		assetPath: null,
 		points: 50,
+		drop: null,
+		hintPenalty: 5,
 		worth: 45,
 		hints: [
 			{ id: "first", position: 1, points: 5, text: "Start from the bottom.", revealed: true },

@@ -17,6 +17,7 @@ import type { LocationStatus } from "./use-location-reporter"
 
 type GameViewProps = {
 	timeLeftMs: number
+	now?: Date
 	pace: { band: PaceBand; label: string } | null
 	rail: RailArc[]
 	strip?: StripEntry[]
@@ -51,6 +52,7 @@ type GameViewProps = {
 export function GameView(props: GameViewProps) {
 	const live = props.preview ? null : props
 	const { timeLeftMs, pace, rail, strip, quest } = props
+	const now = props.now ?? new Date()
 	const showDock = quest && (quest.location || quest.hasAnswers !== false) && props.puzzleComplete === undefined
 	const main = useRef<HTMLElement>(null)
 	const dock = useRef<HTMLDivElement>(null)
@@ -111,12 +113,13 @@ export function GameView(props: GameViewProps) {
 						{live ? (
 							<Intel
 								quest={quest}
+								now={now}
 								onReveal={live.onReveal}
 								decrypting={live.decrypting}
 								onDecryptComplete={live.onDecryptComplete}
 							/>
 						) : (
-							<Intel quest={quest} preview={props.preview === "team" ? "team" : true} />
+							<Intel quest={quest} now={now} preview={props.preview === "team" ? "team" : true} />
 						)}
 					</>
 				) : (

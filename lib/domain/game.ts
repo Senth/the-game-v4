@@ -1,6 +1,6 @@
 import { playableArcs } from "./playable-quests"
 import type { Place, Quest, Season, Spot, Team, TeamQuestProgress } from "./schemas"
-import { hintPenalty } from "./scoring"
+import { hintPenalty, timeWorth } from "./scoring"
 
 export const maxAnswerLength = 200
 
@@ -11,8 +11,12 @@ export function matchesAnswer(submitted: string, answers: string[]): boolean {
 	return answers.some((answer) => normalizeAnswer(answer) === normalized)
 }
 
-export function scoreForSolve(quest: Quest, progress: Pick<TeamQuestProgress, "hintsRevealed">): number {
-	return (quest.points ?? 0) - hintPenalty(progress.hintsRevealed)
+export function currentWorth(quest: Quest, progress: Pick<TeamQuestProgress, "hintsRevealed">, elapsedMs = 0): number {
+	return (timeWorth(quest.points, quest.drop, elapsedMs) ?? 0) - hintPenalty(progress.hintsRevealed)
+}
+
+export function scoreForSolve(quest: Quest, progress: Pick<TeamQuestProgress, "hintsRevealed">, elapsedMs = 0): number {
+	return Math.max(0, currentWorth(quest, progress, elapsedMs))
 }
 
 function shuffle<T>(items: T[], random: () => number): T[] {
@@ -164,11 +168,19 @@ export type PlayerQuest = Pick<Quest, "id" | "displayTitle" | "content" | "point
 	puzzle?: PlayerPuzzle | null
 	location?: { guidance: "none" | "warmer" } | { guidance: "map"; places: Pick<Place, "lat" | "lng" | "radius">[] }
 	hasAnswers?: boolean
+	drop: (NonNullable<Quest["drop"]> & { reachedAt: number }) | null
+	hintPenalty: number
 	worth: number
 	hints: PlayerHint[]
 }
 
-export function playerView(quest: Quest, progress?: TeamQuestProgress, assets?: PuzzleAssets): PlayerQuest {
+export function playerView(
+	quest: Quest,
+	progress?: TeamQuestProgress,
+	assets?: PuzzleAssets,
+	reachedAt = new Date(),
+	now = new Date(),
+): PlayerQuest {
 	const revealed = progress?.hintsRevealed ?? []
 	const puzzleState = progress?.puzzle
 	let puzzle: PlayerPuzzle | null = null
@@ -214,7 +226,16 @@ export function playerView(quest: Quest, progress?: TeamQuestProgress, assets?: 
 				}
 			: {}),
 		points: quest.points,
-		worth: scoreForSolve(quest, { hintsRevealed: revealed }),
+		drop: quest.drop
+			? {
+					fullMinutes: quest.drop.fullMinutes,
+					dropMinutes: quest.drop.dropMinutes,
+					floor: quest.drop.floor,
+					reachedAt: reachedAt.getTime(),
+				}
+			: null,
+		hintPenalty: hintPenalty(revealed),
+		worth: currentWorth(quest, { hintsRevealed: revealed }, now.getTime() - reachedAt.getTime()),
 		hints: shown.map((hint, index) =>
 			"hintId" in hint
 				? { id: hint.hintId, position: index + 1, points: hint.points, text: hint.text, revealed: true }

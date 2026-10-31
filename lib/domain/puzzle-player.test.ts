@@ -10,7 +10,7 @@ const { season, teams } = buildFixture(now)
 const base = season.arcs[0]?.quests[0]
 const team = teams.find((entry) => entry._id === "team-ninjas")
 if (!base || !team) throw new Error("Fixture quest or team missing")
-const quest = { ...base, puzzle: { rows: 2, cols: 2, showFull: false }, answers: [] }
+const quest = { ...base, drop: null, puzzle: { rows: 2, cols: 2, showFull: false }, answers: [] }
 const progress = {
 	questId: quest.id,
 	hintsRevealed: [],

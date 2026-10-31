@@ -243,6 +243,7 @@ export function GameScreen({
 	const pace = paceFromCounts({ start: shown.start, end: shown.end, solved: shown.solved, total: shown.total, now })
 	return (
 		<GameView
+			now={now}
 			timeLeftMs={end === null ? 0 : Math.max(0, end - now.getTime())}
 			pace={pace && { band: pace.band, label: paceLabel(pace.n) }}
 			rail={shown.rail}

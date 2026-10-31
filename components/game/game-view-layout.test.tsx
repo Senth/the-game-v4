@@ -41,6 +41,8 @@ it("reserves unscaled dock height so long permission help stays clear in player 
 			displayTitle: "",
 			content: "Clue",
 			points: 20,
+			drop: null,
+			hintPenalty: 0,
 			worth: 20,
 			hints: [],
 			location: { guidance: "none" },

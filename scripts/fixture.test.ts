@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { rankTeams } from "@/lib/domain/game"
+import { playerGame } from "@/lib/domain/player-game"
 import { Admin, Puzzle, PuzzleState, Quest, Season, Team } from "@/lib/domain/schemas"
 import { hintPenalty } from "@/lib/domain/scoring"
 import { buildFixture } from "./fixture"
@@ -95,6 +96,16 @@ describe("buildFixture", () => {
 		const current = ninjas.progress.find((entry) => entry.questId === "backwards-log")
 		expect(current?.solvedAt).toBeUndefined()
 		expect(current?.hintsRevealed.map((snapshot) => snapshot.hintId)).toEqual(["backwards-log-h1"])
+		expect(ninjas.reachedAt).toEqual(new Date(now.getTime() - 15 * 60_000))
+		expect(quests.get("backwards-log")?.drop).toEqual({ fullMinutes: 10, dropMinutes: 20, floor: 5 })
+		const view = playerGame(season, ninjas, teams, now)
+		if (view.lifecycleState !== "running") throw new Error("fixture")
+		expect(view.quest).toMatchObject({
+			points: 20,
+			drop: { fullMinutes: 10, dropMinutes: 20, floor: 5, reachedAt: ninjas.reachedAt?.getTime() },
+			hintPenalty: 5,
+			worth: 12,
+		})
 
 		const timeFraction = (now.getTime() - season.start.getTime()) / (season.end.getTime() - season.start.getTime())
 		const behindPercent = 100 * timeFraction - (100 * ninjas.questIndex) / authored.length

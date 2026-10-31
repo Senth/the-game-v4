@@ -7,6 +7,7 @@ export function previewGame(
 	quest: Quest,
 	now: Date,
 	puzzleAssets?: PuzzleAssets,
+	reachedAt = now,
 ) {
 	let seed = 0
 	for (const char of quest.id) seed = (Math.imul(seed, 31) + char.charCodeAt(0)) >>> 0
@@ -35,6 +36,6 @@ export function previewGame(
 		timeLeftMs,
 		pace: null,
 		rail: rail(season, { questOrder: [quest.id], questIndex: 0, progress: [] }),
-		quest: playerView(quest, progress, puzzleAssets),
+		quest: playerView(quest, progress, puzzleAssets, reachedAt, now),
 	}
 }

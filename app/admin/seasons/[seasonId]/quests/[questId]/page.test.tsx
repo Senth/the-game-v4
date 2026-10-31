@@ -73,6 +73,7 @@ it("selects the quest's own arc and passes editor fields without hints across th
 		assetPath: quest.assetPath,
 		answers: quest.answers,
 		points: quest.points,
+		drop: quest.drop ?? null,
 		adminNotes: quest.adminNotes,
 		puzzle: quest.puzzle,
 	})
@@ -108,6 +109,24 @@ it("selects the quest's own arc and passes editor fields without hints across th
 		now: titles.props.now,
 	})
 	expect(listSeasonTeams).toHaveBeenCalledExactlyOnceWith(season._id)
+})
+
+it("passes saved drop settings to QuestEditor", async () => {
+	const drop = { fullMinutes: 10, dropMinutes: 20, floor: 5 }
+	const savedQuest = { ...quest, drop }
+	vi.mocked(getSeason).mockResolvedValue({
+		...season,
+		arcs: season.arcs.map((candidate) =>
+			candidate.id === arc.id
+				? { ...candidate, quests: candidate.quests.map((item) => (item.id === quest.id ? savedQuest : item)) }
+				: candidate,
+		),
+	})
+	const element = await QuestPage(props)
+	const editor = element.props.children[1].props.children.props.children[2]
+
+	expect(editor.type).toBe(QuestEditor)
+	expect(editor.props.quest.drop).toEqual(drop)
 })
 
 it("passes the season map area to the quest editor without changing existing places", async () => {

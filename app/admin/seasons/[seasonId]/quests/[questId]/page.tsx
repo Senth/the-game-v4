@@ -76,6 +76,7 @@ export default async function QuestPage({ params }: PageProps<"/admin/seasons/[s
 							assetPath: quest.assetPath,
 							answers: quest.answers,
 							points: quest.points,
+							drop: quest.drop ?? null,
 							puzzle: quest.puzzle,
 							location: quest.location,
 							adminNotes: quest.adminNotes,

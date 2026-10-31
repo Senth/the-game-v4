@@ -16,6 +16,7 @@ import { AutosaveTextField } from "./autosave-text-field"
 import { AutosaveTextarea } from "./autosave-textarea"
 import { ConfirmDialog, primaryClass } from "./confirm-dialog"
 import { CopyDialog } from "./copy-dialog"
+import { DropSettings } from "./drop-settings"
 import { PlaceField } from "./place-field"
 import { PuzzleSettings } from "./puzzle-settings"
 import { QuestAsset, type QuestAssetHandle } from "./quest-asset"
@@ -310,6 +311,7 @@ export function QuestEditor({
 					/>
 					<AutosavePointsField arcId={arcId} questId={quest.id} serverValue={quest.points} missing="Needs points" />
 				</div>
+				<DropSettings arcId={arcId} questId={quest.id} drop={quest.drop ?? null} points={quest.points} />
 				<PlaceField
 					seasonId={seasonId}
 					arcId={arcId}

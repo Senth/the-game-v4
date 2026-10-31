@@ -27,6 +27,13 @@ export const Puzzle = z.object({
 })
 export type Puzzle = z.infer<typeof Puzzle>
 
+export const Drop = z.object({
+	fullMinutes: z.number().int().min(0).max(1440),
+	dropMinutes: z.number().int().min(1).max(1440),
+	floor: z.number().int().min(0).max(10000),
+})
+export type Drop = z.infer<typeof Drop>
+
 export const Place = z.object({
 	id,
 	lat: z.number().min(-90).max(90),
@@ -65,6 +72,7 @@ export const Quest = z.object({
 	location: Location.nullable().default(null).optional(),
 	answers: z.array(z.string()),
 	points: z.number().int().min(0).max(10000).nullable(),
+	drop: Drop.nullable().default(null).optional(),
 	adminNotes: z.string(),
 	hints: z.array(Hint),
 })

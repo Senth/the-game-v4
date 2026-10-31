@@ -32,6 +32,7 @@ describe("newQuest", () => {
 			location: null,
 			answers: [],
 			points: null,
+			drop: null,
 			adminNotes: "",
 			hints: [],
 		})

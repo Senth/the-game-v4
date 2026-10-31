@@ -16,6 +16,7 @@ import {
 	solveCurrentQuest,
 	writePuzzleDrop,
 } from "@/lib/db/teams"
+import { arrivalTime } from "@/lib/domain/finishers"
 import {
 	boardSeasons,
 	currentQuest,
@@ -192,7 +193,7 @@ export async function dropPuzzlePiece(
 				const progress = fresh?.progress.find((entry) => entry.questId === questId)
 				if (!fresh || fresh.questOrder[fresh.questIndex] !== questId || !progress?.puzzle || !isSolved(progress.puzzle))
 					break
-				const pointsEarned = scoreForSolve(found.quest, progress)
+				const pointsEarned = scoreForSolve(found.quest, progress, now.getTime() - arrivalTime(fresh, season).getTime())
 				const expected = {
 					questId,
 					questIndex: fresh.questIndex,
@@ -291,7 +292,11 @@ export async function reportPosition(
 		}
 		const { questIndex, questOrder } = current
 		const hintsRevealed = found.progress?.hintsRevealed ?? []
-		const pointsEarned = scoreForSolve(found.quest, { hintsRevealed })
+		const pointsEarned = scoreForSolve(
+			found.quest,
+			{ hintsRevealed },
+			now.getTime() - arrivalTime(current, season).getTime(),
+		)
 		const expected = {
 			questIndex,
 			questId,
@@ -340,7 +345,7 @@ export async function submitAnswer(
 		if (!matchesAnswer(answer, quest.answers)) return { ok: true, correct: false }
 		const { questOrder, questIndex } = current
 		const hintsRevealed = progress?.hintsRevealed ?? []
-		const pointsEarned = scoreForSolve(quest, { hintsRevealed })
+		const pointsEarned = scoreForSolve(quest, { hintsRevealed }, now.getTime() - arrivalTime(current, season).getTime())
 		const expected = { questIndex, questId, orderLength: questOrder.length, hintCount: hintsRevealed.length }
 		if (await solveCurrentQuest(current._id, expected, now, pointsEarned)) {
 			if (quest.location) {

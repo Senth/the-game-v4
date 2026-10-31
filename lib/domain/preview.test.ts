@@ -12,6 +12,41 @@ const authoredHint = authoredQuest?.hints[0]
 if (!targetArc || !authoredQuest || !authoredHint) throw new Error("Fixture must include the previewed quest and hint")
 
 describe("previewGame", () => {
+	it.each([null, { fullMinutes: 0, dropMinutes: 10, floor: 5 }])("whitelists scoring data for drop %j", (drop) => {
+		const quest = {
+			...authoredQuest,
+			points: 50,
+			drop,
+			internalTitle: "secret-title",
+			adminNotes: "secret-notes",
+			answers: ["secret-answer"],
+			hints: [{ ...authoredHint, text: "secret-hint" }],
+		}
+		const view = previewGame(baseSeason, quest, now).quest
+		expect(view).toMatchObject({ drop: drop ? { ...drop, reachedAt: now.getTime() } : null, hintPenalty: 0, worth: 50 })
+		expect(Object.keys(view).sort()).toEqual([
+			"assetPath",
+			"content",
+			"displayTitle",
+			"drop",
+			"hintPenalty",
+			"hints",
+			"id",
+			"points",
+			"worth",
+		])
+		expect(JSON.stringify(view)).not.toContain("secret-")
+	})
+
+	it("uses a stable reached time while calculating worth at current time", () => {
+		const reachedAt = new Date(now.getTime() - 15 * 60_000)
+		const quest = { ...authoredQuest, points: 20, drop: { fullMinutes: 10, dropMinutes: 20, floor: 5 } }
+		expect(previewGame(baseSeason, quest, now, undefined, reachedAt).quest).toMatchObject({
+			drop: { ...quest.drop, reachedAt: reachedAt.getTime() },
+			worth: 17,
+		})
+	})
+
 	it.each([
 		["unscheduled", { start: null, end: null }, baseSeason.lengthMinutes * 60_000],
 		[

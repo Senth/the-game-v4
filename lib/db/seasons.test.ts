@@ -106,6 +106,7 @@ describe("seasons", () => {
 		lighthouse.quests[1] = {
 			...quest("q2"),
 			location: null,
+			drop: null,
 			displayTitle: "Beacon",
 			hints: [{ id: "q2-h1", text: "Look up", points: 5 }],
 		}
@@ -152,6 +153,22 @@ describe("seasons", () => {
 			content: "Decode this",
 			answers: ["lamp"],
 		})
+	})
+
+	it("saves and clears quest drop settings while preserving concurrent points edits", async () => {
+		const season = await createSeason(seasonInput())
+		const target = { arcId: "a1", questId: "q1" }
+		const drop = { fullMinutes: 10, dropMinutes: 20, floor: 5 }
+
+		await setSeasonField(season._id, { ...target, field: "drop" }, drop)
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.drop).toEqual(drop)
+		await setSeasonField(season._id, { ...target, field: "drop" }, null)
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]?.drop).toBeNull()
+		await Promise.all([
+			setSeasonField(season._id, { ...target, field: "drop" }, drop),
+			setSeasonField(season._id, { ...target, field: "points" }, 50),
+		])
+		expect((await getSeason(season._id))?.arcs[0]?.quests[0]).toMatchObject({ drop, points: 50 })
 	})
 
 	it("targets a quest by id after its arc is reordered", async () => {

@@ -212,6 +212,7 @@ it("renders fields in M2 order with helper text, desktop pairs and quiet removal
 		"File",
 		"Answers",
 		"Points",
+		"Points drop",
 		"Places",
 		"Puzzle",
 		"Admin notes",

@@ -1,4 +1,4 @@
-import { nextOpenBonus, type PlayerFinisher, playerFinishers } from "./finishers"
+import { arrivalTime, nextOpenBonus, type PlayerFinisher, playerFinishers } from "./finishers"
 import {
 	boardSeasons,
 	currentQuest,
@@ -114,7 +114,7 @@ export function playerGame(
 		| (Pick<Season, "start" | "end" | "arcs" | "finishers"> & Partial<Pick<Season, "finisherBonuses">>)
 		| null
 		| undefined,
-	team: Pick<Team, "_id" | "name" | "questOrder" | "questIndex" | "score" | "completed" | "progress">,
+	team: Pick<Team, "_id" | "name" | "questOrder" | "questIndex" | "score" | "completed" | "progress" | "reachedAt">,
 	teams: Pick<Team, "_id" | "name" | "score" | "progress">[],
 	now: Date,
 	puzzleAssets?: PuzzleAssets,
@@ -145,7 +145,7 @@ export function playerGame(
 		teamId: team._id,
 		finishers,
 		nextBonus: nextOpenBonus(season),
-		quest: current ? playerView(current.quest, current.progress, puzzleAssets) : null,
+		quest: current ? playerView(current.quest, current.progress, puzzleAssets, arrivalTime(team, season), now) : null,
 		score: team.score,
 		...counts,
 		start: season.start,

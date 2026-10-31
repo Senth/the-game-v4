@@ -24,7 +24,12 @@ export function TeamPreview({
 	const game = playerGame(season, team, teams, new Date(clock), assets)
 	const view =
 		game.lifecycleState === "running" ? (
-			<GameView {...game} timeLeftMs={game.end ? Math.max(0, game.end.getTime() - clock) : 0} preview="team" />
+			<GameView
+				{...game}
+				now={new Date(clock)}
+				timeLeftMs={game.end ? Math.max(0, game.end.getTime() - clock) : 0}
+				preview="team"
+			/>
 		) : (
 			<LifecycleScreen game={game} now={new Date(clock)} preview />
 		)
