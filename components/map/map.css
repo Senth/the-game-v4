@@ -59,6 +59,7 @@
 .map-place-badge {
 	width: calc(var(--spacing) * 6);
 	height: calc(var(--spacing) * 6);
+	z-index: 0;
 }
 
 .map-place-badge .map-pin {
@@ -102,6 +103,7 @@
 	width: 44px;
 	height: 44px;
 	place-items: center;
+	z-index: 1;
 	padding: 0;
 	border: 0;
 	background: transparent;

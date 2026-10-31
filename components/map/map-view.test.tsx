@@ -460,6 +460,34 @@ describe("MapView", () => {
 		expect(markerRule).not.toMatch(/position\s*:\s*relative/)
 	})
 
+	it("keeps phone markers above places added after phones render", () => {
+		const phones = [
+			{ id: "phone-1", lat: 55.52, lng: 13.21, accuracy: 42, color: "red", team: "Ninjas", name: "Brave Otter" },
+		]
+		const teamPlaces = [{ number: 1, lat: 55.5, lng: 13.2, radius: 40, colors: ["red"] }]
+		const { map } = mount({ phones })
+		map.fire("load")
+
+		const [phoneMarker] = fake.Marker.instances
+		render({ phones, teamPlaces })
+		for (const effect of hooks.effects.slice(1)) effect()
+
+		const [renderedPhone, placeMarker] = fake.Marker.instances
+		expect(fake.Marker.instances).toHaveLength(2)
+		expect(renderedPhone).toBe(phoneMarker)
+		expect(renderedPhone?.options.element.className).toContain("map-phone-marker")
+		expect(placeMarker?.options.element.className).toContain("map-place-badge")
+
+		const styles = readFileSync(new URL("./map.css", import.meta.url), "utf8")
+		const phoneRule = styles.match(/\.map-phone-marker\s*\{([^}]*)\}/)?.[1]
+		const placeRule = styles.match(/\.map-place-badge\s*\{([^}]*)\}/)?.[1]
+		const phoneZIndex = phoneRule?.match(/z-index:\s*(\d+)/)?.[1]
+		const placeZIndex = placeRule?.match(/z-index:\s*(\d+)/)?.[1]
+		expect(phoneZIndex).toBeDefined()
+		expect(placeZIndex).toBeDefined()
+		expect(Number(phoneZIndex)).toBeGreaterThan(Number(placeZIndex))
+	})
+
 	it("renders held and empty numbered badges and updates teammate labels, fading and expiry", () => {
 		const circles = [circle, { ...circle, number: 2, lat: 55.51, held: true }]
 		const phone = { name: "Keen <Otter>", lat: 55.52, lng: 13.21, ageMs: 19_999 }
