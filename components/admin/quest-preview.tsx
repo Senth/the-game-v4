@@ -1,12 +1,11 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { GameView } from "@/components/game/game-view"
 import { previewGame } from "@/lib/domain/preview"
 import type { Quest, Season } from "@/lib/domain/schemas"
 import { useDraftHints, useDraftValue } from "./autosave-provider"
 import { usePuzzlePreviewAssets } from "./use-puzzle-preview-assets"
-import { useSeasonClock } from "./use-season-clock"
 
 export function QuestPreview({
 	season,
@@ -21,6 +20,15 @@ export function QuestPreview({
 	now: number
 	frame?: boolean
 }) {
+	const [previewClock, setPreviewClock] = useState({ initialNow: now, currentNow: now })
+	useEffect(() => {
+		const startedAt = performance.now()
+		const timer = setInterval(() => {
+			setPreviewClock({ initialNow: now, currentNow: now + performance.now() - startedAt })
+		}, 1000)
+		return () => clearInterval(timer)
+	}, [now])
+	const clock = previewClock.initialNow === now ? previewClock.currentNow : now
 	const target = { arcId, questId: quest.id }
 	const displayTitle = useDraftValue({ ...target, field: "displayTitle" }, quest.displayTitle)
 	const content = useDraftValue({ ...target, field: "content" }, quest.content)
@@ -32,7 +40,6 @@ export function QuestPreview({
 	const location = useDraftValue({ ...target, field: "location" }, quest.location)
 	const answers = useDraftValue({ ...target, field: "answers" }, quest.answers)
 	const assets = usePuzzlePreviewAssets({ ...quest, assetPath, puzzle })
-	const clock = useSeasonClock(now, season.start, season.end)
 	const dropClock = useRef<{ drop: typeof drop; reachedAt: number }>({ drop, reachedAt: clock })
 	if (dropClock.current.drop !== drop) dropClock.current = { drop, reachedAt: clock }
 	const game = previewGame(

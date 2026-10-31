@@ -1,13 +1,39 @@
+import type { EffectCallback } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { useDraftHints, useDraftValue } from "./autosave-provider"
 import { QuestPreview } from "./quest-preview"
 import { usePuzzlePreviewAssets } from "./use-puzzle-preview-assets"
-import { useSeasonClock } from "./use-season-clock"
+
+const hooks = vi.hoisted(() => ({
+	effects: [] as EffectCallback[],
+	clock: null as { initialNow: number; currentNow: number } | null,
+	dropClock: null as { current: { drop: unknown; reachedAt: number } } | null,
+}))
 
 vi.mock("./autosave-provider", () => ({ useDraftValue: vi.fn(), useDraftHints: vi.fn() }))
-vi.mock("./use-season-clock", () => ({ useSeasonClock: vi.fn() }))
 vi.mock("./use-puzzle-preview-assets", () => ({ usePuzzlePreviewAssets: vi.fn() }))
+vi.mock("react", async (importOriginal) => {
+	const react = await importOriginal<typeof import("react")>()
+	return {
+		...react,
+		useEffect: (effect: EffectCallback) => hooks.effects.push(effect),
+		useState: (initial: unknown) => {
+			const [value, setter] = react.useState(initial)
+			if (initial && typeof initial === "object" && "initialNow" in initial)
+				return [hooks.clock ?? value, (next: { initialNow: number; currentNow: number }) => (hooks.clock = next)]
+			return [value, setter]
+		},
+		useRef: (initial: unknown) => {
+			const ref = react.useRef(initial)
+			if (initial && typeof initial === "object" && "drop" in initial && "reachedAt" in initial) {
+				if (!hooks.dropClock) hooks.dropClock = ref as unknown as { current: { drop: unknown; reachedAt: number } }
+				return hooks.dropClock
+			}
+			return ref
+		},
+	}
+})
 
 const now = Date.parse("2026-10-15T18:00:00Z")
 const quest = {
@@ -30,13 +56,22 @@ const season = {
 	arcs: [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [quest] }],
 }
 const props = { season, arcId: "arc", quest, now }
+let cleanups: (() => void)[] = []
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	hooks.effects.length = 0
+	hooks.clock = null
+	hooks.dropClock = null
 	vi.mocked(useDraftValue).mockImplementation((_target, value) => value)
 	vi.mocked(useDraftHints).mockImplementation((_target, value) => value)
-	vi.mocked(useSeasonClock).mockReturnValue(now)
 	vi.mocked(usePuzzlePreviewAssets).mockReturnValue(undefined)
+})
+
+afterEach(() => {
+	for (const cleanup of cleanups) cleanup()
+	cleanups = []
+	vi.useRealTimers()
 })
 
 it("uses unsaved puzzle dimensions and a deterministic inert spread without an answer dock", () => {
@@ -111,11 +146,29 @@ it("starts the preview drop clock at the current time when drop settings change"
 	expect(html).toContain("14p in 11:20")
 })
 
-it("uses the local clock without adding a frame to the unframed variant", () => {
-	vi.mocked(useSeasonClock).mockReturnValue(now + 1000)
-	const html = renderToStaticMarkup(<QuestPreview {...props} />)
-	expect(useSeasonClock).toHaveBeenCalledWith(now, season.start, season.end)
-	expect(html).toContain("1:59")
+it.each(["unscheduled", "ended"] as const)("ticks drop preview clock for %s seasons", async (state) => {
+	vi.useFakeTimers()
+	vi.setSystemTime(now)
+	const drop = { fullMinutes: 10, dropMinutes: 20, floor: 5 }
+	vi.mocked(useDraftValue).mockImplementation((target, value) => (target.field === "drop" ? drop : value))
+	const previewSeason =
+		state === "unscheduled"
+			? { ...season, start: null, end: null }
+			: { ...season, start: new Date(now - 120_000), end: new Date(now - 60_000) }
+	const view = () => {
+		hooks.effects.length = 0
+		return renderToStaticMarkup(<QuestPreview {...props} season={previewSeason} />)
+	}
+
+	expect(view()).toContain("14p in 11:20")
+	const cleanup = hooks.effects[0]?.()
+	if (cleanup) cleanups.push(cleanup)
+	await vi.advanceTimersByTimeAsync(1000)
+	expect(view()).toContain("14p in 11:19")
+	await vi.advanceTimersByTimeAsync(679_000)
+	const html = view()
+	expect(html).toContain('text-head">19p</span>')
+	expect(html).toContain("13p in 1:20")
 	expect(html).not.toContain("Player preview")
 	expect(html).not.toContain("scale-[0.82]")
 })
