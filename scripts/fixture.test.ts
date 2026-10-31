@@ -176,8 +176,20 @@ describe("buildFixture", () => {
 			expect(team.questOrder).toHaveLength(14)
 			expect(team.questOrder).toContain(locationQuest.id)
 			expect(team.progress.find((entry) => entry.questId === locationQuest.id)?.solvedAt).toBeUndefined()
-			expect(team.questOrder.indexOf(threeCorners.id)).toBe(team.questOrder.indexOf(locationQuest.id) + 1)
+			if (team.name === "Byggarna" || team.name === "Team Kaos") {
+				expect(team.questOrder.indexOf(threeCorners.id)).toBeLessThan(team.questOrder.indexOf(locationQuest.id))
+			} else {
+				expect(team.questOrder.indexOf(locationQuest.id)).toBeLessThan(team.questOrder.indexOf(threeCorners.id))
+			}
 			expect(team.progress.find((entry) => entry.questId === threeCorners.id)?.solvedAt).toBeUndefined()
+		}
+		for (const [name, questId] of [
+			["Byggarna", "three-corners"],
+			["Team Kaos", "three-corners"],
+			["Lagom", "svedala-station"],
+		] as const) {
+			const team = teams.find((candidate) => candidate.name === name)
+			expect(team?.questOrder[team.questIndex]).toBe(questId)
 		}
 		expect(teams.map((team) => [team.name, team.questIndex, team.score])).toEqual(standings)
 

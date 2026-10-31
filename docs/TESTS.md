@@ -200,6 +200,8 @@ one 5-point hint and no answer or file. It ends with "Three corners", a 25-point
 Stand on all three at once and the town will tell you where to go next." followed by "Split up. Each circle needs
 one of you inside it."
 Every team has both location quests unsolved, so quest orders total 14; scores, ranks and solved counts stay unchanged.
+Byggarna and Team Kaos start on "Three corners", and Lagom starts on "Next stop". Team Kaos replaces Rävarna
+because Rävarna is already in Finale.
 Fixture tests validate puzzle and location configuration plus progress against the zod schemas.
 
 | Arc | Quests | Authored order |
