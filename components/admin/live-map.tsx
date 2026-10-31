@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import { getLivePhones } from "@/app/admin/live-map-actions"
 import LazyMap from "@/components/map/lazy-map"
 import { teamColor } from "@/lib/domain/live-map"
-import { boundsFor } from "@/lib/domain/map"
+import { boundsFor, circleRing } from "@/lib/domain/map"
 import { livePositionsChannel, seasonChannel } from "@/lib/events/bus"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import type { LivePhones } from "@/lib/game/live-map"
@@ -17,6 +17,7 @@ type LiveState =
 			live: true
 			mapArea: Extract<LivePhones, { live: true }>["mapArea"]
 			teams: Extract<LivePhones, { live: true }>["teams"]
+			places: Extract<LivePhones, { live: true }>["places"]
 			phones: LivePhone[]
 	  }
 
@@ -80,13 +81,22 @@ export function LiveMap({ seasonId }: { seasonId: string }) {
 		const color = colors.get(phone.teamId)
 		return team && color ? [{ ...phone, team, color }] : []
 	})
+	const teamPlaces = state?.live
+		? state.places.flatMap((place) => {
+				const placeColors = place.teamIds.flatMap((teamId) => {
+					const color = colors.get(teamId)
+					return color ? [color] : []
+				})
+				return placeColors.length ? [{ ...place, colors: placeColors }] : []
+			})
+		: []
 	const mapArea = state?.live ? state.mapArea : null
-	const framing = manual
-		? null
-		: mapPhones.length
-			? { bounds: boundsFor(mapPhones.map(({ lng, lat }) => [lng, lat] as [number, number])) }
-			: mapArea
-	const hasMap = state?.live && (mapPhones.length > 0 || mapArea !== null)
+	const framingPoints = [
+		...mapPhones.map(({ lng, lat }) => [lng, lat] as [number, number]),
+		...teamPlaces.flatMap((place) => circleRing(place, place.radius)),
+	]
+	const framing = manual ? null : framingPoints.length ? { bounds: boundsFor(framingPoints) } : mapArea
+	const hasMap = state?.live && (mapPhones.length > 0 || teamPlaces.length > 0 || mapArea !== null)
 
 	return (
 		<div className="live-map flex min-h-0 flex-1 flex-col">
@@ -105,6 +115,7 @@ export function LiveMap({ seasonId }: { seasonId: string }) {
 							<LazyMap
 								fill
 								phones={mapPhones}
+								teamPlaces={teamPlaces}
 								framing={framing}
 								refitBoundsOnResize
 								onMoveEnd={(_, moved) => {
