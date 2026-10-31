@@ -24,6 +24,7 @@ export function QuestPreview({
 	const displayTitle = useDraftValue({ ...target, field: "displayTitle" }, quest.displayTitle)
 	const content = useDraftValue({ ...target, field: "content" }, quest.content)
 	const points = useDraftValue({ ...target, field: "points" }, quest.points)
+	const drop = useDraftValue({ ...target, field: "drop" }, quest.drop ?? null)
 	const assetPath = useDraftValue({ ...target, field: "assetPath" }, quest.assetPath)
 	const hints = useDraftHints({ ...target, field: "hints" }, quest.hints)
 	const puzzle = useDraftValue({ ...target, field: "puzzle" }, quest.puzzle)
@@ -33,7 +34,7 @@ export function QuestPreview({
 	const clock = useSeasonClock(now, season.start, season.end)
 	const game = previewGame(
 		season,
-		{ ...quest, displayTitle, content, points, assetPath, hints, puzzle, location, answers },
+		{ ...quest, displayTitle, content, points, drop, assetPath, hints, puzzle, location, answers },
 		new Date(clock),
 		assets,
 	)

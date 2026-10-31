@@ -120,6 +120,14 @@ export async function saveSeasonField(
 			return { ok: false, error: "Use a whole number from 0 to 10000." }
 		}
 		if (
+			"questId" in parsed &&
+			!("hintId" in parsed) &&
+			parsed.field === "drop" &&
+			!Quest.shape.drop.safeParse(value).success
+		) {
+			return { ok: false, error: "Invalid value." }
+		}
+		if (
 			!("arcId" in parsed) &&
 			parsed.field === "defaultQuestPoints" &&
 			!Season.shape.defaultQuestPoints.safeParse(value).success

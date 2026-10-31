@@ -169,6 +169,54 @@ describe("autosave actions", () => {
 		expect((await seasons.getSeason(season._id))?.arcs[0]?.quests[0]?.points).toBe(value)
 	})
 
+	it.each(["unscheduled", "upcoming", "live", "ended"] as const)("saves drop settings while %s", async (status) => {
+		const season = await setup()
+		const now = Date.now()
+		if (status !== "unscheduled") {
+			const start = new Date(now + (status === "upcoming" ? 60_000 : -60_000))
+			const end = new Date(start.getTime() + (status === "ended" ? -1_000 : 60_000))
+			await (await collections()).seasons.updateOne({ _id: season._id }, { $set: { start, end } })
+		}
+		const drop = { fullMinutes: 10, dropMinutes: 20, floor: 0 }
+		expect(await saveSeasonField(season._id, { ...quest, field: "drop" }, drop)).toEqual({ ok: true })
+		expect((await seasons.getSeason(season._id))?.arcs[0]?.quests[0]?.drop).toEqual(drop)
+	})
+
+	it.each([
+		{ fullMinutes: -1, dropMinutes: 20, floor: 0 },
+		{ fullMinutes: 1441, dropMinutes: 20, floor: 0 },
+		{ fullMinutes: 10, dropMinutes: 0, floor: 0 },
+		{ fullMinutes: 10, dropMinutes: 1441, floor: 0 },
+		{ fullMinutes: 10, dropMinutes: 20, floor: -1 },
+		{ fullMinutes: 10, dropMinutes: 20, floor: 10001 },
+	])("rejects invalid drop settings %j without writing", async (value) => {
+		const season = await setup()
+		expect(await saveSeasonField(season._id, { ...quest, field: "drop" }, value)).toEqual({
+			ok: false,
+			error: "Invalid value.",
+		})
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
+	it.each(["anonymous", "team"] as const)("rejects %s drop saves before reading their target", async (session) => {
+		const season = await setup()
+		vi.mocked(requireAdmin).mockImplementationOnce(async () => redirect(session === "anonymous" ? "/login" : "/"))
+		const target = {
+			...quest,
+			get field(): "drop" {
+				return "drop"
+			},
+		}
+		const read = vi.spyOn(target, "field", "get")
+		await expect(saveSeasonField(season._id, target, null)).rejects.toMatchObject({
+			digest: expect.stringContaining("NEXT_REDIRECT"),
+		})
+		expect(read).not.toHaveBeenCalled()
+		expect(await seasons.getSeason(season._id)).toEqual(season)
+		expect(publish).not.toHaveBeenCalled()
+	})
+
 	it.each([0, 10000, null])("saves default quest points %j", async (value) => {
 		const season = await setup()
 		expect(await saveSeasonField(season._id, { field: "defaultQuestPoints" }, value)).toEqual({ ok: true })

@@ -16,6 +16,7 @@ const quest = {
 	content: "Saved content",
 	assetPath: null,
 	points: 20,
+	drop: null,
 	hints: [{ id: "hint", text: "Hidden hint text", points: 5 }],
 	location: null,
 	internalTitle: "Secret internal title",
@@ -99,6 +100,16 @@ it("uses the draft location in the player preview", () => {
 	expect(useDraftValue).toHaveBeenCalledWith({ arcId: "arc", questId: "quest", field: "location" }, null)
 	expect(html).not.toContain('aria-label="Your answer"')
 	expect(html).not.toContain("secret-place")
+})
+
+it("starts the preview drop clock at the current time when drop settings change", () => {
+	const drop = { fullMinutes: 10, dropMinutes: 20, floor: 5 }
+	vi.mocked(useDraftValue).mockImplementation((target, value) => (target.field === "drop" ? drop : value))
+	const element = QuestPreview(props)
+	expect(useDraftValue).toHaveBeenCalledWith({ arcId: "arc", questId: "quest", field: "drop" }, null)
+	expect(element).toMatchObject({
+		props: { quest: { drop: { ...drop, reachedAt: now }, worth: 20 } },
+	})
 })
 
 it("uses the local clock without adding a frame to the unframed variant", () => {
