@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { bearingDegrees, distanceMeters } from "./location"
-import { areaFromBounds, boundsFor, circleRing, edgePoint, radiusFromHandle, roundCoordinate } from "./map"
+import {
+	areaFromBounds,
+	boundsFor,
+	circleRing,
+	edgePoint,
+	radiusFromHandle,
+	roundCoordinate,
+	splitCircleRing,
+} from "./map"
 
 describe("map geometry", () => {
 	const center = { lat: 55.5079, lng: 13.2353 }
@@ -26,6 +34,30 @@ describe("map geometry", () => {
 		const edge = edgePoint(center, 40)
 		expect(distanceMeters(center, edge)).toBeCloseTo(40, 6)
 		expect(bearingDegrees(center, edge)).toBeCloseTo(90, 6)
+	})
+
+	it("splits circles into clockwise color arcs with gaps and a closed single-color ring", () => {
+		const colors = ["red", "blue", "green"]
+		const before = structuredClone({ center, colors })
+		const arcs = splitCircleRing(center, 40, colors)
+		expect(arcs).toHaveLength(colors.length)
+		expect(arcs.map(({ color }) => color)).toEqual(colors)
+		const bearings = arcs.map(({ coordinates }) =>
+			coordinates.map(([lng, lat]) => (bearingDegrees(center, { lat, lng }) + 360) % 360),
+		)
+		expect(bearings[0]?.[0]).toBeCloseTo(5, 1)
+		expect(bearings[0]?.at(-1)).toBeCloseTo(115, 1)
+		expect(bearings[1]?.[0]).toBeCloseTo(125, 1)
+		expect(bearings[1]?.at(-1)).toBeCloseTo(235, 1)
+		expect(bearings[2]?.[0]).toBeCloseTo(245, 1)
+		expect(bearings[2]?.at(-1)).toBeCloseTo(355, 1)
+		for (const arc of bearings) {
+			for (let index = 1; index < arc.length; index++) expect(arc[index]).toBeGreaterThan(arc[index - 1] as number)
+		}
+		const [single] = splitCircleRing(center, 40, ["red"])
+		expect(single?.coordinates).toEqual(circleRing(center, 40))
+		expect(single?.coordinates[0]).toEqual(single?.coordinates.at(-1))
+		expect({ center, colors }).toEqual(before)
 	})
 
 	it.each([
