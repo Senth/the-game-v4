@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { newQuest } from "@/lib/domain/season-tree"
 import { loadLivePhones } from "@/lib/game/live-map"
 import { clearTeamFixes, recordFix } from "@/lib/game/location-fixes"
 import { useTestDb } from "@/test/db"
@@ -12,6 +13,18 @@ const now = new Date("2026-10-29T17:00:00Z")
 const sharedId = crypto.randomUUID()
 const fix = { lat: 55, lng: 13, accuracy: 10, at: now.getTime() - 1000 }
 const mapArea = { lat: 55, lng: 13, zoom: 12 }
+const places = [
+	{ id: "place-secret-1", lat: 55.5, lng: 13.2, radius: 40 },
+	{ id: "place-secret-2", lat: 55.51, lng: 13.21, radius: 35 },
+	{ id: "place-secret-3", lat: 55.52, lng: 13.22, radius: 30 },
+]
+const livePlaces = places.map(({ lat, lng, radius }, index) => ({
+	lat,
+	lng,
+	radius,
+	number: index + 1,
+	teamIds: ["alpha", "zulu"],
+}))
 
 beforeEach(async () => {
 	const db = await collections()
@@ -26,7 +39,16 @@ beforeEach(async () => {
 		end: new Date(now.getTime() + 3_600_000),
 		shuffleArcs: false,
 		mapArea,
-		arcs: [],
+		arcs: [
+			{
+				id: "arc",
+				title: "Arc",
+				shuffleQuests: false,
+				quests: [
+					{ ...newQuest(20), id: "quest-secret", answers: ["answer-secret"], location: { guidance: "map", places } },
+				],
+			},
+		],
 	})
 	for (const [id, name, seasonId] of [
 		["zulu", "Zulu", "season"],
@@ -39,7 +61,7 @@ beforeEach(async () => {
 			name,
 			seasonId,
 			passwordHash: "team-secret",
-			questOrder: [],
+			questOrder: id === "quiet" ? [] : ["quest-secret"],
 			questIndex: 0,
 			score: 0,
 			completed: false,
@@ -71,15 +93,32 @@ describe("live phone data", () => {
 				{ id: "quiet", name: "Quiet" },
 				{ id: "zulu", name: "Zulu" },
 			],
+			places: livePlaces,
 			phones: [
 				{ id: alpha._id, teamId: "alpha", name: "Keen Fox", lat: 55, lng: 13, accuracy: 10, expiresInMs: 29_000 },
 				{ id: zulu._id, teamId: "zulu", name: "Calm Owl", lat: 55, lng: 13, accuracy: 10, expiresInMs: 29_000 },
 			],
 		})
-		expect(JSON.stringify(payload)).not.toMatch(/phoneId|receivedAt|createdAt|lastSeenAt|passwordHash|team-secret|"at"/)
+		expect(JSON.stringify(payload)).not.toMatch(
+			/phoneId|receivedAt|createdAt|lastSeenAt|passwordHash|team-secret|place-secret|quest-secret|questId|answers|answer-secret|"at"/,
+		)
 		expect(JSON.stringify(payload)).not.toContain(sharedId)
 		expect(await listPhonesForTeams(["alpha", "zulu"])).toHaveLength(2)
 		expect(await listPhonesForTeams([])).toEqual([])
+	})
+
+	it("includes current places before any phones report", async () => {
+		expect(await loadLivePhones("season", now)).toEqual({
+			live: true,
+			mapArea,
+			teams: [
+				{ id: "alpha", name: "Alpha" },
+				{ id: "quiet", name: "Quiet" },
+				{ id: "zulu", name: "Zulu" },
+			],
+			places: livePlaces,
+			phones: [],
+		})
 	})
 
 	it("omits expired phones, keeps the exact lifetime boundary and handles absent map areas", async () => {

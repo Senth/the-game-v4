@@ -65,7 +65,7 @@ const first = {
 	expiresInMs: 30_000,
 }
 const live = (phones: (typeof first)[] = [], mapArea: Extract<LivePhones, { live: true }>["mapArea"] = null) =>
-	({ live: true, mapArea, teams, phones }) satisfies LivePhones
+	({ live: true, mapArea, teams, phones, places: [] }) satisfies LivePhones
 const cleanups: (() => void)[] = []
 
 function render() {

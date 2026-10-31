@@ -28,6 +28,7 @@ describe("getLivePhones", () => {
 			live: true,
 			mapArea: null,
 			teams: [{ id: "team", name: "Players" }],
+			places: [{ lat: 55.5, lng: 13.2, radius: 40, number: 1, teamIds: ["team"] }],
 			phones: [{ id: "record", teamId: "team", name: "Fox", lat: 55, lng: 13, accuracy: 10, expiresInMs: 30_000 }],
 		},
 	])("returns admin payload %j", async (payload) => {
