@@ -227,7 +227,14 @@ const arcs: Arc[] = [
 
 const finale = ["gather-the-pieces", "the-vault", "last-word"]
 
-const teamSpecs: { _id: string; name: string; order: string[]; solved: number; reveals: Record<string, number> }[] = [
+const teamSpecs: {
+	_id: string
+	name: string
+	order: string[]
+	solved: number
+	reveals: Record<string, number>
+	currentLocation?: "svedala-station" | "three-corners"
+}[] = [
 	{
 		_id: "team-ravarna",
 		name: "Rävarna",
@@ -248,6 +255,7 @@ const teamSpecs: { _id: string; name: string; order: string[]; solved: number; r
 	{
 		_id: "team-kaos",
 		name: "Team Kaos",
+		currentLocation: "three-corners",
 		order: [
 			"keepers-ledger",
 			"backwards-log",
@@ -282,6 +290,7 @@ const teamSpecs: { _id: string; name: string; order: string[]; solved: number; r
 	{
 		_id: "team-byggarna",
 		name: "Byggarna",
+		currentLocation: "three-corners",
 		order: [
 			"lamp-room",
 			"fog-horn-morse",
@@ -316,6 +325,7 @@ const teamSpecs: { _id: string; name: string; order: string[]; solved: number; r
 	{
 		_id: "team-lagom",
 		name: "Lagom",
+		currentLocation: "svedala-station",
 		order: [
 			"fog-horn-morse",
 			"lamp-room",
@@ -421,10 +431,17 @@ export function buildFixture(now: Date): { season: Season; teams: FixtureTeam[];
 	}
 	const quests = new Map(arcs.flatMap((arc) => arc.quests.map((q) => [q.id, q] as const)))
 
-	const teams = teamSpecs.map(({ _id, name, order, solved, reveals }): FixtureTeam => {
+	const teams = teamSpecs.map(({ _id, name, order, solved, reveals, currentLocation }): FixtureTeam => {
 		const questOrder = [...order, ...finale]
 		questOrder.splice(solved + 1, 0, "svedala-station")
 		questOrder.splice(solved + 2, 0, "three-corners")
+		if (currentLocation) {
+			const locationIndex = questOrder.indexOf(currentLocation)
+			const displacedQuest = questOrder[solved]
+			if (locationIndex < 0 || !displacedQuest) throw new Error("fixture")
+			questOrder[solved] = currentLocation
+			questOrder[locationIndex] = displacedQuest
+		}
 		const step = (now.getTime() - start) / (solved + 1)
 		const progress = questOrder.slice(0, solved + 1).map((questId, index): TeamQuestProgress => {
 			const { hints, points } = quests.get(questId) as Quest

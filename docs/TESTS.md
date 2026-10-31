@@ -125,8 +125,13 @@ Use [PROJECT.md's live-map rules](PROJECT.md#game-master-live-map) for payloads,
 Store tests cover multi-team reads, team isolation, copied fixes and exact 30-second expiry boundaries.
 Check `expiresInMs` against both fix timestamps and server receipt times, including future phone clocks.
 Isolated MongoDB tests join nicknames by team and phone, excluding orphan fixes and teams outside the season.
-Assert all season teams appear name-sorted, even without phones; whitelist teams, map area and phone payloads.
-Reject phone UUIDs, timestamps and team secrets from JSON.
+Assert all season teams appear name-sorted, even without phones; whitelist teams, map area, phones and places
+with exact payload equality. Places appear even before phones report. Reject phone UUIDs, timestamps, place ids,
+quest ids, answers and team secrets from JSON.
+Pure place tests cover 1- and 3-place current quests, all three guidance choices and shared quest places with
+both teams' ids in name order. Check grouping by quest and place, first-appearance then place-number order,
+current-only selection and unchanged inputs. Skip non-location, completed, hidden, removed and unbuilt-order teams.
+Player-boundary tests keep other teams' places and current quests out of game views and positions pushes.
 Before start, after end and without start, return exactly `{live: false}`.
 Action tests reject anonymous and team sessions before database or store reads; admins receive the payload.
 Channel and events-route tests restrict `live-positions:<seasonId>` to admins.
@@ -195,6 +200,8 @@ one 5-point hint and no answer or file. It ends with "Three corners", a 25-point
 Stand on all three at once and the town will tell you where to go next." followed by "Split up. Each circle needs
 one of you inside it."
 Every team has both location quests unsolved, so quest orders total 14; scores, ranks and solved counts stay unchanged.
+Byggarna and Team Kaos start on "Three corners", and Lagom starts on "Next stop". Team Kaos replaces Rävarna
+because Rävarna is already in Finale.
 Fixture tests validate puzzle and location configuration plus progress against the zod schemas.
 
 | Arc | Quests | Authored order |

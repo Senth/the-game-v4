@@ -30,6 +30,28 @@ export function circleRing(center: Coordinates, radius: number, points = 64): Po
 	})
 }
 
+export function splitCircleRing(
+	center: Coordinates,
+	radius: number,
+	colors: string[],
+): { color: string; coordinates: Point[] }[] {
+	if (colors.length === 1) return [{ color: colors[0] as string, coordinates: circleRing(center, radius) }]
+	const step = 360 / colors.length
+	const gap = Math.min(5, step / 4)
+	const arcLength = step - gap * 2
+	return colors.map((color, index) => {
+		const start = index * step + gap
+		const count = Math.ceil(arcLength / (360 / 64))
+		return {
+			color,
+			coordinates: Array.from({ length: count + 1 }, (_, point): Point => {
+				const { lat, lng } = destination(center, radius, start + (arcLength * point) / count)
+				return [lng, lat]
+			}),
+		}
+	})
+}
+
 export function edgePoint(center: Coordinates, radius: number): Coordinates {
 	return destination(center, radius, 90)
 }

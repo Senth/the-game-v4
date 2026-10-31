@@ -11,7 +11,7 @@ import {
 } from "maplibre-gl"
 import { useEffect, useEffectEvent, useRef } from "react"
 import { fadeStartMs, fixTtlMs } from "@/lib/domain/location"
-import { circleRing, edgePoint, radiusFromHandle, roundCoordinate } from "@/lib/domain/map"
+import { circleRing, edgePoint, radiusFromHandle, roundCoordinate, splitCircleRing } from "@/lib/domain/map"
 import type { Place } from "@/lib/domain/schemas"
 import navy from "@/public/map/navy.json"
 import "maplibre-gl/dist/maplibre-gl.css"
@@ -19,6 +19,7 @@ import "./map.css"
 
 type Coordinates = Pick<Place, "lat" | "lng">
 type Circle = Coordinates & { number: number; radius: number; held?: boolean }
+type TeamPlace = Coordinates & { number: number; radius: number; colors: string[] }
 type Teammate = Coordinates & { name: string; ageMs: number }
 type LivePhone = Coordinates & { id: string; accuracy: number; color: string; team: string; name: string }
 type Area = Coordinates & { zoom: number }
@@ -28,6 +29,7 @@ export type MapViewProps = {
 	aspectRatio?: "16/10" | "4/3"
 	fill?: boolean
 	circles?: Circle[]
+	teamPlaces?: TeamPlace[]
 	dot?: (Coordinates & { accuracy: number }) | null
 	teammates?: Teammate[]
 	phones?: LivePhone[]
@@ -67,6 +69,24 @@ function placePolygons(circles: Circle[]): GeoJSONSourceSpecification["data"] {
 	}
 }
 
+function teamPlaceFeatures(places: TeamPlace[]): GeoJSONSourceSpecification["data"] {
+	return {
+		type: "FeatureCollection",
+		features: places.flatMap((place) => [
+			{
+				type: "Feature",
+				properties: { kind: "fill" },
+				geometry: { type: "Polygon", coordinates: [circleRing(place, place.radius)] },
+			},
+			...splitCircleRing(place, place.radius, place.colors).map(({ color, coordinates }) => ({
+				type: "Feature",
+				properties: { kind: "arc", color },
+				geometry: { type: "LineString", coordinates },
+			})),
+		]),
+	}
+}
+
 function phonePolygons(phones: LivePhone[]): GeoJSONSourceSpecification["data"] {
 	return {
 		type: "FeatureCollection",
@@ -82,6 +102,7 @@ export default function MapView({
 	aspectRatio = "16/10",
 	fill = false,
 	circles = [],
+	teamPlaces = [],
 	dot,
 	teammates = [],
 	phones = [],
@@ -98,10 +119,11 @@ export default function MapView({
 	const instance = useRef<LibreMap | null>(null)
 	const markers = useRef<{
 		places: Record<number, { pin?: Marker; edge?: Marker }>
+		teamPlaces: Map<number, Marker>
 		teammates: Map<string, Marker>
 		phones: Map<string, Marker>
 		dot?: Marker
-	}>({ places: {}, teammates: new Map(), phones: new Map() })
+	}>({ places: {}, teamPlaces: new Map(), teammates: new Map(), phones: new Map() })
 	const ready = useRef(false)
 	const dragging = useRef<{ number: number; key: "pin" | "edge" } | null>(null)
 
@@ -151,6 +173,7 @@ export default function MapView({
 			enabled = interactive,
 			nextTeammates = teammates,
 			nextPhones = phones,
+			nextTeamPlaces = teamPlaces,
 		) => {
 			const map = instance.current
 			if (!map || !ready.current) return
@@ -160,6 +183,37 @@ export default function MapView({
 			place.setData(placePolygons(nextCircles))
 			accuracy.setData(polygon(nextDot, nextDot?.accuracy ?? 0))
 			phoneAccuracy.setData(phonePolygons(nextPhones))
+			let teamPlaceSource = map.getSource("team-places") as GeoJSONSource | undefined
+			if (!teamPlaceSource && nextTeamPlaces.length) {
+				map.addSource("team-places", { type: "geojson", data: teamPlaceFeatures(nextTeamPlaces) })
+				map.addLayer(
+					{
+						id: "team-places-fill",
+						type: "fill",
+						source: "team-places",
+						filter: ["==", "kind", "fill"],
+						paint: {
+							"fill-color": getComputedStyle(container.current as HTMLDivElement)
+								.getPropertyValue("--color-head")
+								.trim(),
+							"fill-opacity": 0.12,
+						},
+					},
+					"accuracy-fill",
+				)
+				map.addLayer(
+					{
+						id: "team-places-line",
+						type: "line",
+						source: "team-places",
+						filter: ["==", "kind", "arc"],
+						paint: { "line-color": ["get", "color"], "line-width": 4 },
+					},
+					"accuracy-fill",
+				)
+				teamPlaceSource = map.getSource("team-places") as GeoJSONSource
+			}
+			teamPlaceSource?.setData(teamPlaceFeatures(nextTeamPlaces))
 			const numbers = new Set(nextCircles.map(({ number }) => number))
 			for (const [number, pair] of Object.entries(markers.current.places)) {
 				if (numbers.has(Number(number))) continue
@@ -222,6 +276,28 @@ export default function MapView({
 						marker.setLngLat([position.lng, position.lat])
 					if (key === "edge") marker.getElement().dataset.radius = `${circle.radius} m`
 				}
+			}
+			for (const [index, marker] of markers.current.teamPlaces) {
+				if (index < nextTeamPlaces.length) continue
+				marker.remove()
+				markers.current.teamPlaces.delete(index)
+			}
+			for (const [index, place] of nextTeamPlaces.entries()) {
+				let marker = markers.current.teamPlaces.get(index)
+				if (!marker) {
+					const element = document.createElement("div")
+					const pin = document.createElement("span")
+					pin.className = "map-pin"
+					element.append(pin)
+					marker = new Marker({ element, draggable: false }).setLngLat([place.lng, place.lat]).addTo(map)
+					markers.current.teamPlaces.set(index, marker)
+				}
+				const element = marker.getElement()
+				element.classList.toggle("map-place-badge", true)
+				element.setAttribute("aria-label", `Place ${place.number}`)
+				const pin = element.firstElementChild
+				if (pin) pin.textContent = String(place.number)
+				marker.setDraggable(false).setLngLat([place.lng, place.lat])
 			}
 			if (!nextDot) {
 				markers.current.dot?.remove()
@@ -421,18 +497,19 @@ export default function MapView({
 				pair.pin?.remove()
 				pair.edge?.remove()
 			}
+			for (const marker of markers.current.teamPlaces.values()) marker.remove()
 			markers.current.dot?.remove()
 			for (const marker of markers.current.teammates.values()) marker.remove()
 			for (const marker of markers.current.phones.values()) marker.remove()
-			markers.current = { places: {}, teammates: new Map(), phones: new Map() }
+			markers.current = { places: {}, teamPlaces: new Map(), teammates: new Map(), phones: new Map() }
 			map.remove()
 			instance.current = null
 		}
 	}, [maxZoom, minZoom])
 
 	useEffect(() => {
-		updateSources(circles, dot, edit, interactive, teammates, phones)
-	}, [circles, dot, edit, interactive, teammates, phones])
+		updateSources(circles, dot, edit, interactive, teammates, phones, teamPlaces)
+	}, [circles, dot, edit, interactive, teammates, phones, teamPlaces])
 	useEffect(() => {
 		frame(framing)
 	}, [framing])

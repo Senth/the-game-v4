@@ -4,6 +4,7 @@ import { ensurePhone, renamePhone } from "@/lib/db/phones"
 import * as seasons from "@/lib/db/seasons"
 import { createTeam, setTeamField } from "@/lib/db/teams"
 import { fixTtlMs, positionsPushMs } from "@/lib/domain/location"
+import { playerGame } from "@/lib/domain/player-game"
 import type { Team } from "@/lib/domain/schemas"
 import { newQuest } from "@/lib/domain/season-tree"
 import { positionsChannel, subscribe } from "@/lib/events/bus"
@@ -60,6 +61,7 @@ beforeEach(async () => {
 afterEach(() => {
 	unsubscribe()
 	clearTeamFixes(team._id)
+	clearTeamFixes("other-team")
 	clearPositions(team._id)
 	vi.clearAllTimers()
 	vi.useRealTimers()
@@ -82,8 +84,19 @@ async function nextPush(elapsed: number) {
 }
 
 describe("positions pushes", () => {
-	it("whitelists payloads, joins only this team's names and uses one coverage assignment without DB writes", async () => {
+	it("keeps other teams' places and current quests out of player views and whitelisted pushes without DB writes", async () => {
 		const db = await collections()
+		const otherPlace = { id: "other-place-secret", lat: 66.123, lng: 22.456, radius: 123 }
+		const otherQuest = {
+			...newQuest(20),
+			id: "other-quest",
+			content: "Other team's current clue",
+			location: { guidance: "map" as const, places: [otherPlace] },
+		}
+		await db.seasons.updateOne({ _id: team.seasonId }, { $push: { "arcs.0.quests": otherQuest } })
+		await createTeam({ ...team, _id: "other-team", name: "Other", questOrder: [otherQuest.id] })
+		await ensurePhone("other-team", firstPhone, now)
+		await renamePhone("other-team", firstPhone, "Other Fox")
 		const before = await Promise.all([
 			db.teams.find({}).toArray(),
 			db.seasons.find({}).toArray(),
@@ -91,7 +104,23 @@ describe("positions pushes", () => {
 		])
 		fix(firstPhone, 0)
 		fix(secondPhone, 1)
-		recordFix("other-team", "other-phone", { ...place, accuracy: 10, at: Date.now() })
+		recordFix("other-team", firstPhone, { ...otherPlace, accuracy: 10, at: Date.now() })
+		const season = await seasons.getSeason(team.seasonId)
+		const view = playerGame(season, team, await db.teams.find({ seasonId: team.seasonId }).toArray(), now)
+		expect(view).toMatchObject({
+			lifecycleState: "running",
+			quest: {
+				id: "quest",
+				location: { guidance: "map", places: location.places.map(({ lat, lng, radius }) => ({ lat, lng, radius })) },
+			},
+		})
+		expect(JSON.stringify(view)).not.toMatch(
+			/other-place-secret|Other team's current clue|66\.123|22\.456|teamIds|questOrder/,
+		)
+		if (view.lifecycleState !== "running") throw new Error("Expected running game")
+		expect(view.rail.flatMap((arc) => arc.segments).filter((segment) => segment.state === "current")).toEqual([
+			{ questId: "quest", state: "current" },
+		])
 		await schedulePositions(team._id)
 		expect(events).toEqual([
 			{
@@ -102,7 +131,9 @@ describe("positions pushes", () => {
 				],
 			},
 		])
-		expect(JSON.stringify(events)).not.toMatch(/secret|other|accuracy|radius|phoneId|teamId|receivedAt|"at"|history/)
+		expect(JSON.stringify(events)).not.toMatch(
+			/secret|[Oo]ther|66\.123|22\.456|accuracy|radius|phoneId|teamId|questId|questOrder|receivedAt|"at"|history/,
+		)
 		expect(JSON.stringify(events)).not.toContain(firstPhone)
 		expect(JSON.stringify(events)).not.toContain(secondPhone)
 		expect(

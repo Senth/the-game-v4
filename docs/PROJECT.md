@@ -364,8 +364,15 @@ Accepted reports also publish throttled `live-positions:<seasonId>` events for a
 #### Game master live map
 
 Admins load live phones only while `seasonStatus` is `live`; otherwise the response is exactly `{live: false}`.
-Live responses contain `live: true`, `mapArea`, every season team's `{id, name}` sorted by name, and reporting phones.
+Live responses contain `live: true`, `mapArea`, every season team's `{id, name}` sorted by name, reporting phones and `places`.
 Phone entries whitelist `{id, teamId, name, lat, lng, accuracy, expiresInMs}`; `id` is the phone record id.
+Place entries whitelist `{lat, lng, radius, number, teamIds}`; place and quest ids never appear.
+Walk teams in name order and use each team's current quest. Skip completed teams and current quests that are
+non-location, hidden, removed or undefined, including unbuilt orders. Include every guidance choice: None,
+Warmer/colder and Map. Teams on the same quest share one entry per place, grouped by quest id and place id
+on the server. `number` is the 1-based place position; `teamIds` follow name order. Order entries by first
+appearance in the team walk, then by place number. Build copies without mutating seasons or teams.
+Places are admin-only; player game views and positions pushes never include other teams' places or current quests.
 Join fixes and phone records by team and phone identity. Exclude missing records and teams outside the season.
 Never expose phone UUIDs, fix timestamps, receipt times, record timestamps or team secrets.
 Expiry is `30_000 − max(now − fix.at, now − receivedAt)`, computed on the server, independent of phone and admin clocks.

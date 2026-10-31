@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { getLivePhones } from "@/app/admin/live-map-actions"
 import type { MapViewProps } from "@/components/map/map-view"
 import { teamColor } from "@/lib/domain/live-map"
+import { boundsFor, circleRing } from "@/lib/domain/map"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import type { LivePhones } from "@/lib/game/live-map"
 import { LiveMap } from "./live-map"
@@ -64,8 +65,11 @@ const first = {
 	accuracy: 20,
 	expiresInMs: 30_000,
 }
-const live = (phones: (typeof first)[] = [], mapArea: Extract<LivePhones, { live: true }>["mapArea"] = null) =>
-	({ live: true, mapArea, teams, phones }) satisfies LivePhones
+const live = (
+	phones: (typeof first)[] = [],
+	mapArea: Extract<LivePhones, { live: true }>["mapArea"] = null,
+	places: Extract<LivePhones, { live: true }>["places"] = [],
+) => ({ live: true, mapArea, teams, phones, places }) satisfies LivePhones
 const cleanups: (() => void)[] = []
 
 function render() {
@@ -188,6 +192,36 @@ describe("LiveMap", () => {
 		receive(live([], mapArea))
 		expect(hooks.mapProps?.framing).toEqual(mapArea)
 		expect(hooks.mapProps?.phones).toEqual([])
+	})
+
+	it("shows places without phones, maps team colors, and drops unknown teams", () => {
+		mount()
+		const places: Extract<LivePhones, { live: true }>["places"] = [
+			{ lat: 55.5, lng: 13.2, radius: 100, number: 1, teamIds: ["team-byg", "team-rav", "missing"] },
+			{ lat: 55.6, lng: 13.3, radius: 80, number: 2, teamIds: ["missing"] },
+		]
+		receive(live([], null, places))
+
+		expect(render()).toContain("No phones reporting")
+		expect(render()).toContain("Only phones on a location quest report")
+		expect(hooks.mapProps?.phones).toEqual([])
+		expect(hooks.mapProps?.teamPlaces).toEqual([{ ...places[0], colors: [teamColor(0, 3), teamColor(2, 3)] }])
+	})
+
+	it("frames phones with full place circle extents", () => {
+		mount()
+		const place = { lat: 55.5, lng: 13.2, radius: 1000, number: 1, teamIds: ["team-byg"] }
+		receive(live([first], null, [place]))
+
+		expect(hooks.mapProps?.framing).toEqual({
+			bounds: boundsFor([[first.lng, first.lat], ...circleRing(place, place.radius)]),
+		})
+	})
+
+	it("passes an empty place list when the payload has no places", () => {
+		mount()
+		receive(live([first]))
+		expect(hooks.mapProps?.teamPlaces).toEqual([])
 	})
 
 	it("shows the not-running copy with no status line or map, and follows lifecycle changes", () => {
