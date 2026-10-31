@@ -3,6 +3,7 @@ import {
 	applyStructuralEdit,
 	boardSeasons,
 	buildQuestOrder,
+	currentWorth,
 	lifecycleState,
 	matchesAnswer,
 	ordinal,
@@ -102,17 +103,47 @@ describe("scoreForSolve", () => {
 	it("subtracts every snapshot even when the quest no longer has those hints", () => {
 		const { frozen, original } = frozenCopy({ quest: quest("q1", 30), progress: progress([5, 10, 20]) })
 		expect(frozen.quest.hints).toEqual([])
-		expect(scoreForSolve(frozen.quest, frozen.progress)).toBe(-5)
+		expect(currentWorth(frozen.quest, frozen.progress)).toBe(-5)
+		expect(scoreForSolve(frozen.quest, frozen.progress)).toBe(0)
 		expect(frozen).toEqual(original)
 	})
 
-	it("scores a draft without points as 0 minus penalties", () => {
+	it("keeps draft worth negative but clamps earnings at zero", () => {
 		expect(scoreForSolve(quest("q1", null), progress([]))).toBe(0)
-		expect(scoreForSolve(quest("q1", null), progress([5]))).toBe(-5)
+		expect(currentWorth(quest("q1", null), progress([5]))).toBe(-5)
+		expect(scoreForSolve(quest("q1", null), progress([5]))).toBe(0)
 	})
 
 	it("returns full points without reveals", () => {
 		expect(scoreForSolve(quest("q1", 25), progress([]))).toBe(25)
+	})
+
+	it("subtracts hints after time worth, keeping display negative and earnings nonnegative", () => {
+		const { frozen, original } = frozenCopy({
+			quest: { ...quest("q1", 20), drop: { fullMinutes: 10, dropMinutes: 20, floor: 5 } },
+			progress: progress([5, 10]),
+		})
+		expect(currentWorth(frozen.quest, frozen.progress, 600_000)).toBe(5)
+		expect(scoreForSolve(frozen.quest, frozen.progress, 600_000)).toBe(5)
+		expect(currentWorth(frozen.quest, frozen.progress, 1_200_000)).toBe(-2)
+		expect(scoreForSolve(frozen.quest, frozen.progress, 1_200_000)).toBe(0)
+		expect(currentWorth(frozen.quest, frozen.progress, 1_800_000)).toBe(-10)
+		expect(scoreForSolve(frozen.quest, frozen.progress, 1_800_000)).toBe(0)
+		expect(frozen).toEqual(original)
+	})
+
+	it("ignores elapsed time when drop is null", () => {
+		const q = { ...quest("q1", 30), drop: null }
+		for (const elapsedMs of [0, 600_000, 2_400_000]) {
+			expect(currentWorth(q, progress([5, 10]), elapsedMs)).toBe(15)
+			expect(scoreForSolve(q, progress([5, 10]), elapsedMs)).toBe(15)
+			expect(currentWorth(q, progress([40]), elapsedMs)).toBe(-10)
+			expect(scoreForSolve(q, progress([40]), elapsedMs)).toBe(0)
+		}
+	})
+
+	it("keeps player worth unclamped for display", () => {
+		expect(playerView(quest("q1", 10), progress([20])).worth).toBe(-10)
 	})
 })
 

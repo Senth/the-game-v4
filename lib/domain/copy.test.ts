@@ -65,6 +65,7 @@ describe("copyQuest", () => {
 			location: null,
 			answers: quest.answers,
 			points: quest.points,
+			drop: null,
 			adminNotes: quest.adminNotes,
 			hints: quest.hints.map((hint) => ({ ...hint, id: expect.any(String) })),
 		})
@@ -107,6 +108,7 @@ describe("copyArc", () => {
 					location: null,
 					answers: quest.answers,
 					points: quest.points,
+					drop: null,
 					adminNotes: quest.adminNotes,
 					hints: quest.hints.map((hint) => ({ ...hint, id: expect.any(String) })),
 				},

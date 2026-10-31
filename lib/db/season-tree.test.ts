@@ -155,6 +155,7 @@ describe("season tree writes", () => {
 			location: null,
 			answers: [],
 			points: null,
+			drop: null,
 			adminNotes: "",
 			hints: [],
 		})

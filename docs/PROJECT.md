@@ -58,6 +58,7 @@ New seasons have no default quest points. A missing `defaultQuestPoints` reads a
 | --- | --- |
 | `Arc` | `id: string`, `title: string`, `shuffleQuests: boolean`, `quests: Quest[]` |
 | `Quest` | `id: string`, `displayTitle: string`, `internalTitle: string`, `content: string`, `assetPath: string \| null`, `answers: string[]`, `points: number \| null`, `adminNotes: string`, `hints: Hint[]` |
+| `Quest.drop` | `{fullMinutes: number, dropMinutes: number, floor: number} \| null`; absent reads as null; see [points drop](#points-drop) |
 | `Quest.location` | `{guidance: "none" \| "warmer" \| "map", places: Place[]} \| null`; absent reads as null; absent guidance reads as `"none"`; 1–3 places, with `"map"` required for 2 or 3 |
 | `Place` | `id: string`, `lat: number`, `lng: number`, `radius: number` in metres |
 | `Hint` | `id: string`, `text: string`, `points: number` |
@@ -226,16 +227,50 @@ Match repeated reveals by `hintId`; revealing it again is a no-op. Do not reset 
 Hint penalties are charged on solve, not on reveal:
 
 ```text
-pointsEarned = quest.points - sum(points in progress.hintsRevealed snapshots)
+currentWorth = timeWorth - sum(points in progress.hintsRevealed snapshots)
+pointsEarned = max(0, currentWorth)
 score = score + pointsEarned
 ```
 
-Neither quest earnings nor team score has a floor. Intel shows current worth and full quest worth.
+Quest earnings have a 0p minimum; displayed current worth may be negative. Team score has no floor,
+so historical negative earnings remain valid. Intel shows current worth and full quest worth.
 Past `pointsEarned` records preserve what the team earned; live quest-point edits affect subsequent solves.
 Hint edits affect only future reveals. Solves use the stored penalties, even if the hints were edited or deleted.
 
 Team hint loss sums the penalty points in every revealed-hint snapshot, including the current unsolved quest.
 M3 and M4 both show this total. It can exceed penalties charged against score, since penalties charge only on solve.
+
+#### Points drop
+
+`Quest.drop` is null by default, preserving time-independent scoring. `fullMinutes` is a whole number
+from 0 to 1440, `dropMinutes` from 1 to 1440, and `floor` from 0 to 10000.
+Elapsed time starts at the team's `reachedAt`. Without it, `arrivalTime` uses the last `solvedAt`
+in quest order, then season start. Future arrival times retain full points until reached.
+
+With no drop, null points, or `maxBonus = points - floor` at or below 0, time worth stays at `points`.
+Otherwise it stays at full points through `fullMinutes`, then falls linearly to `floor` over
+`dropMinutes`, rounded up, and stays at the floor:
+
+```text
+fullMs = fullMinutes * 60000
+dropMs = dropMinutes * 60000
+elapsedDropMs = clamp(elapsedMs - fullMs, 0, dropMs)
+lost = floor(maxBonus * elapsedDropMs / dropMs)
+timeWorth = points - lost
+bonus = timeWorth - floor
+nextAt = fullMs + ceil((lost + 1) * dropMs / maxBonus)
+```
+
+Apply stored hint penalties after time worth. Displayed worth may fall below 0p, including after
+revealing every hint; a solve always awards at least 0p, with or without a drop.
+For null points, scoring treats time worth as 0 while draft point displays remain unset.
+The next deduction shows "{bonus - 1}p in m:ss", counting down to `nextAt` from elapsed time.
+At the floor there is no next deduction. For 20p, 10 full minutes, 20 drop minutes and a 5p floor,
+the first point drops at 11:20.
+
+Adding or editing a drop during play applies from each team's original arrival time, so worth may
+drop immediately. Stored `pointsEarned`, finisher claims and skips at 0p never change retroactively.
+No server timer, auto-skip or background jobs are used.
 
 #### Finisher bonus
 

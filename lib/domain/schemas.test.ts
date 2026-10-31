@@ -14,6 +14,46 @@ const draftQuest = {
 }
 
 describe("Quest", () => {
+	it("reads absent or null drop as null without changing input", () => {
+		const original = structuredClone(draftQuest)
+		expect(Quest.parse(draftQuest).drop).toBeNull()
+		expect(Quest.parse({ ...draftQuest, drop: undefined }).drop).toBeNull()
+		expect(Quest.parse({ ...draftQuest, drop: null }).drop).toBeNull()
+		expect(draftQuest).toEqual(original)
+	})
+
+	it.each([
+		{ fullMinutes: 0, dropMinutes: 1, floor: 0 },
+		{ fullMinutes: 1440, dropMinutes: 1440, floor: 10000 },
+		{ fullMinutes: 10, dropMinutes: 20, floor: 5 },
+	])("accepts drop %j", (drop) => {
+		const original = structuredClone(drop)
+		expect(Quest.parse({ ...draftQuest, drop }).drop).toEqual(drop)
+		expect(drop).toEqual(original)
+	})
+
+	it.each([
+		{ fullMinutes: -1 },
+		{ fullMinutes: 1441 },
+		{ fullMinutes: 1.5 },
+		{ dropMinutes: 0 },
+		{ dropMinutes: 1441 },
+		{ dropMinutes: 1.5 },
+		{ floor: -1 },
+		{ floor: 10001 },
+		{ floor: 1.5 },
+		{ fullMinutes: Number.NaN },
+		{ dropMinutes: Number.POSITIVE_INFINITY },
+		{ floor: "5" },
+		{ floor: null },
+		{ fullMinutes: undefined },
+		{ dropMinutes: undefined },
+		{ floor: undefined },
+	])("rejects invalid drop %j", (invalid) => {
+		const drop = { fullMinutes: 10, dropMinutes: 20, floor: 5, ...invalid }
+		expect(Quest.safeParse({ ...draftQuest, drop }).success).toBe(false)
+	})
+
 	it("reads a legacy quest location as null without changing input", () => {
 		const original = structuredClone(draftQuest)
 		expect(Quest.parse(draftQuest).location).toBeNull()

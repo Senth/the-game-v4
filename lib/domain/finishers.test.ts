@@ -27,6 +27,21 @@ describe("finishers", () => {
 		expect(arrivalTime(team, { start })).toEqual(earlier)
 		expect(arrivalTime({ ...team, progress: [] }, { start })).toEqual(start)
 	})
+	it("ignores unsolved entries and removed quests when falling back without reachedAt", () => {
+		const legacy = {
+			...team,
+			progress: [
+				{ questId: "first", solvedAt: earlier, hintsRevealed: [], pointsEarned: 10 },
+				{ questId: "last", hintsRevealed: [], pointsEarned: 0 },
+				{ questId: "removed", solvedAt: later, hintsRevealed: [], pointsEarned: 10 },
+			],
+		}
+		const original = structuredClone(legacy)
+		expect(arrivalTime(legacy, { start })).toEqual(earlier)
+		expect(arrivalTime({ ...legacy, progress: legacy.progress.slice(1) }, { start })).toEqual(start)
+		expect(arrivalTime({ ...legacy, progress: [] }, { start: null })).toEqual(new Date(0))
+		expect(legacy).toEqual(original)
+	})
 	it("sorts arrivals without mutating teams", () => {
 		const teams = [
 			{ ...team, _id: "later", reachedAt: later },

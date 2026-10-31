@@ -33,6 +33,20 @@ Assert unbuilt orders are skipped and not counted, and arc removal counts each t
 Put reproducible rule and interaction cases in unit or component tests rather than adding browser flows.
 Write a red regression test first for a reproducible bug. On failure, rerun only affected tests while fixing.
 
+### Points drop
+
+Use [PROJECT.md's points-drop rules](PROJECT.md#points-drop) for time worth and countdowns.
+Schemas accept absent, null and valid drops, default absence to null, and reject non-integer or
+out-of-range full minutes, drop minutes and floors, including exact range boundaries.
+Pure tests cover before, at and after full time, mid-drop rounding, exact full-plus-drop time,
+after the drop, floors equal to or above points, null points, a zero floor and unchanged inputs.
+Countdown tests cover the first deduction at 11:20 for 20p with 10 full minutes, 20 drop minutes
+and a 5p floor, every later step, and no next deduction at the floor.
+Test hint penalties after time worth, negative displayed worth, and the 0p solve minimum with
+and without a drop. Null drops preserve otherwise unchanged scoring.
+Keep all-hints worth unclamped. Test arrival fallback without `reachedAt`: last `solvedAt` in
+quest order, then season start. Add no browser flow.
+
 ### Location quests
 
 Use [PROJECT.md's location rules](PROJECT.md#location-quests) for expected behavior and exact boundaries.
