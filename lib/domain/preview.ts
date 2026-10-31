@@ -35,6 +35,6 @@ export function previewGame(
 		timeLeftMs,
 		pace: null,
 		rail: rail(season, { questOrder: [quest.id], questIndex: 0, progress: [] }),
-		quest: playerView(quest, progress, puzzleAssets),
+		quest: playerView(quest, progress, puzzleAssets, now, now),
 	}
 }

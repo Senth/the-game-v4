@@ -155,35 +155,47 @@ describe("shared puzzle writes", () => {
 		expect(await state()).toMatchObject({ version: 2, spots: [{ cell: 1 }, {}, {}, {}] })
 	})
 
-	it("solves once with stored hint penalties and one finisher claim under concurrent final drops", async () => {
-		await setState([{ cell: 0 }, { cell: 1 }, { cell: 2 }, { x: 0, y: 0 }])
-		const db = await collections()
-		await db.teams.updateOne(
-			{ _id: team._id },
-			{ $push: { "progress.0.hintsRevealed": { hintId: "deleted", text: "Saved hint", points: 7, revealedAt: now } } },
-		)
-		const events: string[] = []
-		const unsubscribe = subscribe([teamChannel(team._id), seasonChannel("season"), boardChannel], ({ channel }) =>
-			events.push(channel),
-		)
-		const results = await Promise.all(
-			Array.from({ length: 4 }, () => dropPuzzlePiece(team, quest.id, ids[3] as string, { cell: 3 }, now)),
-		)
-		unsubscribe()
-		expect(results.filter(({ status }) => status === "solved")).toEqual([{ status: "solved", pointsEarned: 43 }])
-		expect(await teams.getTeam(team._id)).toMatchObject({
-			score: 63,
-			questIndex: 1,
-			completed: true,
-			progress: [{ pointsEarned: 43, solvedAt: now }],
-		})
-		expect((await getSeason("season"))?.finishers).toEqual([{ teamId: team._id, place: 1, points: 20, at: now }])
-		expect(events.filter((channel) => channel === boardChannel)).toHaveLength(1)
-		expect(events.filter((channel) => channel === seasonChannel("season"))).toHaveLength(1)
-		expect(await getSolvedPuzzle(team, quest.id)).toEqual({ ids, pointsEarned: 43 })
-	})
+	it.each([false, true])(
+		"solves once with stored hint penalties and one finisher claim under concurrent final drops, drop=%s",
+		async (dropping) => {
+			const earned = dropping ? 23 : 43
+			if (dropping) {
+				await setSeasonField("season", { ...target, field: "drop" }, { fullMinutes: 5, dropMinutes: 10, floor: 10 })
+				await teams.setTeamField(team._id, "reachedAt", new Date(now.getTime() - 600_000))
+			}
+			await setState([{ cell: 0 }, { cell: 1 }, { cell: 2 }, { x: 0, y: 0 }])
+			const db = await collections()
+			await db.teams.updateOne(
+				{ _id: team._id },
+				{
+					$push: { "progress.0.hintsRevealed": { hintId: "deleted", text: "Saved hint", points: 7, revealedAt: now } },
+				},
+			)
+			const events: string[] = []
+			const unsubscribe = subscribe([teamChannel(team._id), seasonChannel("season"), boardChannel], ({ channel }) =>
+				events.push(channel),
+			)
+			const results = await Promise.all(
+				Array.from({ length: 4 }, () => dropPuzzlePiece(team, quest.id, ids[3] as string, { cell: 3 }, now)),
+			)
+			unsubscribe()
+			expect(results.filter(({ status }) => status === "solved")).toEqual([{ status: "solved", pointsEarned: earned }])
+			expect(await teams.getTeam(team._id)).toMatchObject({
+				score: earned + 20,
+				questIndex: 1,
+				completed: true,
+				progress: [{ pointsEarned: earned, solvedAt: now }],
+			})
+			expect((await getSeason("season"))?.finishers).toEqual([{ teamId: team._id, place: 1, points: 20, at: now }])
+			expect(events.filter((channel) => channel === boardChannel)).toHaveLength(1)
+			expect(events.filter((channel) => channel === seasonChannel("season"))).toHaveLength(1)
+			expect(await getSolvedPuzzle(team, quest.id)).toEqual({ ids, pointsEarned: earned })
+		},
+	)
 
 	it("recalculates penalties when a hint is revealed between the final drop and solve", async () => {
+		await setSeasonField("season", { ...target, field: "drop" }, { fullMinutes: 5, dropMinutes: 10, floor: 10 })
+		await teams.setTeamField(team._id, "reachedAt", new Date(now.getTime() - 600_000))
 		await setState([{ cell: 0 }, { cell: 1 }, { cell: 2 }, { x: 0, y: 0 }])
 		const original = teams.solveCurrentQuest
 		const solve = vi.spyOn(teams, "solveCurrentQuest")
@@ -201,12 +213,12 @@ describe("shared puzzle writes", () => {
 		})
 		expect(await dropPuzzlePiece(team, quest.id, ids[3] as string, { cell: 3 }, now)).toEqual({
 			status: "solved",
-			pointsEarned: 42,
+			pointsEarned: 22,
 		})
 		expect(solve).toHaveBeenCalledTimes(2)
-		expect((await teams.getTeam(team._id))?.score).toBe(62)
+		expect((await teams.getTeam(team._id))?.score).toBe(42)
 		await setSeasonField("season", { ...target, field: "points" }, 100)
-		expect(await actions.getSolvedPuzzle(quest.id)).toEqual({ ids, pointsEarned: 42 })
+		expect(await actions.getSolvedPuzzle(quest.id)).toEqual({ ids, pointsEarned: 22 })
 	})
 
 	it("never solves a board moved out of completion between the final drop and solve", async () => {

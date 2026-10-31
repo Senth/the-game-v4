@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import * as actions from "@/app/actions"
 import { TeamPreview } from "@/components/admin/team-preview"
 import { registerTeam } from "@/lib/auth/register"
+import { sessionOptions } from "@/lib/auth/session"
 import { collections } from "@/lib/db/collections"
 import { createSeason, setRegistrationOpen, setSeasonField } from "@/lib/db/seasons"
 import {
@@ -17,13 +18,14 @@ import {
 } from "@/lib/db/teams"
 import type { PlayerGame } from "@/lib/domain/player-game"
 import { publicBoard } from "@/lib/domain/player-game"
+import { pieceIds } from "@/lib/domain/puzzle"
 import type { Season, Team } from "@/lib/domain/schemas"
 import { boardChannel, seasonChannel, subscribe, teamChannel } from "@/lib/events/bus"
 import { createLiveConnection } from "@/lib/events/live-connection"
 import { buildFixture } from "@/scripts/fixture"
 import { useTestDb } from "@/test/db"
 import { secretAnswer, withSecrets } from "@/test/secrets"
-import { loadBoard, loadGame, loadStandings, revealHint, submitAnswer } from "./game"
+import { dropPuzzlePiece, loadBoard, loadGame, loadStandings, reportPosition, revealHint, submitAnswer } from "./game"
 
 const session = vi.hoisted(() => ({ teamId: "" }))
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }))
@@ -443,6 +445,69 @@ describe("submitAnswer", () => {
 		expect(await getTeam(team._id)).toMatchObject({ score: team.score + 15, questIndex: team.questIndex + 1 })
 		expect(events).toHaveLength(3)
 	})
+
+	it("retries stale hints and awards dropped points and one finisher bonus under concurrent answers", async () => {
+		const flow = await createSeason({
+			...season,
+			_id: crypto.randomUUID(),
+			finisherBonuses: [20],
+			arcs: season.arcs.map((arc) => ({
+				...arc,
+				quests: arc.quests.map((quest) =>
+					quest.id === current ? { ...quest, drop: { fullMinutes: 0, dropMinutes: 10, floor: 0 } } : quest,
+				),
+			})),
+		})
+		const team = await freshTeam({
+			seasonId: flow._id,
+			questOrder: [current],
+			questIndex: 0,
+			reachedAt: new Date(now.getTime() - 300_000),
+			progress: ninjas.progress.filter((entry) => entry.questId === current),
+		})
+		const stale = { ...team, progress: [] }
+		const results = await Promise.all([
+			submitAnswer(stale, current, secretAnswer(current), now),
+			submitAnswer(stale, current, secretAnswer(current), now),
+		])
+		expect(results.filter((result) => result.ok && result.correct)).toHaveLength(1)
+		expect(results).toContainEqual(expect.objectContaining({ pointsEarned: 5 }))
+		expect(await getTeam(team._id)).toMatchObject({
+			score: team.score + 25,
+			completed: true,
+			progress: [{ pointsEarned: 5, solvedAt: now }],
+		})
+		expect((await (await collections()).seasons.findOne({ _id: flow._id }))?.finishers).toEqual([
+			{ teamId: team._id, place: 1, points: 20, at: now },
+		])
+	})
+
+	it.each([false, true])("uses legacy arrival fallback, prior solve=%s", async (previous) => {
+		const reachedAt = new Date(now.getTime() - 600_000)
+		const flow = await createSeason({
+			...season,
+			_id: crypto.randomUUID(),
+			start: previous ? new Date(reachedAt.getTime() - 600_000) : reachedAt,
+			arcs: season.arcs.map((arc) => ({
+				...arc,
+				quests: arc.quests.map((quest) =>
+					quest.id === current ? { ...quest, points: 50, drop: { fullMinutes: 5, dropMinutes: 10, floor: 10 } } : quest,
+				),
+			})),
+		})
+		const team = await freshTeam({
+			seasonId: flow._id,
+			reachedAt: undefined,
+			questOrder: previous ? [next, current] : [current],
+			questIndex: previous ? 1 : 0,
+			progress: previous ? [{ questId: next, hintsRevealed: [], pointsEarned: 10, solvedAt: reachedAt }] : [],
+		})
+		expect(await submitAnswer(team, current, secretAnswer(current), now)).toMatchObject({
+			correct: true,
+			pointsEarned: 30,
+		})
+		expect((await getTeam(team._id))?.score).toBe(team.score + 30)
+	})
 })
 
 describe("revealHint", () => {
@@ -573,6 +638,91 @@ describe("hint history through the actions", () => {
 			completed: true,
 			progress: [{ questId: target.questId, hintsRevealed: snapshots, pointsEarned: 35 }],
 		})
+	})
+})
+
+describe.each(["typed", "puzzle", "location"] as const)("%s solve timing", (kind) => {
+	it.each([
+		{ label: "mid-drop", minutes: 10, points: 50, drop: { fullMinutes: 5, dropMinutes: 10, floor: 10 }, earned: 23 },
+		{ label: "after floor", minutes: 20, points: 50, drop: { fullMinutes: 5, dropMinutes: 10, floor: 10 }, earned: 3 },
+		{
+			label: "negative drop worth",
+			minutes: 20,
+			points: 50,
+			drop: { fullMinutes: 5, dropMinutes: 10, floor: 5 },
+			earned: 0,
+		},
+		{ label: "negative fixed worth", minutes: 20, points: 5, drop: null, earned: 0 },
+	])("stores $label minus hints revealed before the drop", async ({ minutes, points, drop, earned }) => {
+		vi.useFakeTimers({ toFake: ["Date"] })
+		vi.setSystemTime(now)
+		try {
+			const authored = season.arcs.flatMap((arc) => arc.quests).find((quest) => quest.id === current)
+			if (!authored) throw new Error("Missing current quest")
+			const quest = {
+				...authored,
+				points,
+				drop,
+				hints: [{ id: hint(1), text: "Saved hint", points: 7 }],
+				puzzle: kind === "puzzle" ? { rows: 2, cols: 2, showFull: false } : null,
+				assetPath: kind === "puzzle" ? "/assets/puzzle.png" : null,
+				location:
+					kind === "location"
+						? { guidance: "none" as const, places: [{ id: "place", lat: 55, lng: 13, radius: 40 }] }
+						: null,
+			}
+			const flow = await createSeason({
+				...season,
+				_id: crypto.randomUUID(),
+				start: now,
+				end: new Date(now.getTime() + 3_600_000),
+				arcs: [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [quest] }],
+			})
+			const team = await freshTeam({
+				seasonId: flow._id,
+				questOrder: [current],
+				questIndex: 0,
+				reachedAt: now,
+				progress:
+					kind === "puzzle"
+						? [
+								{
+									questId: current,
+									pointsEarned: 0,
+									hintsRevealed: [],
+									puzzle: { version: 0, spots: [{ cell: 0 }, { cell: 1 }, { cell: 2 }, { x: 0, y: 0 }] },
+								},
+							]
+						: [],
+			})
+			expect(await revealHint(team, hint(1))).toMatchObject({ ok: true })
+			const at = new Date(now.getTime() + minutes * 60_000)
+			vi.setSystemTime(at)
+			expect(await loadGame(team)).toMatchObject({ quest: { worth: earned === 0 ? -2 : earned, hintPenalty: 7 } })
+			if (kind === "typed") {
+				expect(await submitAnswer(team, current, secretAnswer(current))).toMatchObject({
+					correct: true,
+					pointsEarned: earned,
+				})
+			} else if (kind === "puzzle") {
+				const ids = await pieceIds(current, quest.assetPath as string, 2, 2, sessionOptions().password)
+				expect(await dropPuzzlePiece(team, current, ids[3] as string, { cell: 3 })).toEqual({
+					status: "solved",
+					pointsEarned: earned,
+				})
+			} else {
+				expect(
+					await reportPosition(team, "phone", current, { lat: 55, lng: 13, accuracy: 10, at: at.getTime() }),
+				).toEqual({ status: "solved", pointsEarned: earned })
+			}
+			expect(await getTeam(team._id)).toMatchObject({
+				score: team.score + earned,
+				completed: true,
+				progress: [{ pointsEarned: earned, solvedAt: at }],
+			})
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
 

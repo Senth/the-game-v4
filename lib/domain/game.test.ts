@@ -530,6 +530,8 @@ describe("playerView", () => {
 			content: "Read the log in reverse.",
 			assetPath: "backwards-log.png",
 			points: 30,
+			drop: null,
+			hintPenalty: 8,
 			worth: 22,
 			hints: [
 				{ id: "h1", position: 1, points: 5, text: "Original wording", revealed: true },
@@ -544,6 +546,41 @@ describe("playerView", () => {
 		const view = playerView(secretQuest)
 		expect(view.worth).toBe(30)
 		expect(view.hints.map((hint) => hint.revealed)).toEqual([false, false, false])
+	})
+
+	it("whitelists drop timing and snapshot penalties with negative current worth", () => {
+		const input = { ...secretQuest, drop: { fullMinutes: 5, dropMinutes: 10, floor: 5, secret: "hidden" } }
+		const { frozen, original } = frozenCopy({ input, progress })
+		const view = playerView(
+			frozen.input,
+			frozen.progress,
+			undefined,
+			revealedAt,
+			new Date(revealedAt.getTime() + 900_000),
+		)
+		expect(view.drop).toEqual({ fullMinutes: 5, dropMinutes: 10, floor: 5, reachedAt: revealedAt.getTime() })
+		expect(view.hintPenalty).toBe(8)
+		expect(view.worth).toBe(-3)
+		expect(Object.keys(view).sort()).toEqual([
+			"assetPath",
+			"content",
+			"displayTitle",
+			"drop",
+			"hintPenalty",
+			"hints",
+			"id",
+			"points",
+			"worth",
+		])
+		for (const secret of [
+			"hidden",
+			"internal-backwards-log",
+			"secret-answer",
+			"secret admin note",
+			"secret hidden hint",
+		])
+			expect(JSON.stringify(view)).not.toContain(secret)
+		expect(frozen).toEqual(original)
 	})
 
 	it.each(["none", "warmer"] as const)("serializes no secrets for guidance %s", (guidance) => {

@@ -300,6 +300,8 @@ describe("location reports", () => {
 		"solves once across phones and retries with %s guidance, stored hint penalties, one bonus and all live channels",
 		async (guidance) => {
 			await setSeasonField("season", target, { ...location, guidance })
+			await setSeasonField("season", { ...target, field: "drop" }, { fullMinutes: 5, dropMinutes: 10, floor: 10 })
+			await teams.setTeamField(team._id, "reachedAt", new Date(now.getTime() - 600_000))
 			await teams.revealHint(
 				team._id,
 				{ questId: quest.id, questIndex: 0 },
@@ -318,22 +320,22 @@ describe("location reports", () => {
 				const results = await Promise.all(
 					Array.from({ length: 8 }, (_, i) => reportPosition(team, `phone-${i % 2}`, quest.id, fix, now)),
 				)
-				expect(results.filter(({ status }) => status === "solved")).toEqual([{ status: "solved", pointsEarned: 43 }])
+				expect(results.filter(({ status }) => status === "solved")).toEqual([{ status: "solved", pointsEarned: 23 }])
 				expect(results.filter(({ status }) => status === "stop")).toHaveLength(7)
 				expect(await reportPosition(team, "phone-0", quest.id, fix, now)).toEqual({ status: "stop" })
 				expect(await teams.getTeam(team._id)).toMatchObject({
-					score: 63,
+					score: 43,
 					questIndex: 1,
 					completed: true,
-					progress: [{ questId: quest.id, solvedAt: now, pointsEarned: 43 }],
+					progress: [{ questId: quest.id, solvedAt: now, pointsEarned: 23 }],
 				})
 				expect((await getSeason("season"))?.finishers).toEqual([{ teamId: team._id, place: 1, points: 20, at: now }])
 				expect(events).toEqual(channels)
 				expect(latestFixes(team._id, now.getTime()).size).toBe(0)
 				expect(recordGuidanceFix(team._id, "phone-0", quest.id, fix, now.getTime())).toEqual([])
-				expect(await actions.getSolvedLocation(quest.id)).toEqual({ pointsEarned: 43 })
+				expect(await actions.getSolvedLocation(quest.id)).toEqual({ pointsEarned: 23 })
 				await setSeasonField("season", { ...target, field: "points" }, 100)
-				expect(await getSolvedLocation(team, quest.id)).toEqual({ pointsEarned: 43 })
+				expect(await getSolvedLocation(team, quest.id)).toEqual({ pointsEarned: 23 })
 				const stored = await (await collections()).teams.findOne({ _id: team._id })
 				for (const key of ["lat", "lng", "accuracy", "phone", "location"])
 					expect(JSON.stringify(stored)).not.toContain(`"${key}"`)
@@ -495,6 +497,8 @@ describe("location reports", () => {
 	)
 
 	it("retries hint races using latest penalties", async () => {
+		await setSeasonField("season", { ...target, field: "drop" }, { fullMinutes: 5, dropMinutes: 10, floor: 10 })
+		await teams.setTeamField(team._id, "reachedAt", new Date(now.getTime() - 600_000))
 		const original = teams.solveCurrentQuest
 		vi.spyOn(teams, "solveCurrentQuest").mockImplementationOnce(async (...args) => {
 			await teams.revealHint(
@@ -504,7 +508,7 @@ describe("location reports", () => {
 			)
 			return original(...args)
 		})
-		expect(await reportPosition(team, "phone", quest.id, fix, now)).toEqual({ status: "solved", pointsEarned: 42 })
+		expect(await reportPosition(team, "phone", quest.id, fix, now)).toEqual({ status: "solved", pointsEarned: 22 })
 	})
 
 	it.each(["move", "remove"])("rechecks location when %s wins a race with solving", async (edit) => {

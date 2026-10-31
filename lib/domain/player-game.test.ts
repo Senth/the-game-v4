@@ -122,6 +122,41 @@ it("exposes only next open bonus to running game and board notices", () => {
 })
 
 describe("playerGame", () => {
+	it.each(["reachedAt", "last-solve", "season-start"] as const)("uses %s for drop timing", (source) => {
+		const reachedAt = new Date(now.getTime() - 600_000)
+		const previous = { questId: "previous", hintsRevealed: [], pointsEarned: 10, solvedAt: reachedAt }
+		const quest = {
+			...secretSeason.arcs[0]?.quests[0],
+			id: "drop-quest",
+			displayTitle: "Drop",
+			internalTitle: "secret-title",
+			content: "Clue",
+			assetPath: null,
+			answers: ["secret-answer"],
+			adminNotes: "secret-notes",
+			points: 50,
+			drop: { fullMinutes: 5, dropMinutes: 10, floor: 10 },
+			hints: [{ id: "hidden", text: "secret-hint", points: 5 }],
+		}
+		const dropSeason = {
+			...secretSeason,
+			start: source === "season-start" ? reachedAt : new Date(reachedAt.getTime() - 600_000),
+			arcs: [{ id: "arc", title: "Arc", shuffleQuests: false, quests: [quest] }],
+		}
+		const team = {
+			...ninjas,
+			reachedAt: source === "reachedAt" ? reachedAt : undefined,
+			questOrder: ["previous", quest.id],
+			questIndex: 1,
+			progress: source === "season-start" ? [] : [previous],
+		}
+		const view = playerGame(dropSeason, team, [team], now)
+		expect(view).toMatchObject({
+			quest: { drop: { ...quest.drop, reachedAt: reachedAt.getTime() }, hintPenalty: 0, worth: 30 },
+		})
+		expect(JSON.stringify(view)).not.toContain("secret-")
+	})
+
 	it("returns waiting for a null, missing or unscheduled season", () => {
 		expect(playerGame(null, ninjas, teams, now)).toEqual({
 			lifecycleState: "waiting",

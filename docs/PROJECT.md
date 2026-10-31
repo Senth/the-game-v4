@@ -588,6 +588,7 @@ Players never receive internal titles, admin notes, answers or unrevealed hint t
 and live responses. Hidden hints may expose their id, position and penalty, not their text.
 Players reveal hints by id, not by index, so edits and deletions cannot shift a reveal onto another hint.
 Construct a player view without deleting fields from the shared season object.
+Drop quests expose only their drop settings, `reachedAt` (epoch ms) and stored-snapshot `hintPenalty` for scoring.
 Waiting, countdown and running game views include `teamName` and `phones: {name, you}[]`.
 Only phones seen within 10 minutes appear, including the exact 10-minute edge.
 Your phone comes first, then the rest by name. Phone entries expose no record id, phone id,

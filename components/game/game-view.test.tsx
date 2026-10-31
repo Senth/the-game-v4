@@ -28,6 +28,8 @@ const quest: PlayerQuest = {
 	content: "Read the clue.",
 	assetPath: null,
 	points: 50,
+	drop: null,
+	hintPenalty: 10,
 	worth: 40,
 	hints: [
 		{ id: "locked-hint", position: 1, points: 5, revealed: false },
