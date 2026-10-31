@@ -80,6 +80,21 @@ it.each([
 	expect(html).toContain('aria-invalid="true"')
 })
 
+it.each([
+	["fullMinutes", 2000, "Full for", "Use 0 to 1440."],
+	["dropMinutes", 0, "Drop over", "Use 1 to 1440."],
+	["floor", 10001, "Floor", "Use 0 to 10000."],
+] as const)("marks only invalid %s field", (key, invalid, label, message) => {
+	field.value = { ...drop, [key]: invalid }
+	const html = renderToStaticMarkup(<DropSettings {...props} drop={field.value} />)
+	const inputFor = (fieldLabel: string) =>
+		html.match(new RegExp(`<label[^>]*>${fieldLabel}</label>[\\s\\S]*?<input([^>]*)>`))?.[1] ?? ""
+
+	expect(inputFor(label)).toContain('aria-invalid="true"')
+	expect(html.match(/aria-invalid="true"/g)).toHaveLength(1)
+	expect(html).toContain(message)
+})
+
 it("shows summary, floor warning and unset-points summary", () => {
 	field.value = { ...drop, floor: 20 }
 	let html = renderToStaticMarkup(<DropSettings {...props} drop={field.value} />)

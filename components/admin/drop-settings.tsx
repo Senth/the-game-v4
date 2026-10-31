@@ -64,7 +64,7 @@ export function DropSettings({
 											max={max}
 											step={1}
 											value={Number.isNaN(number) ? "" : number}
-											failed={field.failed || invalid}
+											failed={invalid || (field.failed && validDrop)}
 											error={invalid ? `Use ${min} to ${max}.` : field.error}
 											onChange={(event) =>
 												field.onChange({
