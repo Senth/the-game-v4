@@ -105,11 +105,10 @@ it("uses the draft location in the player preview", () => {
 it("starts the preview drop clock at the current time when drop settings change", () => {
 	const drop = { fullMinutes: 10, dropMinutes: 20, floor: 5 }
 	vi.mocked(useDraftValue).mockImplementation((target, value) => (target.field === "drop" ? drop : value))
-	const element = QuestPreview(props)
+	const html = renderToStaticMarkup(<QuestPreview {...props} />)
 	expect(useDraftValue).toHaveBeenCalledWith({ arcId: "arc", questId: "quest", field: "drop" }, null)
-	expect(element).toMatchObject({
-		props: { quest: { drop: { ...drop, reachedAt: now }, worth: 20 } },
-	})
+	expect(html).toContain("20p")
+	expect(html).toContain("14p in 11:20")
 })
 
 it("uses the local clock without adding a frame to the unframed variant", () => {

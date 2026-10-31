@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useReducedMotion } from "@/components/use-reduced-motion"
 import type { PlayerHint, PlayerQuest } from "@/lib/domain/game"
+import { timeBonus, timeWorth } from "@/lib/domain/scoring"
 import { createHold } from "./hold"
 import { scrambleFrame } from "./scramble"
 
@@ -189,33 +190,73 @@ function RevealedHint({
 	)
 }
 
-type IntelProps =
+type IntelProps = {
+	quest: Pick<PlayerQuest, "worth" | "points" | "hints" | "drop" | "hintPenalty">
+	now?: Date
+} & (
+	| { preview: true | "team" }
 	| {
-			quest: Pick<PlayerQuest, "worth" | "points" | "hints">
-			preview: true | "team"
-	  }
-	| {
-			quest: Pick<PlayerQuest, "worth" | "points" | "hints">
 			preview?: false
 			onReveal: (hintId: string) => Promise<void>
 			decrypting: ReadonlySet<string>
 			onDecryptComplete: (hintId: string) => void
 	  }
+)
 
-export function Intel({ quest, ...props }: IntelProps) {
+function timeUntil(milliseconds: number) {
+	const seconds = Math.max(0, Math.ceil(milliseconds / 1000))
+	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+}
+
+export function Intel({ quest, now = new Date(), ...props }: IntelProps) {
 	const reducedMotion = useReducedMotion()
 	const live = props.preview ? null : props
+	const elapsedMs = quest.drop ? now.getTime() - quest.drop.reachedAt : 0
+	const bonus = timeBonus(quest.points, quest.drop, elapsedMs)
+	const worth = quest.drop ? (timeWorth(quest.points, quest.drop, elapsedMs) ?? 0) - quest.hintPenalty : quest.worth
 
 	return (
 		<section className="mt-7" aria-label="Intel">
 			<div className="flex items-end justify-between border-b border-z2 pb-2">
 				<span className="font-cond text-xs uppercase tracking-wider text-muted">Intel</span>
 				<span className="font-cond">
-					<span className="text-3xl font-bold tabular-nums text-head">{quest.worth}p</span>
+					<span className="text-3xl font-bold tabular-nums text-head">{worth}p</span>
 					<span className="text-sm text-muted"> / {quest.points ?? 0}p</span>
 				</span>
 			</div>
 			<ul>
+				{bonus && (
+					<li className="border-b border-z1">
+						<div className="flex items-start justify-between gap-3 py-2.5 text-sm">
+							<span>
+								<span className="relative mr-2 font-cond text-muted">
+									<span className="invisible">{hintNumber(1)}</span>
+									<svg
+										viewBox="0 0 16 16"
+										className="absolute inset-0 m-auto size-3.5"
+										fill="none"
+										stroke="currentColor"
+										strokeWidth="1.6"
+										strokeLinecap="round"
+										aria-hidden="true"
+									>
+										<circle cx="8" cy="8" r="6.2" />
+										<path d="M8 4.6V8l2.3 1.5" />
+									</svg>
+								</span>
+								Time bonus<span className="text-muted">, max {bonus.maxBonus}p</span>
+							</span>
+							<span className="flex shrink-0 items-baseline gap-3 font-cond tabular-nums">
+								{bonus.next ? (
+									<span className="text-xs text-muted">
+										{bonus.next.bonus}p in {timeUntil(bonus.next.inMs)}
+									</span>
+								) : null}
+								<span className={bonus.next ? "text-pace-ok" : "text-muted"}>+{bonus.bonus}p</span>
+							</span>
+						</div>
+					</li>
+				)}
 				{quest.hints.map((hint) => (
 					<li key={hint.id} className="border-b border-z1 last:border-b-0">
 						{hint.revealed && (live || props.preview === "team") ? (

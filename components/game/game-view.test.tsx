@@ -40,6 +40,33 @@ const quest: PlayerQuest = {
 const rail: RailArc[] = [{ arcId: "arc-one", segments: [{ questId: "quest-one", state: "current" }] }]
 
 describe("GameView preview", () => {
+	it.each([
+		[true, 348_000, "15p", "14p in 5:32", "+15p"],
+		["team", 878_000, "12p", "11p in 0:42", "+12p"],
+	] as const)("uses preview clock for drop scoring in preview=%s", (preview, elapsedMs, worth, countdown, bonus) => {
+		const reachedAt = Date.parse("2026-10-31T12:00:00Z")
+		const html = renderToStaticMarkup(
+			<GameView
+				timeLeftMs={0}
+				now={new Date(reachedAt + elapsedMs)}
+				pace={null}
+				rail={rail}
+				preview={preview}
+				quest={{
+					...quest,
+					points: 20,
+					drop: { fullMinutes: 10, dropMinutes: 20, floor: 5, reachedAt },
+					hintPenalty: 5,
+					worth: 15,
+					hints: [],
+				}}
+			/>,
+		)
+		expect(html).toContain(`text-head">${worth}</span>`)
+		expect(html).toContain(countdown)
+		expect(html).toContain(bonus)
+	})
+
 	it.each([true, "team"] as const)(
 		"shows all empty numbered map places without positions or subscriptions in preview=%s",
 		(preview) => {

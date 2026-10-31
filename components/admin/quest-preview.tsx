@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import { GameView } from "@/components/game/game-view"
 import { previewGame } from "@/lib/domain/preview"
 import type { Quest, Season } from "@/lib/domain/schemas"
@@ -32,13 +33,16 @@ export function QuestPreview({
 	const answers = useDraftValue({ ...target, field: "answers" }, quest.answers)
 	const assets = usePuzzlePreviewAssets({ ...quest, assetPath, puzzle })
 	const clock = useSeasonClock(now, season.start, season.end)
+	const dropClock = useRef<{ drop: typeof drop; reachedAt: number }>({ drop, reachedAt: clock })
+	if (dropClock.current.drop !== drop) dropClock.current = { drop, reachedAt: clock }
 	const game = previewGame(
 		season,
 		{ ...quest, displayTitle, content, points, drop, assetPath, hints, puzzle, location, answers },
 		new Date(clock),
 		assets,
+		new Date(dropClock.current.reachedAt),
 	)
-	const view = <GameView {...game} />
+	const view = <GameView {...game} now={new Date(clock)} />
 	if (!frame) return view
 	return (
 		<>

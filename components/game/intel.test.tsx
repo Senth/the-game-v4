@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
-import type { PlayerHint } from "@/lib/domain/game"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { PlayerHint, PlayerQuest } from "@/lib/domain/game"
 import { AnswerDock, type AnswerFeedback } from "./answer-dock"
 import { Intel } from "./intel"
 
@@ -12,7 +12,7 @@ describe("Intel", () => {
 			{ id: "first", position: 1, points: 5, text: "Start from the bottom.", revealed: true },
 		]
 		const html = renderToStaticMarkup(
-			<Intel {...intelProps} quest={{ worth: 35, points: 50, hints }} onReveal={vi.fn()} />,
+			<Intel {...intelProps} quest={{ worth: 35, points: 50, drop: null, hintPenalty: 0, hints }} onReveal={vi.fn()} />,
 		)
 		expect(html).toContain('text-head">35p</span>')
 		expect(html).toContain('text-muted"> / 50p</span>')
@@ -26,7 +26,11 @@ describe("Intel", () => {
 	it("never renders text from a locked hint, even if extra text reaches the component", () => {
 		const hint = { id: "locked", position: 2, points: 10, revealed: false as const, text: "Unrevealed secret" }
 		const html = renderToStaticMarkup(
-			<Intel {...intelProps} quest={{ worth: 40, points: 50, hints: [hint] }} onReveal={vi.fn()} />,
+			<Intel
+				{...intelProps}
+				quest={{ worth: 40, points: 50, drop: null, hintPenalty: 0, hints: [hint] }}
+				onReveal={vi.fn()}
+			/>,
 		)
 		expect(html).not.toContain(hint.text)
 		expect(html).toContain("Hold to decrypt")
@@ -38,9 +42,87 @@ describe("Intel", () => {
 
 	it("keeps negative worth without clamping it", () => {
 		const html = renderToStaticMarkup(
-			<Intel {...intelProps} quest={{ worth: -5, points: 10, hints: [] }} onReveal={vi.fn()} />,
+			<Intel
+				{...intelProps}
+				quest={{ worth: -5, points: 10, drop: null, hintPenalty: 0, hints: [] }}
+				onReveal={vi.fn()}
+			/>,
 		)
 		expect(html).toContain('text-head">-5p</span>')
+	})
+})
+
+describe("Intel time bonus", () => {
+	const reachedAt = Date.parse("2026-10-31T12:00:00Z")
+	const quest: Pick<PlayerQuest, "worth" | "points" | "hints" | "drop" | "hintPenalty"> = {
+		worth: 15,
+		points: 20,
+		drop: { fullMinutes: 10, dropMinutes: 20, floor: 5, reachedAt },
+		hintPenalty: 5,
+		hints: [],
+	}
+
+	beforeEach(() => vi.useFakeTimers())
+	afterEach(() => vi.useRealTimers())
+
+	function renderAt(elapsedMs: number, overrides: Partial<typeof quest> = {}) {
+		vi.setSystemTime(reachedAt + elapsedMs)
+		return renderToStaticMarkup(
+			<Intel {...intelProps} quest={{ ...quest, ...overrides }} now={new Date()} onReveal={vi.fn()} />,
+		)
+	}
+
+	it("shows the first deduction before the drop", () => {
+		const html = renderAt(348_000)
+		expect(html).toContain('text-head">15p</span>')
+		expect(html).toContain("14p in 5:32")
+		expect(html).toContain('text-pace-ok">+15p</span>')
+	})
+
+	it("updates worth and countdown at the first deduction and mid-drop", () => {
+		const firstDeduction = renderAt(680_000)
+		expect(firstDeduction).toContain('text-head">14p</span>')
+		expect(firstDeduction).toContain("13p in 1:20")
+		expect(firstDeduction).toContain('text-pace-ok">+14p</span>')
+
+		const midDrop = renderAt(878_000)
+		expect(midDrop).toContain('text-head">12p</span>')
+		expect(midDrop).toContain("11p in 0:42")
+		expect(midDrop).toContain('text-pace-ok">+12p</span>')
+	})
+
+	it.each([1_800_000, 2_400_000])("shows zero bonus without a countdown at %i ms", (elapsedMs) => {
+		const html = renderAt(elapsedMs)
+		expect(html).toContain('text-head">0p</span>')
+		expect(html).toContain('text-muted">+0p</span>')
+		expect(html).not.toContain(" in ")
+	})
+
+	it("keeps negative header worth separate from non-negative bonus", () => {
+		const html = renderAt(0, { hintPenalty: 100 })
+		expect(html).toContain('text-head">-80p</span>')
+		expect(html).toContain('text-pace-ok">+15p</span>')
+		expect(html).not.toContain('text-pace-ok">-')
+	})
+
+	it.each<[string, typeof quest]>([
+		["no drop", { ...quest, drop: null }],
+		["no positive bonus", { ...quest, drop: { fullMinutes: 10, dropMinutes: 20, floor: 20, reachedAt } }],
+	])("omits the row for %s", (_name, timedQuest) => {
+		const html = renderToStaticMarkup(
+			<Intel {...intelProps} quest={timedQuest} now={new Date(reachedAt)} onReveal={vi.fn()} />,
+		)
+		expect(html).not.toContain("Time bonus")
+	})
+
+	it("shares hint number slot and keeps countdown compact", () => {
+		const html = renderAt(348_000, {
+			hints: [{ id: "revealed", position: 1, points: 5, text: "Clue", revealed: true }],
+		})
+		expect(html).toContain('<span class="relative mr-2 font-cond text-muted"><span class="invisible">01</span><svg')
+		expect(html).toContain('<span class="mr-2 font-cond text-muted">01</span>')
+		expect(html).toContain("shrink-0 items-baseline gap-3 font-cond tabular-nums")
+		expect(html).toContain("text-xs text-muted")
 	})
 })
 

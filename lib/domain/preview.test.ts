@@ -38,6 +38,15 @@ describe("previewGame", () => {
 		expect(JSON.stringify(view)).not.toContain("secret-")
 	})
 
+	it("uses a stable reached time while calculating worth at current time", () => {
+		const reachedAt = new Date(now.getTime() - 15 * 60_000)
+		const quest = { ...authoredQuest, points: 20, drop: { fullMinutes: 10, dropMinutes: 20, floor: 5 } }
+		expect(previewGame(baseSeason, quest, now, undefined, reachedAt).quest).toMatchObject({
+			drop: { ...quest.drop, reachedAt: reachedAt.getTime() },
+			worth: 17,
+		})
+	})
+
 	it.each([
 		["unscheduled", { start: null, end: null }, baseSeason.lengthMinutes * 60_000],
 		[
