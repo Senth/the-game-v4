@@ -86,6 +86,7 @@ Production compose lives in `terraform/services/the-game/` in server-infrastruct
 The human runs `terraform apply`. Data lives under `/home/the-game/`.
 Main merges auto-deploy `ghcr.io/senth/the-game-v4:main` within 5 minutes.
 `game.senth.org` serves v4.
+v3 is archived. Its backup is under `/mnt/lvm/backups/the-game-v3/`.
 
 Run one-off commands inside the app container, such as admin creation:
 
