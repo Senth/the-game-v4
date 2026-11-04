@@ -2,7 +2,6 @@
 
 The Game is a timed puzzle hunt where teams share a login across phones.
 Game masters author quests and run seasons with live progress updates.
-It uses Next.js 16, React 19, Tailwind CSS 4 and MongoDB 8.
 See [project rules](docs/PROJECT.md) and [design](docs/DESIGN.md) for the contracts.
 
 ## Local development
@@ -86,12 +85,9 @@ Production compose lives in `terraform/services/the-game/` in server-infrastruct
 The human runs `terraform apply`. Data lives under `/home/the-game/`.
 Main merges auto-deploy `ghcr.io/senth/the-game-v4:main` within 5 minutes.
 `game.senth.org` serves v4.
+v3 is archived. Its backup is under `/mnt/lvm/backups/the-game-v3/`.
 
-Run one-off commands inside the app container, such as admin creation:
-
-```sh
-docker exec -it the-game-app-1 node scripts/admin-create.mjs <name>
-```
+Run one-off commands in `the-game-app-1`, as in the admin creation command above.
 
 ## Releasing
 
@@ -115,6 +111,3 @@ Set `IMAGE_TAG` in the host's `.env` to the desired version, then update:
 docker compose pull app
 docker compose up -d
 ```
-
-PR CI runs application gates and a separate compose image check.
-CI checks formatting with `pnpm lint`, without rewriting files.

@@ -7,7 +7,8 @@ Quest content gets the player's attention; admin tools stay dense enough to run 
 New surfaces use this same language, not a new visual direction.
 
 `app/globals.css` owns the runtime token values.
-[PROJECT.md](PROJECT.md) alone defines pace math, rail meaning, standings-strip selection and game rules.
+Game rules, including pace math, rail meaning and standings-strip selection, live in code.
+See [PROJECT.md](PROJECT.md#where-rules-live).
 
 ## Tokens
 
@@ -46,7 +47,7 @@ Fonts: `--font-head` for headings, `--font-body` for quest prose and body text,
 - At widths of at least 1024 px, use the desktop admin frame; below that, use the mobile frame.
 - Use the existing Tailwind spacing, type and radius utilities from the accepted mocks.
   Do not introduce one-off values for ordinary spacing or controls.
-- Autosave state belongs in the header, not a Save bar, using the states defined in PROJECT.md.
+- Autosave state belongs in the header, not a Save bar, as "Saved", "Saving…" or "Not saved, retry".
   Show it only on pages with an autosave field. A failed field gets a `warn` border and a retry control.
 - Confirmations and copy flows use the native `<dialog>` style: `accent` confirm for additions,
   `pace-3` for removals and deletions.
@@ -65,7 +66,7 @@ Fonts: `--font-head` for headings, `--font-body` for quest prose and body text,
 
 ### Missing-field warnings
 
-Completeness comes from [PROJECT.md](PROJECT.md#nested-types), shared with Add to game and Start now.
+Completeness comes from `missingForGame` in `lib/domain/playable-quests.ts`, shared with Add to game and Start now.
 Warnings show from first open in every season state. A `warn` triangle follows the quest name in the tree.
 A missing editor field gets a `warn` border and a `font-cond text-xs text-warn` line below it.
 A failed save's line replaces the missing line while the failure lasts.

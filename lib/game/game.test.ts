@@ -398,6 +398,17 @@ describe("submitAnswer", () => {
 		expect(await getTeam(team._id)).toMatchObject({ score: team.score + 15, questIndex: team.questIndex + 1 })
 	})
 
+	it("adds quest earnings to a negative team score without flooring the balance", async () => {
+		const team = await freshTeam({ score: -50 })
+		expect(await submitAnswer(team, current, secretAnswer(current), now)).toMatchObject({
+			ok: true,
+			correct: true,
+			pointsEarned: 15,
+			game: { score: -35, quest: { id: next } },
+		})
+		expect(await getTeam(team._id)).toMatchObject({ score: -35, questIndex: team.questIndex + 1 })
+	})
+
 	it("returns completed after solving the last quest", async () => {
 		const team = await freshTeam({ questOrder: ninjas.questOrder.slice(0, ninjas.questIndex + 1) })
 		const result = await submitAnswer(team, current, secretAnswer(current), now)
