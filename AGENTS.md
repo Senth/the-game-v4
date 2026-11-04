@@ -15,7 +15,7 @@ MongoDB access lives in `lib/db/`, zod schemas in `lib/domain/`, and dev boot an
 | --- | --- |
 | `pnpm dev` | Allocate this checkout's ports, boot local MongoDB, seed if empty, then run Next.js development server |
 | `scripts/dev-stack.sh up \| down \| status \| ports` | Run `pnpm dev` in the background, stop it, list its ports, or print its web port |
-| `pnpm seed` | Load the development fixture documented in `docs/TESTS.md` |
+| `pnpm seed` | Load the development fixture from `scripts/fixture.ts` |
 | `pnpm admin:create <name>` | Create an admin in the `MONGODB_URI` database; reads the password from a prompt or stdin |
 | `pnpm lint --write` | Run markdownlint, then Biome, and apply supported Biome fixes |
 | `pnpm typecheck` | Run `tsc --noEmit` |
@@ -32,7 +32,6 @@ Development and tests use `mongodb-memory-server`, never Docker.
 `pnpm dev` takes its web and MongoDB ports from 7000-7999, records them in `.tmp/dev-stack/stack.json`
 and releases them on exit. When `MONGODB_URI` is unset, it persists the local database under `.tmp/mongo`.
 When the dispatcher finishes every step, run `[dev] stop` from `.ai/config.toml`.
-Production requires `SESSION_SECRET` of at least 32 characters. Development falls back to a fixed secret.
 Keep temporary artifacts under `.tmp/`. Do not use live databases or services in tests.
 
 ## Folder layout
@@ -52,14 +51,18 @@ Keep temporary artifacts under `.tmp/`. Do not use live databases or services in
 
 ## Contracts
 
-- [Project](docs/PROJECT.md) owns domain rules, pace math, standings selection and migration decisions.
-- [Tests](docs/TESTS.md) owns fixtures, test responsibilities and the e2e budget.
+- [Project](docs/PROJECT.md) owns the glossary, where rules live and rules code can't show.
+- [Tests](docs/TESTS.md) owns test rules, the e2e budget and fixture accounts.
 - [Design](docs/DESIGN.md) owns the dark visual language, token meanings and component ownership.
 - [Personas](docs/PERSONAS.md) describes players and game masters.
 - [Mocks](docs/mocks/README.md) records accepted references and superseded details.
 - `.ai/config.toml` owns application gates and review boot instructions.
 
 Keep rules in their owning document and link to them elsewhere. Conform to the accepted design.
+Feature rules live in code and tests. PROJECT.md and TESTS.md hold only what those can't show.
+Never reference issues, pull requests or task ids in any Markdown file.
+That bans `I-<num>`, `#<num>`, issue or PR URLs and phrases like `issue <num>`.
+Issue titles never start with `I-<num>`. GitHub already shows the number.
 Guard admin routes and every admin server action. Player responses must omit secrets as defined in PROJECT.md.
 
 <!-- markdownlint-disable MD013 MD025 -->
