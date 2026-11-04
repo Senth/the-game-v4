@@ -2,7 +2,7 @@
 
 These nine HTML/PNG pairs are the accepted visual references. The committed files remain available
 after the hosted previews expire. [DESIGN.md](../DESIGN.md) owns visual rules;
-[PROJECT.md](../PROJECT.md) owns behavior, pace math, rails and standings selection.
+the code owns behavior, pace math, rails and standings selection.
 
 | Id | HTML | PNG | Shows |
 | --- | --- | --- | --- |
@@ -23,7 +23,7 @@ after the hosted previews expire. [DESIGN.md](../DESIGN.md) owns visual rules;
 - D1's accent drop line is superseded by H1's dashed slot on desktop.
 - D1's "Saved" label moves from the form heading row to the top bar.
 - D1's "Open on phone ↗" is dropped. The quest preview has no URL of its own.
-- G2's "2 quests behind pace" becomes "2 behind". Use the general header wording from PROJECT.md.
+- G2's "2 quests behind pace" becomes "2 behind".
 - M2 and D1's always-open hint inputs are superseded by H1 resting/drag rows and H2 tap-to-edit.
   Keep M2's Revealed by chips, hidden until the season starts.
 - M4 is the revised admin3 version: hint text lines below each quest title, points in the right column.
@@ -40,26 +40,3 @@ after the hosted previews expire. [DESIGN.md](../DESIGN.md) owns visual rules;
 The HTML files are static references, not working application code. They use remote Google Fonts,
 Tailwind's browser CDN and placeholder images. PNGs preserve the accepted appearance without those services.
 D1 and M4 iframe sources are rewritten to the relative sibling `G2-game.html`.
-
-## Source mapping
-
-| Committed base name | v3 source under `.tmp/mocks/` |
-| --- | --- |
-| `G2-game` | `game2/G2-tinted` |
-| `S1-standings` | `game2/S1-two-bars` |
-| `D1-admin-desktop` | `admin2/D1-tree` |
-| `M1-quests` | `admin2/M1-quests-live` |
-| `M2-quest-editor` | `admin2/M2-quest-edit` |
-| `M3-teams` | `admin2/M3-teams` |
-| `H1-hints-drag` | `admin3/H1-drag` |
-| `H2-hint-edit` | `admin3/H2-edit` |
-| `M4-team` | `admin3/M4-team` |
-
-Each mapping applies to both `.html` and `.png`. Sources are copied without restyling.
-
-## Local preview proof
-
-Serve this directory with `python3 -m http.server --bind 127.0.0.1 --directory docs/mocks 8000`
-from the repo root. Fetch `http://127.0.0.1:8000/D1-admin-desktop.html`, then resolve its iframe
-source against that URL and fetch it. Both D1 and M4 must resolve to `G2-game.html` with HTTP 200.
-Agents use HTTP requests for this check; they do not drive the app by hand.
